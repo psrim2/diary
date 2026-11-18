@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 스크롤바 완전 숨김 유틸리티 */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0px;
+  height: 0px;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* 미니멀 속지 스타일 - 전체 바탕색(#fafafa) 일체형 */
+.paper-minimal-blank {
+  background-color: transparent;
+}
+
+.paper-minimal-grid {
+  background-color: transparent;
+  background-image: 
+    linear-gradient(to right, rgba(0, 0, 0, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.paper-minimal-lined {
+  background-color: transparent;
+  background-image: linear-gradient(to bottom, transparent 29px, rgba(0, 0, 0, 0.08) 30px);
+  background-size: 100% 30px;
+}
+
+.paper-minimal-dots {
+  background-color: transparent;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.12) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.touch-none {
+  touch-action: none;
+}
