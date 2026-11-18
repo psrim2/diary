@@ -383,10 +383,10 @@ function DiaryMainApp() {
     <div className="min-h-screen bg-stone-100 flex flex-col items-center justify-start sm:p-4 font-sans text-stone-800">
       {/* 
         모바일 ~ 태블릿 ~ PC 완전 반응형 레이아웃
-        - 모바일: 가로 100%, 세로 화면 100% 핏
-        - 태블릿/PC: 보기 편안한 너비(max-w-2xl ~ max-w-3xl)로 자연스럽게 확장
+        - 에디터 모드: 아날로그 다이어리 수첩 규격(max-w-md, ~448px)으로 모든 기기에서 동일한 종이 비례와 몰입감 제공
+        - 캘린더/목록 뷰: 여유로운 너비(max-w-2xl)로 쾌적한 브라우징 제공
       */}
-      <div className="w-full max-w-3xl h-screen sm:h-[92vh] bg-[#fafafa] flex flex-col sm:rounded-3xl sm:shadow-lg sm:border sm:border-stone-200/90 overflow-hidden relative">
+      <div className={`w-full ${currentView === 'editor' ? 'max-w-md' : 'max-w-2xl'} h-screen sm:h-[92vh] bg-[#fafafa] flex flex-col sm:rounded-3xl sm:shadow-lg sm:border sm:border-stone-200/90 overflow-hidden relative transition-[max-width] duration-200`}>
         
         {/* 상단 네비게이션 헤더 (에디터 화면이 아닐 때) */}
         {currentView !== 'editor' && (

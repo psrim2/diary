@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Search, Trash2 } from 'lucide-react';
 import { PAPER_STYLES } from '../constants';
-import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas } from '../utils/canvasLayers';
+import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas, CANONICAL_WIDTH, CANONICAL_HEIGHT } from '../utils/canvasLayers';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -52,38 +52,23 @@ function DiaryCard({ diary, onSelect, onDelete }) {
     [normalizedLayers]
   );
 
-  // 작성된 모든 내용(펜 드로잉, 스티커, 글상자)이 잘리지 않고 모두 보이도록 최소 높이 계산
-  const computedMinHeight = React.useMemo(() => {
-    let maxY = 220;
+  const cardPaperRef = useRef(null);
+  const [previewScale, setPreviewScale] = useState(0.85);
 
-    if (Array.isArray(diary.strokes)) {
-      diary.strokes.forEach((stroke) => {
-        stroke.points?.forEach((pt) => {
-          if (pt && typeof pt.y === 'number') {
-            maxY = Math.max(maxY, pt.y + 40);
-          }
-        });
-      });
-    }
-
-    if (Array.isArray(diary.stickers)) {
-      diary.stickers.forEach((st) => {
-        if (st && typeof st.y === 'number') {
-          maxY = Math.max(maxY, st.y + 80);
-        }
-      });
-    }
-
-    if (Array.isArray(diary.textBlocks)) {
-      diary.textBlocks.forEach((tb) => {
-        const lines = (tb?.text || '').split('\n').length;
-        const blockBottom = (tb?.y || 20) + lines * 32 + 36;
-        maxY = Math.max(maxY, blockBottom);
-      });
-    }
-
-    return Math.ceil(maxY);
-  }, [diary.strokes, diary.stickers, diary.textBlocks]);
+  useEffect(() => {
+    const el = cardPaperRef.current;
+    if (!el) return;
+    const updatePreviewScale = () => {
+      const w = el.clientWidth;
+      if (w > 0) {
+        setPreviewScale(Math.min(1.0, Number((w / CANONICAL_WIDTH).toFixed(3))));
+      }
+    };
+    updatePreviewScale();
+    const ro = new ResizeObserver(updatePreviewScale);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // 터치 제스처
   const handleTouchStart = (e) => {
@@ -236,113 +221,144 @@ function DiaryCard({ diary, onSelect, onDelete }) {
           )}
         </div>
 
-        {/* 박스 본문: 작성된 모든 내용이 생성 순서(layerOrder)대로 온전히 보이는 종이 속지 */}
-        <div
-          style={{ minHeight: `${computedMinHeight}px` }}
-          className={`w-full rounded-2xl border border-stone-200/60 p-4 relative isolate overflow-hidden ${paperClass}`}
-        >
-          {/* 생성 순서(layerOrder)별 드로잉 밴드 캔버스 */}
-          {strokeBands.map((band) => (
-            <StrokeBandCanvas key={band.id} band={band} />
-          ))}
-
-          {/* 텍스트 블록 전체 (인스타그램 스토리 스타일 배지 및 정렬 반영) */}
-          {normalizedLayers.textBlocks?.map((block, idx) => {
-            let bgClass = '';
-            let textColor = block.color || '#111111';
-            let customBgStyle = undefined;
-
-            if (block.bgStyle === 'light') {
-              bgClass = 'bg-white/95 text-stone-900 shadow-xs rounded-xl px-3 py-1';
-            } else if (block.bgStyle === 'dark') {
-              bgClass = 'bg-black/90 text-white shadow-xs rounded-xl px-3 py-1';
-              textColor = '#ffffff';
-            } else if (block.bgStyle === 'color') {
-              bgClass = 'text-white shadow-xs rounded-xl px-3 py-1';
-              customBgStyle = { backgroundColor: block.color || '#111111' };
-              textColor = '#ffffff';
-            }
-
-            return (
-              <div
-                key={block.id}
-                style={{
-                  fontFamily: block.fontFamily || "'Gaegu', cursive",
-                  fontSize: `${block.fontSize || 20}px`,
-                  color: textColor,
-                  textAlign: block.textAlign || 'left',
-                  lineHeight: '30px',
-                  zIndex: typeof block.layerOrder === 'number' ? block.layerOrder : idx + 1,
-                  marginTop: idx === 0 && block.y > 24 ? `${block.y - 16}px` : undefined,
-                  transform:
-                    block.rotation || (block.scale && block.scale !== 1)
-                      ? `rotate(${block.rotation || 0}deg) scale(${block.scale || 1})`
-                      : undefined,
-                  transformOrigin: 'center center',
-                  ...customBgStyle,
-                }}
-                className={`relative w-[90%] mx-auto whitespace-pre-wrap break-words select-none mb-3 ${bgClass}`}
-              >
-                {block.text}
-              </div>
-            );
-          })}
-
-          {(!normalizedLayers.textBlocks || normalizedLayers.textBlocks.length === 0) &&
-            diary.summary &&
-            diary.summary !== '기록된 일기' && (
-              <div
-                style={{ fontFamily: "'Gaegu', cursive", zIndex: 1 }}
-                className="text-stone-700 text-lg leading-relaxed relative w-[90%] mx-auto whitespace-pre-wrap break-words"
-              >
-                {diary.summary}
-              </div>
-            )}
-
-          {/* 스티커 & 마스킹 테이프 */}
-          {normalizedLayers.stickers?.map((sticker, idx) => (
+        {/* 박스 본문: 작성 화면과 100% 동일한 비례와 위치를 유지하는 규격(CANONICAL 360x520) 종이 속지 */}
+        <div ref={cardPaperRef} className="w-full flex justify-center overflow-hidden">
+          <div
+            style={{
+              width: `${CANONICAL_WIDTH * previewScale}px`,
+              height: `${CANONICAL_HEIGHT * previewScale}px`,
+            }}
+            className="relative shrink-0 overflow-hidden rounded-2xl border border-stone-200/60 shadow-2xs"
+          >
             <div
-              key={sticker.id}
               style={{
-                left: `${sticker.x || 0}px`,
-                top: `${sticker.y || 0}px`,
-                zIndex: typeof sticker.layerOrder === 'number' ? sticker.layerOrder : idx + 1,
-                transform: `rotate(${sticker.rotation || 0}deg) scale(${sticker.scale || 1})`,
+                width: `${CANONICAL_WIDTH}px`,
+                height: `${CANONICAL_HEIGHT}px`,
+                transform: `scale(${previewScale})`,
+                transformOrigin: 'top left',
               }}
-              className="absolute select-none pointer-events-none"
+              className={`absolute top-0 left-0 ${paperClass} overflow-hidden`}
             >
-              {sticker.imageUrl ? (
-                <img
-                  src={sticker.imageUrl}
-                  alt={sticker.label || sticker.category || 'decoration'}
-                  draggable={false}
-                  className={
-                    sticker.category === 'tape' || sticker.type === 'tape'
-                      ? 'w-24 h-auto object-contain select-none pointer-events-none block'
-                      : 'w-12 h-12 object-contain select-none pointer-events-none block'
-                  }
+              {/* 생성 순서(layerOrder)별 드로잉 밴드 캔버스 */}
+              {strokeBands.map((band) => (
+                <StrokeBandCanvas
+                  key={band.id}
+                  band={band}
+                  width={CANONICAL_WIDTH}
+                  height={CANONICAL_HEIGHT}
                 />
-              ) : sticker.type === 'tape' ? (
+              ))}
+
+              {/* 텍스트 블록 전체 (인스타그램 스토리 스타일 배지 및 정렬, 작성된 절대 위치 완벽 반영) */}
+              {normalizedLayers.textBlocks?.map((block, idx) => {
+                let bgClass = '';
+                let textColor = block.color || '#111111';
+                let customBgStyle = undefined;
+
+                if (block.bgStyle === 'light') {
+                  bgClass = 'bg-white/95 text-stone-900 rounded-2xl shadow-sm px-3.5 py-1.5';
+                } else if (block.bgStyle === 'dark') {
+                  bgClass = 'bg-black/90 text-white rounded-2xl shadow-sm px-3.5 py-1.5';
+                  textColor = '#ffffff';
+                } else if (block.bgStyle === 'color') {
+                  bgClass = 'text-white rounded-2xl shadow-sm px-3.5 py-1.5';
+                  customBgStyle = { backgroundColor: block.color || '#111111' };
+                  textColor = '#ffffff';
+                }
+
+                return (
+                  <div
+                    key={block.id}
+                    style={{
+                      position: 'absolute',
+                      left: typeof block.x === 'number' ? `${block.x}px` : '18px',
+                      top: `${block.y || 40}px`,
+                      maxWidth: '90%',
+                      zIndex: typeof block.layerOrder === 'number' ? block.layerOrder : idx + 1,
+                      transform: `rotate(${block.rotation || 0}deg) scale(${block.scale || 1})`,
+                      transformOrigin: 'center center',
+                      fontFamily: block.fontFamily || "'Gaegu', cursive",
+                      fontSize: `${block.fontSize || 22}px`,
+                      color: textColor,
+                      textAlign: block.textAlign || 'center',
+                      lineHeight: 1.35,
+                      ...customBgStyle,
+                    }}
+                    className={`whitespace-pre-wrap break-words select-none pointer-events-none p-1 ${bgClass}`}
+                  >
+                    {block.text}
+                  </div>
+                );
+              })}
+
+              {(!normalizedLayers.textBlocks || normalizedLayers.textBlocks.length === 0) &&
+                diary.summary &&
+                diary.summary !== '기록된 일기' && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: '18px',
+                      top: '40px',
+                      fontFamily: "'Gaegu', cursive",
+                      zIndex: 1,
+                    }}
+                    className="text-stone-700 text-lg leading-relaxed relative w-[90%] whitespace-pre-wrap break-words"
+                  >
+                    {diary.summary}
+                  </div>
+                )}
+
+              {/* 스티커 & 꾸미기 에셋 (작성 화면과 100% 동일한 절대 위치와 크기) */}
+              {normalizedLayers.stickers?.map((sticker, idx) => (
                 <div
-                  className="w-24 h-5 rounded shadow-2xs relative overflow-hidden"
+                  key={sticker.id}
                   style={{
-                    backgroundColor: sticker.color,
-                    backgroundImage:
-                      sticker.pattern === 'dots'
-                        ? 'radial-gradient(rgba(0,0,0,0.15) 1px, transparent 1px)'
-                        : sticker.pattern === 'stripes'
-                        ? 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.08) 4px, rgba(0,0,0,0.08) 8px)'
-                        : 'none',
-                    backgroundSize: sticker.pattern === 'dots' ? '6px 6px' : 'auto',
+                    position: 'absolute',
+                    left: `${sticker.x || 0}px`,
+                    top: `${sticker.y || 0}px`,
+                    zIndex: typeof sticker.layerOrder === 'number' ? sticker.layerOrder : idx + 1,
+                    transform: `rotate(${sticker.rotation || 0}deg) scale(${sticker.scale || 1})`,
+                    transformOrigin: 'center center',
                   }}
-                />
-              ) : (
-                <span className="text-2xl sm:text-3xl filter drop-shadow-2xs block">
-                  {sticker.content}
-                </span>
-              )}
+                  className="select-none pointer-events-none p-1"
+                >
+                  {sticker.imageUrl ? (
+                    <img
+                      src={sticker.imageUrl}
+                      alt=""
+                      draggable={false}
+                      className={
+                        sticker.category === 'tape' || sticker.type === 'tape'
+                          ? 'w-28 h-auto object-contain select-none block'
+                          : 'w-14 h-14 object-contain select-none block'
+                      }
+                    />
+                  ) : sticker.type === 'tape' ? (
+                    <div
+                      className="w-28 h-6 rounded shadow-xs relative overflow-hidden"
+                      style={{
+                        backgroundColor: sticker.color,
+                        backgroundImage:
+                          sticker.pattern === 'dots'
+                            ? 'radial-gradient(rgba(0,0,0,0.15) 1px, transparent 1px)'
+                            : sticker.pattern === 'stripes'
+                            ? 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.08) 4px, rgba(0,0,0,0.08) 8px)'
+                            : 'none',
+                        backgroundSize: sticker.pattern === 'dots' ? '6px 6px' : 'auto',
+                      }}
+                    >
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
+                      <div className="absolute right-0 top-0 bottom-0 w-1 bg-black/10" />
+                    </div>
+                  ) : (
+                    <span className="text-3xl sm:text-4xl filter drop-shadow-xs block leading-none">
+                      {sticker.content}
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
       </div>
     </div>

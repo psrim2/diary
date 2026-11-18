@@ -1,20 +1,55 @@
 import React, { useRef, useEffect } from 'react';
 
-// 기존 데이터에 layerOrder가 없는 경우 순차적인 생성 순서 부여
+// 표준 다이어리 규격 캔버스 해상도 (모든 디바이스 공통 가상 뷰포트)
+export const CANONICAL_WIDTH = 360;
+export const CANONICAL_HEIGHT = 520;
+
+// 기존 데이터에 layerOrder가 없는 경우 순차적인 생성 순서 부여 & 레거시 좌표 정규화
 export function normalizeDiaryLayers(diary) {
   let order = 1;
-  const strokes = (diary?.strokes || []).map((s) => ({
+  let strokes = (diary?.strokes || []).map((s) => ({
     ...s,
     layerOrder: typeof s.layerOrder === 'number' ? s.layerOrder : order++,
   }));
-  const textBlocks = (diary?.textBlocks || []).map((t) => ({
+  let textBlocks = (diary?.textBlocks || []).map((t) => ({
     ...t,
     layerOrder: typeof t.layerOrder === 'number' ? t.layerOrder : order++,
   }));
-  const stickers = (diary?.stickers || []).map((st) => ({
+  let stickers = (diary?.stickers || []).map((st) => ({
     ...st,
     layerOrder: typeof st.layerOrder === 'number' ? st.layerOrder : order++,
   }));
+
+  // 레거시 데이터 호환: 과거 PC 넓은 화면(>380px)에서 작성되어 좌표가 벗어난 경우 360x520 영역 내로 비율 자동 보정
+  let maxX = 0;
+  strokes.forEach((s) => s.points?.forEach((p) => { if (p?.x > maxX) maxX = p.x; }));
+  stickers.forEach((st) => { if (st?.x > maxX) maxX = st.x; });
+  textBlocks.forEach((tb) => { if (tb?.x > maxX) maxX = tb.x; });
+
+  if (maxX > 380) {
+    const scaleFactor = 330 / maxX;
+    strokes = strokes.map((s) => ({
+      ...s,
+      size: Math.max(1, Number((s.size * scaleFactor).toFixed(1))),
+      points: s.points?.map((p) => ({
+        x: Math.round(p.x * scaleFactor),
+        y: Math.round(p.y * scaleFactor),
+      })),
+    }));
+    stickers = stickers.map((st) => ({
+      ...st,
+      x: Math.round(st.x * scaleFactor),
+      y: Math.round(st.y * scaleFactor),
+      scale: Math.max(0.4, Number(((st.scale || 1) * scaleFactor).toFixed(2))),
+    }));
+    textBlocks = textBlocks.map((tb) => ({
+      ...tb,
+      x: Math.round((tb.x || 0) * scaleFactor),
+      y: Math.round((tb.y || 0) * scaleFactor),
+      fontSize: Math.max(12, Math.round((tb.fontSize || 20) * scaleFactor)),
+    }));
+  }
+
   const allOrders = [
     ...strokes.map((s) => s.layerOrder || 0),
     ...textBlocks.map((t) => t.layerOrder || 0),
@@ -92,7 +127,7 @@ export function buildStrokeBands(activeStrokes = [], textBlocks = [], stickers =
   });
 }
 
-export function StrokeBandCanvas({ band }) {
+export function StrokeBandCanvas({ band, width = CANONICAL_WIDTH, height = CANONICAL_HEIGHT }) {
   const bandCanvasRef = useRef(null);
 
   useEffect(() => {
@@ -100,12 +135,9 @@ export function StrokeBandCanvas({ band }) {
     if (!canvas) return;
 
     const renderBand = () => {
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
-
       const dpr = window.devicePixelRatio || 1;
-      const targetW = Math.round(rect.width * dpr);
-      const targetH = Math.round(rect.height * dpr);
+      const targetW = Math.round(width * dpr);
+      const targetH = Math.round(height * dpr);
 
       if (canvas.width !== targetW || canvas.height !== targetH) {
         canvas.width = targetW;
@@ -164,16 +196,17 @@ export function StrokeBandCanvas({ band }) {
     };
 
     renderBand();
-    const observer = new ResizeObserver(() => renderBand());
-    observer.observe(canvas);
-    return () => observer.disconnect();
-  }, [band]);
+  }, [band, width, height]);
 
   return (
     <canvas
       ref={bandCanvasRef}
-      style={{ zIndex: band.layerOrder }}
-      className="absolute inset-0 w-full h-full pointer-events-none block"
+      style={{
+        zIndex: band.layerOrder,
+        width: `${width}px`,
+        height: `${height}px`,
+      }}
+      className="absolute inset-0 pointer-events-none block"
     />
   );
 }

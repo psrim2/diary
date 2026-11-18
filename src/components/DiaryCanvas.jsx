@@ -19,7 +19,13 @@ import {
 import { PEN_TOOLS, PAPER_STYLES, FONTS } from '../constants';
 import { PRESET_GIF_STICKERS } from '../constants/presetGifStickers';
 import { subscribeToDecorations } from '../firebase';
-import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas } from '../utils/canvasLayers';
+import { 
+  normalizeDiaryLayers, 
+  buildStrokeBands, 
+  StrokeBandCanvas, 
+  CANONICAL_WIDTH, 
+  CANONICAL_HEIGHT 
+} from '../utils/canvasLayers';
 import StickerPalette from './StickerPalette';
 import PaperSelectModal from './PaperSelectModal';
 
@@ -194,8 +200,45 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
   const editorRootRef = useRef(null);
   const canvasRef = useRef(null);
   const canvasContainerRef = useRef(null);
+  const paperViewportRef = useRef(null);
+  const [paperScale, setPaperScale] = useState(1);
   const isDrawingRef = useRef(false);
   const currentStrokeRef = useRef(null);
+
+  // 뷰포트 크기에 맞춰 표준 규격(360x520) 속지의 스케일(scale)을 자동 계산
+  const updatePaperScale = useCallback(() => {
+    const viewport = paperViewportRef.current;
+    if (!viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    // 상하좌우 안전 여백 고려
+    const availW = Math.max(120, rect.width - 24);
+    const availH = Math.max(120, rect.height - 16);
+
+    const scaleW = availW / CANONICAL_WIDTH;
+    const scaleH = availH / CANONICAL_HEIGHT;
+    const calculated = Math.min(scaleW, scaleH);
+
+    // 모바일/태블릿/PC에서 깨짐 없이 0.55 ~ 1.15 사이로 최적 스케일 설정
+    const clamped = Math.min(1.15, Math.max(0.55, Number(calculated.toFixed(3))));
+    setPaperScale(clamped);
+  }, []);
+
+  useEffect(() => {
+    updatePaperScale();
+    const viewport = paperViewportRef.current;
+    if (!viewport) return;
+
+    const ro = new ResizeObserver(() => updatePaperScale());
+    ro.observe(viewport);
+    window.addEventListener('resize', updatePaperScale);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', updatePaperScale);
+    };
+  }, [updatePaperScale, activeToolMode]);
 
   // 모바일/태블릿 가상 키보드 높이 감지 (툴바가 키보드 위로 올라오도록 오프셋 계산)
   const [keyboardOffset, setKeyboardOffset] = useState(0);
@@ -268,17 +311,14 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
     [activeStrokes, textBlocks, stickers]
   );
 
-  // 캔버스 크기 업데이트
+  // 캔버스 크기 업데이트 (CANONICAL 고정 해상도 360x520 & DPR 렌더링)
   const updateCanvasDimensions = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return;
-
     const dpr = window.devicePixelRatio || 1;
-    const targetWidth = Math.round(rect.width * dpr);
-    const targetHeight = Math.round(rect.height * dpr);
+    const targetWidth = Math.round(CANONICAL_WIDTH * dpr);
+    const targetHeight = Math.round(CANONICAL_HEIGHT * dpr);
 
     if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
       canvas.width = targetWidth;
@@ -290,53 +330,28 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
   }, [clearOverlayCanvas]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     updateCanvasDimensions();
-
-    const resizeObserver = new ResizeObserver(() => {
-      updateCanvasDimensions();
-    });
-
-    resizeObserver.observe(canvas);
-    if (canvasContainerRef.current) {
-      resizeObserver.observe(canvasContainerRef.current);
-    }
-
-    window.addEventListener('resize', updateCanvasDimensions);
-
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener('resize', updateCanvasDimensions);
-    };
   }, [updateCanvasDimensions]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      updateCanvasDimensions();
-    }, 40);
-    return () => clearTimeout(timer);
-  }, [activeToolMode, updateCanvasDimensions]);
-
-  // 좌표 계산
+  // 좌표 계산 (터치 및 마우스 위치를 CANONICAL 표준 360x520 좌표계로 정밀 역변환)
   const getCoordinates = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
 
     const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-
     const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
     const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
 
-    const scaleX = (canvas.width / dpr) / rect.width;
-    const scaleY = (canvas.height / dpr) / rect.height;
+    const scaleX = rect.width > 0 ? CANONICAL_WIDTH / rect.width : 1;
+    const scaleY = rect.height > 0 ? CANONICAL_HEIGHT / rect.height : 1;
 
     const x = (clientX - rect.left) * scaleX;
     const y = (clientY - rect.top) * scaleY;
 
-    return { x, y };
+    return {
+      x: Math.max(0, Math.min(CANONICAL_WIDTH, x)),
+      y: Math.max(0, Math.min(CANONICAL_HEIGHT, y)),
+    };
   };
 
   // 드로잉 이벤트
@@ -478,7 +493,8 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
 
   // 인스타그램 스토리 텍스트 입력 완료 ('완료' 클릭 또는 바깥 배경 탭)
   const handleFinishStoryText = () => {
-    const trimmed = editingText.trim();
+    const rawValue = storyTextareaRef.current?.value ?? editingText;
+    const trimmed = (rawValue || '').trim();
     if (!trimmed) {
       // 텍스트가 비어있으면 기존 블록 삭제, 신규면 생성 취소
       if (editingTextId) {
@@ -489,8 +505,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
       return;
     }
 
-    const containerW = canvasContainerRef.current?.clientWidth || 340;
-    const defaultX = Math.round(containerW * 0.05);
+    const defaultX = Math.round(CANONICAL_WIDTH * 0.05);
 
     setTextBlocks(prev => {
       const exists = prev.find(t => t.id === editingTextId);
@@ -499,7 +514,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
           t.id === editingTextId
             ? {
                 ...t,
-                text: editingText,
+                text: rawValue,
                 fontFamily: editingFont,
                 fontSize: editingSize,
                 color: editingColor,
@@ -511,14 +526,14 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
       } else {
         const newBlock = {
           id: editingTextId,
-          text: editingText,
+          text: rawValue,
           fontFamily: editingFont,
           fontSize: editingSize,
           color: editingColor,
           textAlign: editingAlign,
           bgStyle: editingBgStyle,
           x: defaultX,
-          y: Math.min(260, 40 + prev.length * 45),
+          y: Math.min(CANONICAL_HEIGHT - 60, 40 + prev.length * 45),
           rotation: 0,
           scale: 1,
           layerOrder: getNextLayerOrder(),
@@ -696,16 +711,17 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
 
       if (draggingItem) {
         if (e.cancelable) e.preventDefault();
-        const deltaX = clientX - draggingItem.startX;
-        const deltaY = clientY - draggingItem.startY;
+        const effectiveScale = paperScale > 0 ? paperScale : 1;
+        const deltaX = (clientX - draggingItem.startX) / effectiveScale;
+        const deltaY = (clientY - draggingItem.startY) / effectiveScale;
 
-        const newX = draggingItem.origX + deltaX;
-        const newY = Math.max(0, draggingItem.origY + deltaY);
+        const newX = Math.max(0, Math.min(CANONICAL_WIDTH - 20, draggingItem.origX + deltaX));
+        const newY = Math.max(0, Math.min(CANONICAL_HEIGHT - 20, draggingItem.origY + deltaY));
 
         if (draggingItem.type === 'text') {
           updateTextBlock(draggingItem.id, { x: newX, y: newY });
         } else if (draggingItem.type === 'sticker') {
-          updateSticker(draggingItem.id, { x: Math.max(0, newX), y: newY });
+          updateSticker(draggingItem.id, { x: newX, y: newY });
         }
       }
     };
@@ -1075,39 +1091,60 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
 
       {/* 
         ================================================================
-        [본문] 속지의 줄무늬/모눈 배경 컬러는 바탕색(#fafafa) 일체 유지
+        [본문] 모든 디바이스에서 100% 동일한 결과값을 보장하는 표준 규격(CANONICAL 360x520) 다이어리 속지
+        - 디바이스 화면 크기(iPhone SE ~ 15 Pro, 갤럭시, iPad, PC)에 관계없이 정비율 스케일링
+        - 획, 스티커, 텍스트 줄바꿈 및 배치가 모든 기기에서 완벽하게 동일하게 유지
         ================================================================
       */}
       <div 
-        ref={canvasContainerRef}
-        onClick={() => {
-          if (activeToolMode !== 'pen') {
-            setSelectedTextId(null);
-            setSelectedStickerId(null);
-          }
-        }}
-        className={`flex-1 mx-4 sm:mx-6 mb-48 sm:mb-52 relative isolate overflow-hidden ${currentPaperClass} transition-colors duration-200`}
+        ref={paperViewportRef}
+        className="flex-1 w-full flex items-center justify-center relative overflow-hidden select-none mb-36 sm:mb-40 px-2"
       >
-        {/* (1-A) 생성 순서(layerOrder)별 드로잉 밴드 캔버스 레이어 */}
-        {strokeBands.map((band) => (
-          <StrokeBandCanvas key={band.id} band={band} />
-        ))}
-
-        {/* (1-B) 현재 그리는 중인 획을 입력받는 최상단 인터랙티브 드로잉 캔버스 */}
-        <canvas
-          ref={canvasRef}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-          className={`absolute inset-0 w-full h-full block ${
-            activeToolMode === 'pen' ? 'cursor-crosshair touch-none' : 'pointer-events-none'
-          }`}
+        <div
           style={{
-            zIndex: activeToolMode === 'pen' ? 9999 : 0,
-            touchAction: 'none',
+            width: `${CANONICAL_WIDTH * paperScale}px`,
+            height: `${CANONICAL_HEIGHT * paperScale}px`,
           }}
-        />
+          className="relative flex items-center justify-center shrink-0 transition-[width,height] duration-75"
+        >
+          <div 
+            ref={canvasContainerRef}
+            onClick={() => {
+              if (activeToolMode !== 'pen') {
+                setSelectedTextId(null);
+                setSelectedStickerId(null);
+              }
+            }}
+            style={{
+              width: `${CANONICAL_WIDTH}px`,
+              height: `${CANONICAL_HEIGHT}px`,
+              transform: `scale(${paperScale})`,
+              transformOrigin: 'top left',
+            }}
+            className={`absolute top-0 left-0 rounded-2xl shadow-sm border border-stone-200/80 overflow-hidden ${currentPaperClass} transition-colors duration-200`}
+          >
+            {/* (1-A) 생성 순서(layerOrder)별 드로잉 밴드 캔버스 레이어 */}
+            {strokeBands.map((band) => (
+              <StrokeBandCanvas key={band.id} band={band} width={CANONICAL_WIDTH} height={CANONICAL_HEIGHT} />
+            ))}
+
+            {/* (1-B) 현재 그리는 중인 획을 입력받는 최상단 인터랙티브 드로잉 캔버스 */}
+            <canvas
+              ref={canvasRef}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              style={{
+                zIndex: activeToolMode === 'pen' ? 9999 : 0,
+                touchAction: 'none',
+                width: `${CANONICAL_WIDTH}px`,
+                height: `${CANONICAL_HEIGHT}px`,
+              }}
+              className={`absolute inset-0 block ${
+                activeToolMode === 'pen' ? 'cursor-crosshair touch-none' : 'pointer-events-none'
+              }`}
+            />
 
         {/* (2) 텍스트 블록 레이어 (인스타그램 스토리 스티커 스타일) */}
         {textBlocks.map((block, idx) => {
@@ -1365,6 +1402,8 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
             </div>
           );
         })}
+          </div>
+        </div>
       </div>
 
       {/* 
@@ -1579,29 +1618,21 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
         {/* (2) 아래쪽 아이콘 독 툴박스 - 라운드 20px (위 박스와 정확히 10px 간격 유지) */}
         <div className="pointer-events-auto bg-[#f4f4f4]/95 backdrop-blur-md border border-stone-200/80 rounded-[20px] px-7 py-3.5 shadow-md flex items-center justify-between">
           
-          {/* 1. 타이핑 아이콘 (Type) - 텍스트 모드 전환 및 인스타그램 스토리 에디터 오픈 */}
+          {/* 1. 타이핑 아이콘 (Type) - 항상 새 텍스트 입력창 오픈 (인스타그램 스토리 스타일) */}
           <button
+            type="button"
             onClick={() => {
               setSelectedStickerId(null);
-              if (activeToolMode !== 'text') {
-                setActiveToolMode('text');
-                if (textBlocks.length === 0) {
-                  openStoryTextEditor(null);
-                } else {
-                  const targetId = selectedTextId || textBlocks[textBlocks.length - 1].id;
-                  setSelectedTextId(targetId);
-                }
-              } else {
-                const currentBlock = textBlocks.find(t => t.id === selectedTextId);
-                openStoryTextEditor(currentBlock || null);
-              }
+              setSelectedTextId(null);
+              setActiveToolMode('text');
+              openStoryTextEditor(null);
             }}
             className={`p-1.5 rounded-full transition-all ${
               activeToolMode === 'text'
                 ? 'text-black scale-110 font-bold'
                 : 'text-stone-400 hover:text-stone-700'
             }`}
-            title="텍스트 추가 / 수정 (인스타그램 스토리 스타일)"
+            title="새 텍스트 작성 (인스타그램 스토리 스타일)"
           >
             <Type size={21} strokeWidth={activeToolMode === 'text' ? 2.6 : 2} />
           </button>
@@ -1792,23 +1823,38 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
               </button>
             </div>
 
-            {/* 완료 버튼 (블랙 원형/필 버튼) */}
+            {/* 완료 버튼 (블랙 원형/필 버튼 - 모바일 터치 즉각 반응) */}
             <button
               type="button"
-              onClick={handleFinishStoryText}
-              className="px-5 py-2 bg-black hover:bg-stone-800 text-white font-black text-sm rounded-full shadow-md active:scale-95 transition"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                handleFinishStoryText();
+              }}
+              onTouchEnd={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                handleFinishStoryText();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleFinishStoryText();
+              }}
+              className="px-5 py-2 bg-black hover:bg-stone-800 text-white font-black text-sm rounded-full shadow-md active:scale-95 transition cursor-pointer select-none"
             >
               완료
             </button>
           </div>
 
-          {/* 2. 중앙 영역: [좌측 수직 크기 슬라이더] + [중앙 텍스트 입력창] */}
+          {/* 2. 중앙 영역: [좌측 수직 크기 슬라이더] + [중앙 텍스트 입력창] - 바깥 영역 터치 시 작성 완료 */}
           <div
-            className="flex-1 flex items-center justify-center relative my-auto px-2 overflow-y-auto no-scrollbar"
-            onClick={(e) => e.stopPropagation()}
+            className="flex-1 flex items-center justify-center relative my-auto px-2 overflow-y-auto no-scrollbar cursor-pointer"
+            onClick={handleFinishStoryText}
           >
             {/* 인스타그램 스토리 수직 폰트 크기 슬라이더 (좌측) */}
-            <div className="absolute left-1 sm:left-4 top-1/2 -translate-y-1/2 flex flex-col items-center z-20 select-none">
+            <div
+              className="absolute left-1 sm:left-4 top-1/2 -translate-y-1/2 flex flex-col items-center z-20 select-none cursor-default"
+              onClick={(e) => e.stopPropagation()}
+            >
               <span className="text-[13px] text-stone-900 font-black mb-1">A</span>
               <div className="h-44 sm:h-52 flex items-center justify-center">
                 <input
@@ -1825,7 +1871,10 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
             </div>
 
             {/* 중앙 텍스트에어리어 (자동 높이 & 실시간 스타일 반영) */}
-            <div className="w-full max-w-sm sm:max-w-md px-10 flex flex-col items-center justify-center">
+            <div
+              className="w-full max-w-sm sm:max-w-md px-10 flex flex-col items-center justify-center cursor-default"
+              onClick={(e) => e.stopPropagation()}
+            >
               <textarea
                 ref={storyTextareaRef}
                 value={editingText}
@@ -1843,6 +1892,8 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                       : editingColor,
                   textAlign: editingAlign,
                   lineHeight: 1.35,
+                  userSelect: 'text',
+                  WebkitUserSelect: 'text',
                   backgroundColor:
                     editingBgStyle === 'light'
                       ? '#ffffff'
@@ -1852,7 +1903,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                       ? editingColor
                       : 'transparent',
                 }}
-                className={`w-full border-0 outline-hidden resize-none p-3.5 placeholder-stone-400 overflow-hidden transition-all ${
+                className={`w-full border-0 outline-hidden resize-none p-3.5 placeholder-stone-400 overflow-hidden transition-all select-text ${
                   editingBgStyle === 'light'
                     ? 'rounded-2xl shadow-md border border-stone-200/90'
                     : editingBgStyle !== 'none'
