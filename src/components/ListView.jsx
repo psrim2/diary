@@ -61,7 +61,7 @@ function DiaryCard({ diary, onSelect, onDelete }) {
     const updatePreviewScale = () => {
       const w = el.clientWidth;
       if (w > 0) {
-        setPreviewScale(Math.min(1.0, Number((w / CANONICAL_WIDTH).toFixed(3))));
+        setPreviewScale(Math.min(2.5, Math.max(0.4, Number((w / CANONICAL_WIDTH).toFixed(3)))));
       }
     };
     updatePreviewScale();

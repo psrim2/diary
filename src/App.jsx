@@ -380,13 +380,19 @@ function DiaryMainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-100 flex flex-col items-center justify-start sm:p-4 font-sans text-stone-800">
+    <div className={`min-h-screen w-full flex flex-col items-center justify-center font-sans text-stone-800 relative transition-colors duration-300 ${
+      currentView === 'editor' ? 'desk-background p-0 sm:p-6' : 'bg-stone-100 justify-start p-0 sm:p-4'
+    }`}>
       {/* 
         모바일 ~ 태블릿 ~ PC 완전 반응형 레이아웃
-        - 에디터 모드: 아날로그 다이어리 수첩 규격(max-w-md, ~448px)으로 모든 기기에서 동일한 종이 비례와 몰입감 제공
+        - 에디터 모드: aspect-ratio: 3 / 4, 최대 높이 85dvh 기반 정비율 유동 확대 & 중앙 정렬
         - 캘린더/목록 뷰: 여유로운 너비(max-w-2xl)로 쾌적한 브라우징 제공
       */}
-      <div className={`w-full ${currentView === 'editor' ? 'max-w-md' : 'max-w-2xl'} h-screen sm:h-[92vh] bg-[#fafafa] flex flex-col sm:rounded-3xl sm:shadow-lg sm:border sm:border-stone-200/90 overflow-hidden relative transition-[max-width] duration-200`}>
+      <div className={`${
+        currentView === 'editor'
+          ? 'diary-editor-window'
+          : 'w-full max-w-2xl h-screen sm:h-[92vh] bg-[#fafafa] flex flex-col sm:rounded-3xl sm:shadow-lg sm:border sm:border-stone-200/90 overflow-hidden relative transition-[max-width] duration-200'
+      }`}>
         
         {/* 상단 네비게이션 헤더 (에디터 화면이 아닐 때) */}
         {currentView !== 'editor' && (

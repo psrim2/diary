@@ -127,7 +127,7 @@ export function buildStrokeBands(activeStrokes = [], textBlocks = [], stickers =
   });
 }
 
-export function StrokeBandCanvas({ band, width = CANONICAL_WIDTH, height = CANONICAL_HEIGHT }) {
+export function StrokeBandCanvas({ band }) {
   const bandCanvasRef = useRef(null);
 
   useEffect(() => {
@@ -135,9 +135,14 @@ export function StrokeBandCanvas({ band, width = CANONICAL_WIDTH, height = CANON
     if (!canvas) return;
 
     const renderBand = () => {
+      const rect = canvas.getBoundingClientRect();
+      const currentW = rect.width;
+      const currentH = rect.height;
+      if (currentW === 0 || currentH === 0) return;
+
       const dpr = window.devicePixelRatio || 1;
-      const targetW = Math.round(width * dpr);
-      const targetH = Math.round(height * dpr);
+      const targetW = Math.round(currentW * dpr);
+      const targetH = Math.round(currentH * dpr);
 
       if (canvas.width !== targetW || canvas.height !== targetH) {
         canvas.width = targetW;
@@ -148,7 +153,10 @@ export function StrokeBandCanvas({ band, width = CANONICAL_WIDTH, height = CANON
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.scale(dpr, dpr);
+      ctx.scale(
+        dpr * (currentW / CANONICAL_WIDTH),
+        dpr * (currentH / CANONICAL_HEIGHT)
+      );
 
       band.operations.forEach((stroke) => {
         if (!stroke.points || stroke.points.length < 2) return;
@@ -196,17 +204,18 @@ export function StrokeBandCanvas({ band, width = CANONICAL_WIDTH, height = CANON
     };
 
     renderBand();
-  }, [band, width, height]);
+    const ro = new ResizeObserver(() => renderBand());
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, [band]);
 
   return (
     <canvas
       ref={bandCanvasRef}
       style={{
         zIndex: band.layerOrder,
-        width: `${width}px`,
-        height: `${height}px`,
       }}
-      className="absolute inset-0 pointer-events-none block"
+      className="absolute inset-0 w-full h-full pointer-events-none block"
     />
   );
 }
