@@ -29,6 +29,41 @@ function getTodayDateStr() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// 날짜별 단일 일기 원칙: 동일한 날짜(YYYY-MM-DD)를 가진 중복 일기를 1개로 병합/정리
+function deduplicateDiariesByDate(diaryList) {
+  if (!Array.isArray(diaryList)) return [];
+  const map = new Map();
+  diaryList.forEach((diary) => {
+    if (!diary || !diary.date) return;
+    const dateKey = String(diary.date).trim();
+    const existing = map.get(dateKey);
+    if (!existing) {
+      map.set(dateKey, diary);
+    } else {
+      // 둘 다 존재하는 경우, 실제 작성 내용(텍스트, 획, 스티커)이 더 풍부한 쪽을 유지
+      const existingScore =
+        (existing.textBlocks?.length || 0) * 10 +
+        (existing.strokes?.length || 0) * 2 +
+        (existing.stickers?.length || 0) * 5 +
+        (existing.weather ? 2 : 0) +
+        (existing.summary ? 5 : 0);
+      const currentScore =
+        (diary.textBlocks?.length || 0) * 10 +
+        (diary.strokes?.length || 0) * 2 +
+        (diary.stickers?.length || 0) * 5 +
+        (diary.weather ? 2 : 0) +
+        (diary.summary ? 5 : 0);
+
+      if (currentScore >= existingScore) {
+        map.set(dateKey, diary);
+      }
+    }
+  });
+  return Array.from(map.values()).sort((a, b) =>
+    (b.date || '').localeCompare(a.date || '')
+  );
+}
+
 export default function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
 
@@ -47,14 +82,15 @@ export default function App() {
 }
 
 function DiaryMainApp() {
-  // 로컬스토리지에서 일기 불러오기 (기본값: 아무 데이터도 없는 빈 배열 [])
+  // 로컬스토리지에서 일기 불러오기 (기본값: 아무 데이터도 없는 빈 배열 [] & 날짜별 중복 자동 정리)
   const [diaries, setDiaries] = useState(() => {
     const saved = localStorage.getItem('analog_diaries');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed.filter(d => !LEGACY_SAMPLE_IDS.has(String(d?.id)));
+          const validDiaries = parsed.filter(d => !LEGACY_SAMPLE_IDS.has(String(d?.id)));
+          return deduplicateDiariesByDate(validDiaries);
         }
       } catch (e) {
         console.error('Failed to parse diaries', e);
@@ -146,12 +182,24 @@ function DiaryMainApp() {
 
         if (isCancelled) return;
 
-        // 클라우드 일기 실시간 구독
+        // 클라우드 일기 실시간 구독 (날짜별 중복 자동 정리)
         unsubscribeDiaries = subscribeToUserDiaries(
           user.uid,
-          (cloudDiaries) => {
-            setDiaries(cloudDiaries);
+          async (cloudDiaries) => {
+            const deduped = deduplicateDiariesByDate(cloudDiaries);
+            setDiaries(deduped);
             setIsSyncing(false);
+
+            // Firestore에 동일 날짜로 생성된 불필요한 중복 문서가 남아있다면 원격에서도 자동 정리
+            if (cloudDiaries.length > deduped.length) {
+              const keepIds = new Set(deduped.map((d) => d.id));
+              const duplicateDocs = cloudDiaries.filter((d) => !keepIds.has(d.id));
+              for (const dup of duplicateDocs) {
+                if (dup?.id) {
+                  deleteDiaryFromCloud(user.uid, dup.id).catch(() => {});
+                }
+              }
+            }
           },
           () => {
             setIsSyncing(false);
@@ -293,19 +341,35 @@ function DiaryMainApp() {
     }
   };
 
-  // 일기 저장 처리 (로컬 상태 반영 + 로그인 시 Firestore 저장)
+  // 일기 저장 처리 (날짜별 1개 일기 원칙: 중복 방지, 로컬 반영 + 로그인 시 Firestore 동기화)
   const handleSaveDiary = async (updatedDiary) => {
-    setDiaries(prev => {
-      const exists = prev.some(d => d.id === updatedDiary.id);
-      if (exists) {
-        return prev.map(d => d.id === updatedDiary.id ? updatedDiary : d);
-      }
-      return [updatedDiary, ...prev];
+    // 1. 같은 날짜(date)를 가진 기존 일기가 있는지 확인
+    const sameDateDiary = diaries.find(
+      (d) => d.date === updatedDiary.date && d.id !== updatedDiary.id
+    );
+
+    // 2. 같은 날짜에 다른 ID의 일기가 존재했다면, 기존 ID를 유지하여 Firestore 중복 문서 생성 방지
+    const targetId = sameDateDiary?.id || updatedDiary.id;
+    const finalDiaryToSave = {
+      ...updatedDiary,
+      id: targetId,
+    };
+
+    setDiaries((prev) => {
+      // 동일 id 또는 동일 date를 가진 기존 항목을 모두 제거 후 신규 저장본 추가
+      const filtered = prev.filter(
+        (d) => d.id !== finalDiaryToSave.id && d.date !== finalDiaryToSave.date
+      );
+      return deduplicateDiariesByDate([finalDiaryToSave, ...filtered]);
     });
 
     if (user) {
       try {
-        await saveDiaryToCloud(user.uid, updatedDiary);
+        // 기존과 다른 ID로 임시 생성되었던 경우, 구 중복 문서 정리
+        if (updatedDiary.id && updatedDiary.id !== targetId) {
+          await deleteDiaryFromCloud(user.uid, updatedDiary.id);
+        }
+        await saveDiaryToCloud(user.uid, finalDiaryToSave);
       } catch (err) {
         console.error('[Firestore] 일기 저장 오류:', err);
       }

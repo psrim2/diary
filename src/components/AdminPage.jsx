@@ -11,6 +11,7 @@ import {
 } from '../firebase';
 
 const CATEGORIES = [
+  { id: 'gif', label: '움직이는 GIF (gif)' },
   { id: 'sticker', label: '스티커 (sticker)' },
   { id: 'weather', label: '날씨 (weather)' },
   { id: 'tape', label: '마스킹테이프 (tape)' },
@@ -498,7 +499,7 @@ export default function AdminPage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/png,image/svg+xml,image/*"
+              accept="image/gif,image/png,image/jpeg,image/webp,image/svg+xml,image/*"
               multiple
               onChange={handleFileChange}
               className="text-sm"

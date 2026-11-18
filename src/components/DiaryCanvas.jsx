@@ -11,10 +11,15 @@ import {
   RotateCw, 
   RotateCcw, 
   Maximize2,
-  X
+  X,
+  AlignLeft,
+  AlignCenter,
+  AlignRight
 } from 'lucide-react';
 import { PEN_TOOLS, PAPER_STYLES, FONTS } from '../constants';
+import { PRESET_GIF_STICKERS } from '../constants/presetGifStickers';
 import { subscribeToDecorations } from '../firebase';
+import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas } from '../utils/canvasLayers';
 import StickerPalette from './StickerPalette';
 import PaperSelectModal from './PaperSelectModal';
 
@@ -64,182 +69,14 @@ function getLocalTodayStr() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-// 기존 데이터에 layerOrder가 없는 경우 순차적인 생성 순서 부여
-export function normalizeDiaryLayers(diary) {
-  let order = 1;
-  const strokes = (diary?.strokes || []).map((s) => ({
-    ...s,
-    layerOrder: typeof s.layerOrder === 'number' ? s.layerOrder : order++,
-  }));
-  const textBlocks = (diary?.textBlocks || []).map((t) => ({
-    ...t,
-    layerOrder: typeof t.layerOrder === 'number' ? t.layerOrder : order++,
-  }));
-  const stickers = (diary?.stickers || []).map((st) => ({
-    ...st,
-    layerOrder: typeof st.layerOrder === 'number' ? st.layerOrder : order++,
-  }));
-  const allOrders = [
-    ...strokes.map((s) => s.layerOrder || 0),
-    ...textBlocks.map((t) => t.layerOrder || 0),
-    ...stickers.map((st) => st.layerOrder || 0),
-  ];
-  const maxOrder = allOrders.length > 0 ? Math.max(...allOrders) : 0;
-  return { strokes, textBlocks, stickers, maxOrder };
-}
-
-// 생성 순서(layerOrder)에 따라 드로잉 획들을 밴드 단위로 묶어 스티커/텍스트와 정확한 레이어 순서로 교차 렌더링
-export function buildStrokeBands(activeStrokes = [], textBlocks = [], stickers = []) {
-  if (!Array.isArray(activeStrokes) || activeStrokes.length === 0) return [];
-
-  const indexedStrokes = activeStrokes.map((s, idx) => ({
-    ...s,
-    layerOrder: typeof s.layerOrder === 'number' ? s.layerOrder : idx + 1,
-  }));
-
-  const erasers = indexedStrokes
-    .filter((s) => s.tool === 'eraser')
-    .sort((a, b) => a.layerOrder - b.layerOrder);
-
-  const drawStrokes = indexedStrokes
-    .filter((s) => s.tool !== 'eraser')
-    .sort((a, b) => a.layerOrder - b.layerOrder);
-
-  if (drawStrokes.length === 0) return [];
-
-  const domOrders = [
-    ...(textBlocks || []).map((t) => (typeof t.layerOrder === 'number' ? t.layerOrder : 0)),
-    ...(stickers || []).map((st) => (typeof st.layerOrder === 'number' ? st.layerOrder : 0)),
-  ]
-    .filter((o) => o > 0)
-    .sort((a, b) => a - b);
-
-  const rawBands = [];
-  let currentBand = null;
-
-  drawStrokes.forEach((stroke) => {
-    if (!currentBand) {
-      currentBand = {
-        layerOrder: stroke.layerOrder,
-        maxOrder: stroke.layerOrder,
-        strokes: [stroke],
-      };
-      rawBands.push(currentBand);
-    } else {
-      const hasInterveningDomObject = domOrders.some(
-        (o) => o > currentBand.maxOrder && o < stroke.layerOrder
-      );
-      if (hasInterveningDomObject) {
-        currentBand = {
-          layerOrder: stroke.layerOrder,
-          maxOrder: stroke.layerOrder,
-          strokes: [stroke],
-        };
-        rawBands.push(currentBand);
-      } else {
-        currentBand.strokes.push(stroke);
-        currentBand.maxOrder = Math.max(currentBand.maxOrder, stroke.layerOrder);
-      }
-    }
-  });
-
-  return rawBands.map((band, idx) => {
-    const applicableErasers = erasers.filter((e) => e.layerOrder > band.layerOrder);
-    const operations = [...band.strokes, ...applicableErasers].sort(
-      (a, b) => a.layerOrder - b.layerOrder
-    );
-    return {
-      id: `band-${band.layerOrder}-${idx}`,
-      layerOrder: band.layerOrder,
-      operations,
-    };
-  });
-}
-
-export function StrokeBandCanvas({ band }) {
-  const bandCanvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = bandCanvasRef.current;
-    if (!canvas) return;
-
-    const renderBand = () => {
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return;
-
-      const dpr = window.devicePixelRatio || 1;
-      const targetW = Math.round(rect.width * dpr);
-      const targetH = Math.round(rect.height * dpr);
-
-      if (canvas.width !== targetW || canvas.height !== targetH) {
-        canvas.width = targetW;
-        canvas.height = targetH;
-      }
-
-      const ctx = canvas.getContext('2d');
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.scale(dpr, dpr);
-
-      band.operations.forEach((stroke) => {
-        if (!stroke.points || stroke.points.length < 2) return;
-        ctx.save();
-        ctx.beginPath();
-
-        if (stroke.tool === 'eraser') {
-          ctx.globalCompositeOperation = 'destination-out';
-          ctx.lineWidth = stroke.size;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-        } else if (stroke.tool === 'highlighter') {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.strokeStyle = stroke.color;
-          ctx.lineWidth = stroke.size;
-          ctx.globalAlpha = 0.35;
-          ctx.lineCap = 'square';
-        } else {
-          ctx.globalCompositeOperation = 'source-over';
-          ctx.strokeStyle = stroke.color;
-          ctx.lineWidth = stroke.size;
-          ctx.globalAlpha = stroke.tool === 'pencil' ? 0.8 : 1.0;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-        }
-
-        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-        for (let i = 1; i < stroke.points.length; i++) {
-          const midPoint = {
-            x: (stroke.points[i - 1].x + stroke.points[i].x) / 2,
-            y: (stroke.points[i - 1].y + stroke.points[i].y) / 2,
-          };
-          ctx.quadraticCurveTo(
-            stroke.points[i - 1].x,
-            stroke.points[i - 1].y,
-            midPoint.x,
-            midPoint.y
-          );
-        }
-        ctx.stroke();
-        ctx.restore();
-      });
-
-      ctx.restore();
-    };
-
-    renderBand();
-    const observer = new ResizeObserver(() => renderBand());
-    observer.observe(canvas);
-    return () => observer.disconnect();
-  }, [band]);
-
-  return (
-    <canvas
-      ref={bandCanvasRef}
-      style={{ zIndex: band.layerOrder }}
-      className="absolute inset-0 w-full h-full pointer-events-none block"
-    />
-  );
+function getEventClientCoords(e) {
+  if (e.touches && e.touches.length > 0) {
+    return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+  }
+  if (e.clientX !== undefined && e.clientY !== undefined) {
+    return { clientX: e.clientX, clientY: e.clientY };
+  }
+  return { clientX: 0, clientY: 0 };
 }
 
 export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
@@ -254,8 +91,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
   const [title, setTitle] = useState(diary?.title || '');
   const [date, setDate] = useState(diary?.date || getLocalTodayStr());
   const [weather, setWeather] = useState(() => {
-    const initial = diary?.weather || diary?.thumbnailMood || '';
-    return initial === '☀️' ? '' : initial;
+    return diary?.weather || diary?.thumbnailMood || '';
   });
   const [paperStyle, setPaperStyle] = useState(diary?.paperStyle || 'lined');
   
@@ -264,10 +100,11 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
 
   // 모달 상태
   const [isWeatherOpen, setIsWeatherOpen] = useState(false);
-  const [repCategoryTab, setRepCategoryTab] = useState('sticker'); // 'sticker' | 'weather' (마스킹테이프 제외)
+  const [repCategoryTab, setRepCategoryTab] = useState('weather'); // 날짜 옆에는 날씨 먼저 표시 (하단 툴과 차별화)
   const [isPaperModalOpen, setIsPaperModalOpen] = useState(false);
   const [isStickerPaletteOpen, setIsStickerPaletteOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Firestore decorations 목록 (날짜 옆 대표 아이콘 선택용)
   const [decorations, setDecorations] = useState([]);
@@ -282,6 +119,31 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
   // 텍스트 블록
   const [textBlocks, setTextBlocks] = useState(initialNormalized.textBlocks);
   const [selectedTextId, setSelectedTextId] = useState(null);
+
+  // 인스타그램 스토리 스타일 텍스트 입력 에디터 상태
+  const [isStoryTextOpen, setIsStoryTextOpen] = useState(false);
+  const [editingTextId, setEditingTextId] = useState(null);
+  const [editingText, setEditingText] = useState('');
+  const [editingFont, setEditingFont] = useState("'Gaegu', cursive");
+  const [editingSize, setEditingSize] = useState(24);
+  const [editingColor, setEditingColor] = useState('#111111');
+  const [editingAlign, setEditingAlign] = useState('center'); // 'left' | 'center' | 'right'
+  const [editingBgStyle, setEditingBgStyle] = useState('none'); // 'none' | 'light' | 'dark' | 'color'
+  const storyTextareaRef = useRef(null);
+
+  // 스토리 텍스트 에디터 열릴 때 오토포커스
+  useEffect(() => {
+    if (isStoryTextOpen) {
+      const timer = setTimeout(() => {
+        if (storyTextareaRef.current) {
+          storyTextareaRef.current.focus();
+          const len = storyTextareaRef.current.value.length;
+          storyTextareaRef.current.setSelectionRange(len, len);
+        }
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [isStoryTextOpen]);
 
   // 스티커
   const [stickers, setStickers] = useState(initialNormalized.stickers);
@@ -314,8 +176,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
       layerOrderCounterRef.current = normalized.maxOrder;
       setTitle(diary.title || '');
       setDate(diary.date || getLocalTodayStr());
-      const nextWeather = diary.weather || diary.thumbnailMood || '';
-      setWeather(nextWeather === '☀️' ? '' : nextWeather);
+      setWeather(diary.weather || diary.thumbnailMood || '');
       setPaperStyle(diary.paperStyle || 'lined');
       setTextBlocks(normalized.textBlocks);
       setStickers(normalized.stickers);
@@ -590,26 +451,90 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
     setPenColor(selectedHex);
   };
 
-  // 텍스트 블록 (기본 서체: 개구체, 기본 텍스트 없음, 가로 반응형 90% 및 좌우 마진 5%, 생성 순서 layerOrder 부여)
-  const handleAddTextBlock = () => {
-    const newId = `t-${Date.now()}`;
-    const newBlock = {
-      id: newId,
-      text: '',
-      fontFamily: "'Gaegu', cursive",
-      fontSize: 20,
-      color: penColor || '#111111',
-      x: null,
-      y: 20 + textBlocks.length * 40,
-      width: '90%',
-      rotation: 0,
-      scale: 1,
-      layerOrder: getNextLayerOrder(),
-    };
-    setTextBlocks([...textBlocks, newBlock]);
-    setSelectedTextId(newId);
-    setSelectedStickerId(null);
+  // 인스타그램 스토리 스타일 텍스트 입력창 열기 (신규 작성 또는 기존 수정)
+  const openStoryTextEditor = (existingBlock = null) => {
     setActiveToolMode('text');
+    if (existingBlock) {
+      setEditingTextId(existingBlock.id);
+      setEditingText(existingBlock.text || '');
+      setEditingFont(existingBlock.fontFamily || "'Gaegu', cursive");
+      setEditingSize(existingBlock.fontSize || 24);
+      setEditingColor(existingBlock.color || penColor || '#111111');
+      setEditingAlign(existingBlock.textAlign || 'center');
+      setEditingBgStyle(existingBlock.bgStyle || 'none');
+    } else {
+      const newId = `t-${Date.now()}`;
+      setEditingTextId(newId);
+      setEditingText('');
+      setEditingFont("'Gaegu', cursive");
+      setEditingSize(24);
+      setEditingColor(penColor || '#111111');
+      setEditingAlign('center');
+      setEditingBgStyle('none');
+    }
+    setIsStoryTextOpen(true);
+    setSelectedStickerId(null);
+  };
+
+  // 인스타그램 스토리 텍스트 입력 완료 ('완료' 클릭 또는 바깥 배경 탭)
+  const handleFinishStoryText = () => {
+    const trimmed = editingText.trim();
+    if (!trimmed) {
+      // 텍스트가 비어있으면 기존 블록 삭제, 신규면 생성 취소
+      if (editingTextId) {
+        setTextBlocks(prev => prev.filter(t => t.id !== editingTextId));
+      }
+      setSelectedTextId(null);
+      setIsStoryTextOpen(false);
+      return;
+    }
+
+    const containerW = canvasContainerRef.current?.clientWidth || 340;
+    const defaultX = Math.round(containerW * 0.05);
+
+    setTextBlocks(prev => {
+      const exists = prev.find(t => t.id === editingTextId);
+      if (exists) {
+        return prev.map(t =>
+          t.id === editingTextId
+            ? {
+                ...t,
+                text: editingText,
+                fontFamily: editingFont,
+                fontSize: editingSize,
+                color: editingColor,
+                textAlign: editingAlign,
+                bgStyle: editingBgStyle,
+              }
+            : t
+        );
+      } else {
+        const newBlock = {
+          id: editingTextId,
+          text: editingText,
+          fontFamily: editingFont,
+          fontSize: editingSize,
+          color: editingColor,
+          textAlign: editingAlign,
+          bgStyle: editingBgStyle,
+          x: defaultX,
+          y: Math.min(260, 40 + prev.length * 45),
+          rotation: 0,
+          scale: 1,
+          layerOrder: getNextLayerOrder(),
+        };
+        return [...prev, newBlock];
+      }
+    });
+
+    setSelectedTextId(editingTextId);
+    setActiveToolMode('text');
+    setIsStoryTextOpen(false);
+  };
+
+  // 레거시 호환용 추가 핸들러
+  const handleAddTextBlock = () => {
+    openStoryTextEditor(null);
   };
 
   const updateTextBlock = (id, fields) => {
@@ -652,15 +577,19 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
   const handleItemDragStart = (e, type, id, currentX, currentY) => {
     e.stopPropagation();
 
-    const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-    const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+    const { clientX, clientY } = getEventClientCoords(e);
 
     let resolvedOrigX = currentX;
-    if (typeof resolvedOrigX !== 'number') {
+    let resolvedOrigY = currentY;
+    if (typeof resolvedOrigX !== 'number' || typeof resolvedOrigY !== 'number') {
       const boxEl = e.currentTarget.closest('[data-object-box="true"]');
-      resolvedOrigX = boxEl
-        ? boxEl.offsetLeft
-        : Math.round((canvasContainerRef.current?.clientWidth || 340) * 0.05);
+      if (boxEl) {
+        if (typeof resolvedOrigX !== 'number') resolvedOrigX = boxEl.offsetLeft;
+        if (typeof resolvedOrigY !== 'number') resolvedOrigY = boxEl.offsetTop;
+      } else {
+        if (typeof resolvedOrigX !== 'number') resolvedOrigX = Math.round((canvasContainerRef.current?.clientWidth || 340) * 0.05);
+        if (typeof resolvedOrigY !== 'number') resolvedOrigY = 40;
+      }
     }
 
     setDraggingItem({
@@ -669,7 +598,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
       startX: clientX,
       startY: clientY,
       origX: resolvedOrigX,
-      origY: currentY || 0,
+      origY: resolvedOrigY,
     });
 
     if (type === 'text') {
@@ -695,8 +624,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
 
-    const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-    const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+    const { clientX, clientY } = getEventClientCoords(e);
 
     const startAngle = Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
     const startDist = Math.max(12, Math.hypot(clientX - centerX, clientY - centerY));
@@ -725,66 +653,87 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
     }
   };
 
-  const handleContainerPointerMove = (e) => {
-    const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-    const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+  // 전역 윈도우 드래그/변형 트래킹 (마우스가 컨테이너를 벗어나거나 모바일 고속 드래그 시에도 끊김 없이 100% 추적)
+  useEffect(() => {
+    if (!draggingItem && !transformingItem) return;
 
-    // 1) 크기 조절 또는 회전 중일 때
-    if (transformingItem) {
-      if (transformingItem.mode === 'rotate') {
-        const currentAngle =
-          Math.atan2(clientY - transformingItem.centerY, clientX - transformingItem.centerX) *
-          (180 / Math.PI);
-        const newRotation = Math.round(
-          transformingItem.origRotation + (currentAngle - transformingItem.startAngle)
-        );
-        if (transformingItem.itemType === 'text') {
-          updateTextBlock(transformingItem.id, { rotation: newRotation });
-        } else {
-          updateSticker(transformingItem.id, { rotation: newRotation });
+    const handleGlobalMove = (e) => {
+      const { clientX, clientY } = getEventClientCoords(e);
+      if (clientX === 0 && clientY === 0) return;
+
+      if (transformingItem) {
+        if (e.cancelable) e.preventDefault();
+        if (transformingItem.mode === 'rotate') {
+          const currentAngle =
+            Math.atan2(clientY - transformingItem.centerY, clientX - transformingItem.centerX) *
+            (180 / Math.PI);
+          const newRotation = Math.round(
+            transformingItem.origRotation + (currentAngle - transformingItem.startAngle)
+          );
+          if (transformingItem.itemType === 'text') {
+            updateTextBlock(transformingItem.id, { rotation: newRotation });
+          } else {
+            updateSticker(transformingItem.id, { rotation: newRotation });
+          }
+        } else if (transformingItem.mode === 'resize') {
+          const currentDist = Math.hypot(
+            clientX - transformingItem.centerX,
+            clientY - transformingItem.centerY
+          );
+          const ratio = currentDist / transformingItem.startDist;
+          const newScale = Math.min(
+            4.0,
+            Math.max(0.35, Number((transformingItem.origScale * ratio).toFixed(2)))
+          );
+          if (transformingItem.itemType === 'text') {
+            updateTextBlock(transformingItem.id, { scale: newScale });
+          } else {
+            updateSticker(transformingItem.id, { scale: newScale });
+          }
         }
-      } else if (transformingItem.mode === 'resize') {
-        const currentDist = Math.hypot(
-          clientX - transformingItem.centerX,
-          clientY - transformingItem.centerY
-        );
-        const ratio = currentDist / transformingItem.startDist;
-        const newScale = Math.min(
-          4.0,
-          Math.max(0.35, Number((transformingItem.origScale * ratio).toFixed(2)))
-        );
-        if (transformingItem.itemType === 'text') {
-          updateTextBlock(transformingItem.id, { scale: newScale });
-        } else {
-          updateSticker(transformingItem.id, { scale: newScale });
+        return;
+      }
+
+      if (draggingItem) {
+        if (e.cancelable) e.preventDefault();
+        const deltaX = clientX - draggingItem.startX;
+        const deltaY = clientY - draggingItem.startY;
+
+        const newX = draggingItem.origX + deltaX;
+        const newY = Math.max(0, draggingItem.origY + deltaY);
+
+        if (draggingItem.type === 'text') {
+          updateTextBlock(draggingItem.id, { x: newX, y: newY });
+        } else if (draggingItem.type === 'sticker') {
+          updateSticker(draggingItem.id, { x: Math.max(0, newX), y: newY });
         }
       }
-      return;
-    }
+    };
 
-    // 2) 드래그 위치 이동 중일 때 (글상자 및 스티커 모두 상하좌우 자유 이동)
-    if (!draggingItem) return;
+    const handleGlobalUp = () => {
+      setDraggingItem(null);
+      setTransformingItem(null);
+    };
 
-    const deltaX = clientX - draggingItem.startX;
-    const deltaY = clientY - draggingItem.startY;
+    window.addEventListener('pointermove', handleGlobalMove);
+    window.addEventListener('pointerup', handleGlobalUp);
+    window.addEventListener('pointercancel', handleGlobalUp);
+    window.addEventListener('touchmove', handleGlobalMove, { passive: false });
+    window.addEventListener('touchend', handleGlobalUp);
 
-    const newX = draggingItem.origX + deltaX;
-    const newY = Math.max(0, draggingItem.origY + deltaY);
-
-    if (draggingItem.type === 'text') {
-      updateTextBlock(draggingItem.id, { x: newX, y: newY });
-    } else if (draggingItem.type === 'sticker') {
-      updateSticker(draggingItem.id, { x: Math.max(0, newX), y: newY });
-    }
-  };
-
-  const handleContainerPointerUp = () => {
-    if (draggingItem) setDraggingItem(null);
-    if (transformingItem) setTransformingItem(null);
-  };
+    return () => {
+      window.removeEventListener('pointermove', handleGlobalMove);
+      window.removeEventListener('pointerup', handleGlobalUp);
+      window.removeEventListener('pointercancel', handleGlobalUp);
+      window.removeEventListener('touchmove', handleGlobalMove);
+      window.removeEventListener('touchend', handleGlobalUp);
+    };
+  }, [draggingItem, transformingItem]);
 
   // 저장
   const handleSaveDiary = () => {
+    if (isSaving) return;
+    setIsSaving(true);
     const finalDiary = {
       id: diary?.id || `entry-${date}-${Date.now()}`,
       title: title || `${yearNum}.${monthNum}.${dayNum} 기록`,
@@ -809,10 +758,6 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
     <div 
       ref={editorRootRef}
       className="flex flex-col h-full bg-[#fafafa] select-none overflow-hidden relative"
-      onPointerMove={handleContainerPointerMove}
-      onPointerUp={handleContainerPointerUp}
-      onTouchMove={handleContainerPointerMove}
-      onTouchEnd={handleContainerPointerUp}
     >
       {/* 
         ================================================================
@@ -872,13 +817,13 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
             />
           </div>
 
-          {/* 우측 대표 스티커 아이콘 버튼 (선택 전: 플러스 버튼 / 선택 시: 배경 동그라미 없이 w-11 h-11 스티커 표시) */}
+          {/* 우측 대표 날씨/스티커 아이콘 버튼 (선택 전: 플러스 버튼 / 선택 시: 배경 동그라미 없이 w-11 h-11 스티커 표시) */}
           <div className="relative pb-0.5">
             <button
               type="button"
               onClick={() => setIsWeatherOpen(!isWeatherOpen)}
               className="w-11 h-11 bg-transparent border-0 p-0 active:scale-95 transition flex items-center justify-center"
-              title="대표 스티커 선택"
+              title="날씨 / 대표 스티커 선택"
             >
               {weather ? (
                 isImageAsset(weather) ? (
@@ -897,66 +842,226 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
 
             {isWeatherOpen && (
               <div 
-                className="absolute right-0 top-full mt-2 bg-white border border-stone-200 rounded-2xl shadow-xl overflow-hidden z-50 w-60 animate-fadeIn"
+                className="absolute right-0 top-full mt-2 bg-white border border-stone-200 rounded-2xl shadow-xl overflow-hidden z-50 w-64 animate-fadeIn"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* 카테고리 탭: 스티커 / 날씨 (마스킹테이프 제외) */}
-                <div className="flex border-b border-stone-100">
-                  <button
-                    type="button"
-                    onClick={() => setRepCategoryTab('sticker')}
-                    className={`flex-1 py-2 text-xs font-medium border-b-2 transition ${
-                      repCategoryTab === 'sticker'
-                        ? 'border-black font-bold text-black'
-                        : 'border-transparent text-stone-400 hover:text-stone-700'
-                    }`}
-                  >
-                    스티커
-                  </button>
+                {/* 카테고리 탭: 날씨 / 스티커 (날짜 옆에는 하단 툴과 달리 '날씨'를 먼저 표시) */}
+                <div className="flex border-b border-stone-100 bg-stone-50/60">
                   <button
                     type="button"
                     onClick={() => setRepCategoryTab('weather')}
-                    className={`flex-1 py-2 text-xs font-medium border-b-2 transition ${
+                    className={`flex-1 py-2 text-xs font-semibold border-b-2 transition ${
                       repCategoryTab === 'weather'
-                        ? 'border-black font-bold text-black'
+                        ? 'border-black font-bold text-black bg-white'
                         : 'border-transparent text-stone-400 hover:text-stone-700'
                     }`}
                   >
                     날씨
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setRepCategoryTab('sticker')}
+                    className={`flex-1 py-2 text-xs font-semibold border-b-2 transition ${
+                      repCategoryTab === 'sticker'
+                        ? 'border-black font-bold text-black bg-white'
+                        : 'border-transparent text-stone-400 hover:text-stone-700'
+                    }`}
+                  >
+                    스티커
+                  </button>
                 </div>
 
-                {/* 선택된 탭의 스티커 그리드 */}
-                <div className="p-2.5 max-h-60 overflow-y-auto">
-                  {decorations.filter((item) => item.category === repCategoryTab).length > 0 ? (
-                    <div className="grid grid-cols-4 gap-2">
-                      {decorations
-                        .filter((item) => item.category === repCategoryTab)
-                        .map((item) => (
+                {/* 선택된 탭 컨텐츠 */}
+                <div className="p-3 max-h-64 overflow-y-auto no-scrollbar">
+                  {repCategoryTab === 'weather' ? (
+                    <div className="space-y-3">
+                      {/* 1. 업로드된 커스텀 날씨 아이콘 */}
+                      {decorations.filter((item) => item.category === 'weather').length > 0 && (
+                        <div>
+                          <div className="text-[10px] font-bold text-stone-400 mb-1.5 px-0.5">커스텀 날씨</div>
+                          <div className="grid grid-cols-4 gap-2">
+                            {decorations
+                              .filter((item) => item.category === 'weather')
+                              .map((item) => (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setWeather(item.imageUrl);
+                                    setIsWeatherOpen(false);
+                                  }}
+                                  className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition ${
+                                    weather === item.imageUrl ? 'bg-stone-200/90 ring-1 ring-black' : ''
+                                  }`}
+                                  title={item.name || item.fileName}
+                                >
+                                  <img
+                                    src={item.imageUrl}
+                                    alt={item.name || '날씨'}
+                                    className="w-8 h-8 object-contain block select-none"
+                                  />
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 2. 기본 날씨 스탬프 (언제나 즉시 선택 가능) */}
+                      <div>
+                        <div className="text-[10px] font-bold text-stone-400 mb-1.5 px-0.5">기본 날씨 스탬프</div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {WEATHER_OPTIONS.map((item) => (
+                            <button
+                              key={item.icon}
+                              type="button"
+                              onClick={() => {
+                                setWeather(item.icon);
+                                setIsWeatherOpen(false);
+                              }}
+                              className={`flex flex-col items-center justify-center p-2 rounded-xl hover:bg-stone-100 active:scale-95 transition ${
+                                weather === item.icon ? 'bg-stone-200/90 ring-1 ring-black' : ''
+                              }`}
+                              title={item.label}
+                            >
+                              <span className="text-2xl leading-none select-none">{item.icon}</span>
+                              <span className="text-[9px] text-stone-500 mt-1 font-medium">{item.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 3. 선택 해제 버튼 */}
+                      {weather && (
+                        <div className="pt-2 border-t border-stone-100 flex justify-center">
                           <button
-                            key={item.id}
                             type="button"
                             onClick={() => {
-                              setWeather(item.imageUrl);
+                              setWeather('');
                               setIsWeatherOpen(false);
                             }}
-                            className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition ${
-                              weather === item.imageUrl ? 'bg-stone-200/80 font-bold' : ''
-                            }`}
-                            title={item.name || item.fileName}
+                            className="text-[11px] text-stone-500 hover:text-red-500 font-medium py-1 px-3 rounded-lg hover:bg-stone-50 transition"
                           >
-                            <img
-                              src={item.imageUrl}
-                              alt={item.name || item.category}
-                              className="w-9 h-9 object-contain block select-none"
-                            />
+                            선택 해제 (기본 + 로 변경)
                           </button>
-                        ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <p className="text-xs text-stone-400 text-center py-6">
-                      등록된 {repCategoryTab === 'weather' ? '날씨' : '스티커'} 항목이 없습니다.
-                    </p>
+                    /* 스티커 탭 (움직이는 GIF + 커스텀 스티커 + 기본 데코 스탬프) */
+                    <div className="space-y-3">
+                      {/* 1. 움직이는 GIF 스티커 프리셋 */}
+                      <div>
+                        <div className="text-[10px] font-bold text-stone-400 mb-1.5 px-0.5 flex items-center justify-between">
+                          <span>움직이는 GIF 스티커</span>
+                          <span className="text-[9px] px-1 bg-red-100 text-red-600 rounded font-bold">GIF</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {PRESET_GIF_STICKERS.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                setWeather(item.imageUrl);
+                                setIsWeatherOpen(false);
+                              }}
+                              className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition active:scale-95 ${
+                                weather === item.imageUrl ? 'bg-stone-200/90 ring-1 ring-black' : ''
+                              }`}
+                              title={item.name}
+                            >
+                              <img
+                                src={item.imageUrl}
+                                alt={item.name}
+                                className="w-8 h-8 object-contain block select-none"
+                              />
+                              <span className="text-[8px] text-stone-500 mt-0.5 truncate w-full text-center">
+                                {item.name}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 2. 업로드된 커스텀 스티커 및 GIF */}
+                      {decorations.filter((item) => item.category === 'sticker' || item.category === 'gif' || item.isGif).length > 0 && (
+                        <div>
+                          <div className="text-[10px] font-bold text-stone-400 mb-1.5 px-0.5">내 보관함 스티커</div>
+                          <div className="grid grid-cols-4 gap-2">
+                            {decorations
+                              .filter((item) => item.category === 'sticker' || item.category === 'gif' || item.isGif)
+                              .map((item) => (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setWeather(item.imageUrl);
+                                    setIsWeatherOpen(false);
+                                  }}
+                                  className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition ${
+                                    weather === item.imageUrl ? 'bg-stone-200/90 ring-1 ring-black' : ''
+                                  }`}
+                                  title={item.name || item.fileName}
+                                >
+                                  <img
+                                    src={item.imageUrl}
+                                    alt={item.name || '스티커'}
+                                    className="w-8 h-8 object-contain block select-none"
+                                  />
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 3. 기본 데코 스탬프 */}
+                      <div>
+                        <div className="text-[10px] font-bold text-stone-400 mb-1.5 px-0.5">기본 데코 스탬프</div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[
+                            { icon: '☕️', label: '커피' },
+                            { icon: '🌿', label: '나뭇잎' },
+                            { icon: '✨', label: '반짝임' },
+                            { icon: '💖', label: '하트' },
+                            { icon: '⭐', label: '별' },
+                            { icon: '🌷', label: '꽃' },
+                            { icon: '🍀', label: '클로버' },
+                            { icon: '🐾', label: '발자국' },
+                          ].map((item) => (
+                            <button
+                              key={item.icon}
+                              type="button"
+                              onClick={() => {
+                                setWeather(item.icon);
+                                setIsWeatherOpen(false);
+                              }}
+                              className={`flex flex-col items-center justify-center p-2 rounded-xl hover:bg-stone-100 active:scale-95 transition ${
+                                weather === item.icon ? 'bg-stone-200/90 ring-1 ring-black' : ''
+                              }`}
+                              title={item.label}
+                            >
+                              <span className="text-2xl leading-none select-none">{item.icon}</span>
+                              <span className="text-[9px] text-stone-500 mt-1 font-medium">{item.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 선택 해제 버튼 */}
+                      {weather && (
+                        <div className="pt-2 border-t border-stone-100 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWeather('');
+                              setIsWeatherOpen(false);
+                            }}
+                            className="text-[11px] text-stone-500 hover:text-red-500 font-medium py-1 px-3 rounded-lg hover:bg-stone-50 transition"
+                          >
+                            선택 해제 (기본 + 로 변경)
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -1004,7 +1109,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
           }}
         />
 
-        {/* (2) 텍스트 블록 레이어 (만들어진 순서 layerOrder 기준 zIndex 적용) */}
+        {/* (2) 텍스트 블록 레이어 (인스타그램 스토리 스티커 스타일) */}
         {textBlocks.map((block, idx) => {
           const isSelected = selectedTextId === block.id;
           const blockScale = block.scale || 1;
@@ -1012,59 +1117,100 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
           const invScale = 1 / blockScale;
           const blockZIndex = typeof block.layerOrder === 'number' ? block.layerOrder : idx + 1;
 
+          // 배경 배지 스타일
+          let bgClass = '';
+          let textColor = block.color || '#111111';
+          let customBgStyle = undefined;
+
+          if (block.bgStyle === 'light') {
+            bgClass = 'bg-white/95 text-stone-900 rounded-2xl shadow-sm px-3.5 py-1.5';
+          } else if (block.bgStyle === 'dark') {
+            bgClass = 'bg-black/90 text-white rounded-2xl shadow-sm px-3.5 py-1.5';
+            textColor = '#ffffff';
+          } else if (block.bgStyle === 'color') {
+            bgClass = 'text-white rounded-2xl shadow-sm px-3.5 py-1.5';
+            customBgStyle = { backgroundColor: block.color || '#111111' };
+            textColor = '#ffffff';
+          }
+
           return (
             <div
               key={block.id}
               data-object-box="true"
-              style={{
-                left: typeof block.x === 'number' ? `${block.x}px` : '5%',
-                top: `${block.y}px`,
-                width: '90%',
-                zIndex: blockZIndex,
-                transform: `rotate(${blockRotation}deg) scale(${blockScale})`,
-                transformOrigin: 'center center',
-              }}
-              className={`absolute select-text transition-shadow ${
-                isSelected
-                  ? 'ring-1.5 ring-dashed ring-stone-800 bg-white/70 backdrop-blur-2xs rounded-lg p-1.5'
-                  : 'p-1'
-              }`}
+              onPointerDown={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
+              onTouchStart={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedTextId(block.id);
                 setSelectedStickerId(null);
                 setActiveToolMode('text');
               }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                openStoryTextEditor(block);
+              }}
+              style={{
+                left: typeof block.x === 'number' ? `${block.x}px` : '5%',
+                top: `${block.y}px`,
+                maxWidth: '90%',
+                zIndex: blockZIndex,
+                transform: `rotate(${blockRotation}deg) scale(${blockScale})`,
+                transformOrigin: 'center center',
+                touchAction: 'none',
+              }}
+              className={`absolute cursor-move select-none touch-none p-1 transition-shadow ${
+                isSelected
+                  ? 'ring-1.5 ring-dashed ring-stone-800 rounded-2xl bg-stone-100/40 backdrop-blur-2xs'
+                  : ''
+              }`}
             >
-              {/* 선택 시 상단 이동 바 및 모서리 직접 조작 핸들(삭제 / 회전 / 크기조절) */}
+              {/* 선택 시 상단 이동 바 및 조작 핸들 */}
               {isSelected && (
                 <>
-                  {/* 상단 드래그 이동 핸들 바 (상하좌우 이동) */}
+                  {/* 상단 드래그 이동 핸들 바 */}
                   <div
                     onPointerDown={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
                     onTouchStart={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
                     style={{ touchAction: 'none' }}
-                    className="w-full h-3.5 bg-stone-400/20 hover:bg-stone-400/40 rounded-t cursor-move flex items-center justify-center mb-1 touch-none"
+                    className="w-full h-4 bg-stone-400/20 hover:bg-stone-400/40 rounded-t-lg cursor-move flex items-center justify-center mb-1 touch-none"
                     title="드래그하여 상하좌우 이동"
                   >
-                    <div className="w-7 h-0.5 bg-stone-500 rounded-full" />
+                    <div className="w-8 h-1 bg-stone-500 rounded-full" />
                   </div>
 
                   {/* 좌측 상단: 삭제 버튼 */}
                   <button
                     type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteTextBlock(block.id);
                     }}
                     style={{ transform: `scale(${invScale})` }}
-                    className="absolute -top-3 -left-3 w-6 h-6 rounded-full bg-stone-800 text-white shadow flex items-center justify-center z-30"
+                    className="absolute -top-3 -left-3 w-6 h-6 rounded-full bg-stone-800 text-white shadow flex items-center justify-center z-30 active:scale-95"
                     title="글상자 삭제"
                   >
                     <X size={12} />
                   </button>
 
-                  {/* 우측 상단: 직접 회전(Rotate) 드래그 핸들 */}
+                  {/* 상단 중앙: 내용 수정(인스타그램 에디터 열기) 버튼 */}
+                  <button
+                    type="button"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openStoryTextEditor(block);
+                    }}
+                    style={{ transform: `scale(${invScale})` }}
+                    className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-2.5 h-5 rounded-full bg-black text-white text-[10px] font-bold shadow flex items-center justify-center space-x-1 z-30 active:scale-95"
+                    title="텍스트 내용 수정"
+                  >
+                    <span>Aa 수정</span>
+                  </button>
+
+                  {/* 우측 상단: 직접 회전 핸들 */}
                   <div
                     onPointerDown={(e) => handleTransformStart(e, 'rotate', 'text', block)}
                     onTouchStart={(e) => handleTransformStart(e, 'rotate', 'text', block)}
@@ -1075,7 +1221,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                     <RotateCw size={12} />
                   </div>
 
-                  {/* 우측 하단: 직접 크기조절(Resize) 드래그 핸들 */}
+                  {/* 우측 하단: 직접 크기조절 핸들 */}
                   <div
                     onPointerDown={(e) => handleTransformStart(e, 'resize', 'text', block)}
                     onTouchStart={(e) => handleTransformStart(e, 'resize', 'text', block)}
@@ -1088,24 +1234,20 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                 </>
               )}
 
-              <textarea
-                autoFocus={isSelected}
-                value={block.text}
-                onFocus={() => {
-                  setSelectedTextId(block.id);
-                  setSelectedStickerId(null);
-                  setActiveToolMode('text');
-                }}
-                onChange={(e) => updateTextBlock(block.id, { text: e.target.value })}
+              {/* 본문 텍스트 */}
+              <div
                 style={{
                   fontFamily: block.fontFamily || "'Gaegu', cursive",
-                  fontSize: `${block.fontSize || 20}px`,
-                  color: block.color,
-                  lineHeight: '30px', // 줄노트 간격(30px)과 완벽 일치!
+                  fontSize: `${block.fontSize || 22}px`,
+                  color: textColor,
+                  textAlign: block.textAlign || 'center',
+                  lineHeight: 1.35,
+                  ...customBgStyle,
                 }}
-                className="w-full bg-transparent border-0 focus:ring-0 p-0 resize-none overflow-hidden outline-hidden"
-                rows={Math.max(2, (block.text || '').split('\n').length)}
-              />
+                className={`whitespace-pre-wrap break-words cursor-move ${bgClass}`}
+              >
+                {block.text || '텍스트를 입력하세요...'}
+              </div>
             </div>
           );
         })}
@@ -1236,7 +1378,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
         className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-40 w-11/12 max-w-md flex flex-col space-y-[10px] pointer-events-none transition-[bottom] duration-150 ease-out"
       >
         
-        {/* (1) 위쪽 상세 컨트롤 패널 - 라운드 20px (펜/텍스트/속지 모드일 때만 표시) */}
+        {/* (1) 위쪽 상세 컨트롤 패널 - 라운드 20px (펜/텍스트/속지 모드일 때 표시) */}
         {(activeToolMode === 'pen' || activeToolMode === 'text' || activeToolMode === 'paper') && (
         <div className="pointer-events-auto bg-[#f4f4f4]/95 backdrop-blur-md border border-stone-200/70 rounded-[20px] p-3 sm:p-3.5 shadow-md flex flex-col justify-center overflow-visible">
           
@@ -1385,30 +1527,28 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
             <div className="flex items-center justify-between animate-fadeIn text-xs">
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={handleAddTextBlock}
-                  className="flex items-center space-x-1.5 bg-black text-white px-3 py-1.5 rounded-xl hover:bg-stone-800 transition font-medium shadow-2xs"
+                  type="button"
+                  onClick={() => openStoryTextEditor(null)}
+                  className="flex items-center space-x-1.5 bg-black text-white px-3 py-1.5 rounded-xl hover:bg-stone-800 active:scale-95 transition font-medium shadow-2xs"
                 >
                   <Plus size={14} />
-                  <span>글상자 추가</span>
+                  <span>새 텍스트</span>
                 </button>
 
                 {selectedText && (
-                  <div className="flex items-center space-x-1.5 border-l border-stone-300 pl-2">
-                    <select
-                      value={selectedText.fontFamily}
-                      onChange={(e) => updateTextBlock(selectedText.id, { fontFamily: e.target.value })}
-                      className="bg-white rounded-lg border border-stone-200 px-2 py-1 text-xs cursor-pointer outline-hidden"
-                    >
-                      {FONTS.map(f => (
-                        <option key={f.id} value={f.family}>{f.name}</option>
-                      ))}
-                    </select>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openStoryTextEditor(selectedText)}
+                    className="flex items-center space-x-1.5 bg-white text-stone-800 border border-stone-200/80 px-3 py-1.5 rounded-xl hover:bg-stone-100 active:scale-95 transition font-medium shadow-2xs"
+                  >
+                    <Type size={13} />
+                    <span>내용 수정</span>
+                  </button>
                 )}
               </div>
 
               <span className="text-[11px] text-stone-400">
-                원하는 곳으로 드래그
+                드래그하여 자유 이동
               </span>
             </div>
           )}
@@ -1439,18 +1579,29 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
         {/* (2) 아래쪽 아이콘 독 툴박스 - 라운드 20px (위 박스와 정확히 10px 간격 유지) */}
         <div className="pointer-events-auto bg-[#f4f4f4]/95 backdrop-blur-md border border-stone-200/80 rounded-[20px] px-7 py-3.5 shadow-md flex items-center justify-between">
           
-          {/* 1. 타이핑 아이콘 (Type) */}
+          {/* 1. 타이핑 아이콘 (Type) - 텍스트 모드 전환 및 인스타그램 스토리 에디터 오픈 */}
           <button
             onClick={() => {
               setSelectedStickerId(null);
-              setActiveToolMode(activeToolMode === 'text' ? 'none' : 'text');
+              if (activeToolMode !== 'text') {
+                setActiveToolMode('text');
+                if (textBlocks.length === 0) {
+                  openStoryTextEditor(null);
+                } else {
+                  const targetId = selectedTextId || textBlocks[textBlocks.length - 1].id;
+                  setSelectedTextId(targetId);
+                }
+              } else {
+                const currentBlock = textBlocks.find(t => t.id === selectedTextId);
+                openStoryTextEditor(currentBlock || null);
+              }
             }}
             className={`p-1.5 rounded-full transition-all ${
               activeToolMode === 'text'
-                ? 'text-black scale-110'
+                ? 'text-black scale-110 font-bold'
                 : 'text-stone-400 hover:text-stone-700'
             }`}
-            title="타이핑"
+            title="텍스트 추가 / 수정 (인스타그램 스토리 스타일)"
           >
             <Type size={21} strokeWidth={activeToolMode === 'text' ? 2.6 : 2} />
           </button>
@@ -1569,6 +1720,202 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
         selectedStyle={paperStyle}
         onSelectStyle={setPaperStyle}
       />
+
+      {/* 
+        ================================================================
+        [인스타그램 스토리 스타일 텍스트 입력 에디터 모달]
+        - 화이트 반투명 배경(bg-white/90 backdrop-blur-md)으로 검은색 기본 글씨가 또렷하게 보이도록 개선
+        ================================================================
+      */}
+      {isStoryTextOpen && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col justify-between bg-white/90 backdrop-blur-md p-4 sm:p-6 animate-fadeIn select-none overflow-hidden"
+          onClick={handleFinishStoryText}
+        >
+          {/* 1. 상단 바: [정렬 아이콘] [배경 강조 A] ────── [완료] */}
+          <div
+            className="flex items-center justify-between z-20 shrink-0 pt-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center space-x-2.5">
+              {/* 정렬 버튼 (좌측 / 중앙 / 우측 토글) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const nextAlign =
+                    editingAlign === 'left'
+                      ? 'center'
+                      : editingAlign === 'center'
+                      ? 'right'
+                      : 'left';
+                  setEditingAlign(nextAlign);
+                }}
+                className="w-10 h-10 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200/90 flex items-center justify-center backdrop-blur-md active:scale-95 transition shadow-2xs"
+                title="텍스트 정렬 (좌측/중앙/우측)"
+              >
+                {editingAlign === 'left' && <AlignLeft size={20} />}
+                {editingAlign === 'center' && <AlignCenter size={20} />}
+                {editingAlign === 'right' && <AlignRight size={20} />}
+              </button>
+
+              {/* 텍스트 배경 하이라이트 토글 (인스타그램 'A' 강조 버튼) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const nextBg =
+                    editingBgStyle === 'none'
+                      ? 'light'
+                      : editingBgStyle === 'light'
+                      ? 'dark'
+                      : editingBgStyle === 'dark'
+                      ? 'color'
+                      : 'none';
+                  setEditingBgStyle(nextBg);
+                }}
+                className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition active:scale-95 ${
+                  editingBgStyle === 'none'
+                    ? 'bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200/90'
+                    : editingBgStyle === 'light'
+                    ? 'bg-white text-stone-900 border border-stone-300 shadow-sm ring-1 ring-stone-200'
+                    : editingBgStyle === 'dark'
+                    ? 'bg-black text-white shadow-sm'
+                    : 'text-white shadow-sm'
+                }`}
+                style={
+                  editingBgStyle === 'color'
+                    ? { backgroundColor: editingColor }
+                    : undefined
+                }
+                title="텍스트 배경 강조 스타일"
+              >
+                A
+              </button>
+            </div>
+
+            {/* 완료 버튼 (블랙 원형/필 버튼) */}
+            <button
+              type="button"
+              onClick={handleFinishStoryText}
+              className="px-5 py-2 bg-black hover:bg-stone-800 text-white font-black text-sm rounded-full shadow-md active:scale-95 transition"
+            >
+              완료
+            </button>
+          </div>
+
+          {/* 2. 중앙 영역: [좌측 수직 크기 슬라이더] + [중앙 텍스트 입력창] */}
+          <div
+            className="flex-1 flex items-center justify-center relative my-auto px-2 overflow-y-auto no-scrollbar"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 인스타그램 스토리 수직 폰트 크기 슬라이더 (좌측) */}
+            <div className="absolute left-1 sm:left-4 top-1/2 -translate-y-1/2 flex flex-col items-center z-20 select-none">
+              <span className="text-[13px] text-stone-900 font-black mb-1">A</span>
+              <div className="h-44 sm:h-52 flex items-center justify-center">
+                <input
+                  type="range"
+                  min="16"
+                  max="44"
+                  step="1"
+                  value={editingSize}
+                  onChange={(e) => setEditingSize(Number(e.target.value))}
+                  className="w-36 sm:w-44 accent-black cursor-pointer -rotate-90 origin-center"
+                />
+              </div>
+              <span className="text-[9px] text-stone-400 font-bold mt-1">A</span>
+            </div>
+
+            {/* 중앙 텍스트에어리어 (자동 높이 & 실시간 스타일 반영) */}
+            <div className="w-full max-w-sm sm:max-w-md px-10 flex flex-col items-center justify-center">
+              <textarea
+                ref={storyTextareaRef}
+                value={editingText}
+                onChange={(e) => setEditingText(e.target.value)}
+                placeholder="텍스트를 입력하세요..."
+                rows={Math.max(1, (editingText || '').split('\n').length)}
+                style={{
+                  fontFamily: editingFont,
+                  fontSize: `${editingSize}px`,
+                  color:
+                    editingBgStyle === 'dark' || editingBgStyle === 'color'
+                      ? '#ffffff'
+                      : editingBgStyle === 'light'
+                      ? '#111111'
+                      : editingColor,
+                  textAlign: editingAlign,
+                  lineHeight: 1.35,
+                  backgroundColor:
+                    editingBgStyle === 'light'
+                      ? '#ffffff'
+                      : editingBgStyle === 'dark'
+                      ? '#111111'
+                      : editingBgStyle === 'color'
+                      ? editingColor
+                      : 'transparent',
+                }}
+                className={`w-full border-0 outline-hidden resize-none p-3.5 placeholder-stone-400 overflow-hidden transition-all ${
+                  editingBgStyle === 'light'
+                    ? 'rounded-2xl shadow-md border border-stone-200/90'
+                    : editingBgStyle !== 'none'
+                    ? 'rounded-2xl shadow-xl'
+                    : ''
+                }`}
+              />
+            </div>
+          </div>
+
+          {/* 3. 하단 컨트롤 바: [폰트 선택 캐러셀] + [컬러 스와치 팔레트] */}
+          <div
+            className="flex flex-col space-y-3 z-20 shrink-0 pb-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 폰트 선택 캐러셀 (인스타그램 스토리 폰트 셀렉터) */}
+            <div className="flex items-center justify-center space-x-2 overflow-x-auto no-scrollbar py-1">
+              {FONTS.map((font) => (
+                <button
+                  key={font.id}
+                  type="button"
+                  onClick={() => setEditingFont(font.family)}
+                  style={{ fontFamily: font.family }}
+                  className={`px-3.5 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
+                    editingFont === font.family
+                      ? 'bg-black text-white font-bold scale-105 shadow-sm'
+                      : 'bg-stone-100 text-stone-700 hover:bg-stone-200 border border-stone-200/80 font-medium'
+                  }`}
+                >
+                  {font.name}
+                </button>
+              ))}
+            </div>
+
+            {/* 컬러 스와치 팔레트 */}
+            <div className="flex items-center justify-center space-x-2 overflow-x-auto no-scrollbar py-1">
+              {FIXED_PRESET_COLORS.map((c) => {
+                const isSelected = editingColor.toLowerCase() === c.value.toLowerCase();
+                return (
+                  <button
+                    key={c.value}
+                    type="button"
+                    onClick={() => setEditingColor(c.value)}
+                    className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center p-[2px] box-border transition-all ${
+                      isSelected
+                        ? 'border-2 border-stone-900 scale-110 shadow-sm'
+                        : 'border-2 border-transparent hover:opacity-80'
+                    }`}
+                    title={c.name}
+                  >
+                    <span
+                      className={`w-full h-full rounded-full block ${
+                        c.value === '#ffffff' ? 'border border-stone-300' : ''
+                      }`}
+                      style={{ backgroundColor: c.value }}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

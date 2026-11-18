@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Search, Trash2 } from 'lucide-react';
 import { PAPER_STYLES } from '../constants';
-import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas } from './DiaryCanvas';
+import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas } from '../utils/canvasLayers';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -31,8 +31,7 @@ function DiaryCard({ diary, onSelect, onDelete }) {
   const dateObj = new Date(year, month, day);
   const dayNum = String(day).padStart(2, '0');
   const dayEn = DAY_NAMES_EN[dateObj.getDay()];
-  const rawMood = diary.thumbnailMood || diary.weather || '';
-  const mood = rawMood === '☀️' ? '' : rawMood;
+  const mood = diary.thumbnailMood || diary.weather || '';
   const isMoodImage =
     typeof mood === 'string' &&
     (mood.startsWith('data:') ||
@@ -247,28 +246,47 @@ function DiaryCard({ diary, onSelect, onDelete }) {
             <StrokeBandCanvas key={band.id} band={band} />
           ))}
 
-          {/* 텍스트 블록 전체 */}
-          {normalizedLayers.textBlocks?.map((block, idx) => (
-            <div
-              key={block.id}
-              style={{
-                fontFamily: block.fontFamily || "'Gaegu', cursive",
-                fontSize: `${block.fontSize || 20}px`,
-                color: block.color || '#111',
-                lineHeight: '30px',
-                zIndex: typeof block.layerOrder === 'number' ? block.layerOrder : idx + 1,
-                marginTop: idx === 0 && block.y > 24 ? `${block.y - 16}px` : undefined,
-                transform:
-                  block.rotation || (block.scale && block.scale !== 1)
-                    ? `rotate(${block.rotation || 0}deg) scale(${block.scale || 1})`
-                    : undefined,
-                transformOrigin: 'center center',
-              }}
-              className="relative w-[90%] mx-auto whitespace-pre-wrap break-words select-none mb-3"
-            >
-              {block.text}
-            </div>
-          ))}
+          {/* 텍스트 블록 전체 (인스타그램 스토리 스타일 배지 및 정렬 반영) */}
+          {normalizedLayers.textBlocks?.map((block, idx) => {
+            let bgClass = '';
+            let textColor = block.color || '#111111';
+            let customBgStyle = undefined;
+
+            if (block.bgStyle === 'light') {
+              bgClass = 'bg-white/95 text-stone-900 shadow-xs rounded-xl px-3 py-1';
+            } else if (block.bgStyle === 'dark') {
+              bgClass = 'bg-black/90 text-white shadow-xs rounded-xl px-3 py-1';
+              textColor = '#ffffff';
+            } else if (block.bgStyle === 'color') {
+              bgClass = 'text-white shadow-xs rounded-xl px-3 py-1';
+              customBgStyle = { backgroundColor: block.color || '#111111' };
+              textColor = '#ffffff';
+            }
+
+            return (
+              <div
+                key={block.id}
+                style={{
+                  fontFamily: block.fontFamily || "'Gaegu', cursive",
+                  fontSize: `${block.fontSize || 20}px`,
+                  color: textColor,
+                  textAlign: block.textAlign || 'left',
+                  lineHeight: '30px',
+                  zIndex: typeof block.layerOrder === 'number' ? block.layerOrder : idx + 1,
+                  marginTop: idx === 0 && block.y > 24 ? `${block.y - 16}px` : undefined,
+                  transform:
+                    block.rotation || (block.scale && block.scale !== 1)
+                      ? `rotate(${block.rotation || 0}deg) scale(${block.scale || 1})`
+                      : undefined,
+                  transformOrigin: 'center center',
+                  ...customBgStyle,
+                }}
+                className={`relative w-[90%] mx-auto whitespace-pre-wrap break-words select-none mb-3 ${bgClass}`}
+              >
+                {block.text}
+              </div>
+            );
+          })}
 
           {(!normalizedLayers.textBlocks || normalizedLayers.textBlocks.length === 0) &&
             diary.summary &&

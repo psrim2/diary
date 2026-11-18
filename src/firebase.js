@@ -290,25 +290,25 @@ function withTimeout(promise, ms, label = 'TIMEOUT') {
 }
 
 /**
- * 이미지 파일(SVG/PNG 등)을 Data URL로 변환
- * (Firebase Storage 미활성화 환경에서도 즉시 Firestore에 저장할 수 있도록 경량화 지원)
+ * 이미지 파일(GIF/SVG/PNG 등)을 Data URL로 변환
+ * (움직이는 GIF는 캔버스 변환 시 프레임이 손실되므로 원본 바이너리를 100% 보존)
  */
-function fileToDataUrl(file) {
+export function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result;
-      // SVG이거나 200KB 이하의 소용량 이미지는 원본 Data URL 그대로 반환
-      if (
-        file.type === 'image/svg+xml' ||
-        file.name.toLowerCase().endsWith('.svg') ||
-        file.size <= 200 * 1024
-      ) {
+      const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+      const isSvg = file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg');
+      
+      // 움직이는 GIF는 캔버스 drawImage 거치면 정지 화상이 되므로 반드시 원본 Data URL 그대로 반환
+      // SVG 및 400KB 이하 소용량 이미지도 원본 그대로 반환
+      if (isGif || isSvg || file.size <= 400 * 1024) {
         resolve(dataUrl);
         return;
       }
 
-      // 고용량 비트맵(PNG/JPG)인 경우 Firestore 1MB 문서 제한 내에 들어오도록 리사이징
+      // 고용량 비트맵(PNG/JPG)인 경우 Firestore 문서 제한 내에 들어오도록 리사이징
       const img = new Image();
       img.onload = () => {
         const maxDim = 512;
@@ -338,9 +338,9 @@ function fileToDataUrl(file) {
 }
 
 /**
- * 10. 꾸미기 에셋(날씨/스티커/마스킹테이프) Firebase Storage 업로드 및 Firestore decorations 컬렉션 저장
+ * 10. 꾸미기 에셋(날씨/스티커/마스킹테이프/움직이는 GIF) Firebase Storage 업로드 및 Firestore decorations 컬렉션 저장
  * (Storage 버킷 미개설/CORS 차단 시 무한 대기하지 않고 즉시 Data URL 폴백으로 Firestore decorations에 저장)
- * @param {{ file: File, category: 'weather' | 'sticker' | 'tape', name?: string }} params
+ * @param {{ file: File, category: 'weather' | 'sticker' | 'tape' | 'gif', name?: string }} params
  */
 export async function uploadDecorationAsset({ file, category, name }) {
   if (!isFirebaseConfigured || !db) {
@@ -349,7 +349,7 @@ export async function uploadDecorationAsset({ file, category, name }) {
   if (!file) {
     throw new Error('업로드할 파일을 선택해 주세요.');
   }
-  const validCategories = ['weather', 'sticker', 'tape'];
+  const validCategories = ['weather', 'sticker', 'tape', 'gif'];
   if (!validCategories.includes(category)) {
     throw new Error('유효하지 않은 카테고리입니다.');
   }
@@ -362,6 +362,9 @@ export async function uploadDecorationAsset({ file, category, name }) {
   let imageUrl = '';
   let storagePath = '';
 
+  const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+  const resolvedContentType = file.type || (isGif ? 'image/gif' : 'image/png');
+
   // 1) Firebase Storage가 가용한 경우 1.2초 타임아웃 내에 업로드 시도
   if (storage && isStorageBucketAvailable) {
     const candidatePath = `decorations/${category}/${timestamp}_${safeFileName}`;
@@ -369,7 +372,7 @@ export async function uploadDecorationAsset({ file, category, name }) {
     try {
       await withTimeout(
         uploadBytes(fileRef, file, {
-          contentType: file.type || 'image/svg+xml',
+          contentType: resolvedContentType,
         }),
         1200,
         'STORAGE_UPLOAD_TIMEOUT'
@@ -390,7 +393,7 @@ export async function uploadDecorationAsset({ file, category, name }) {
     }
   }
 
-  // 2) Storage 미사용/폴백 시 SVG/PNG Data URL로 즉시 변환
+  // 2) Storage 미사용/폴백 시 SVG/PNG/GIF Data URL로 즉시 변환 (GIF 애니메이션 100% 보존)
   if (!imageUrl) {
     imageUrl = await fileToDataUrl(file);
     storagePath = '';
@@ -400,11 +403,12 @@ export async function uploadDecorationAsset({ file, category, name }) {
   const defaultLabel = file.name.replace(/\.[^/.]+$/, '');
   const itemRecord = {
     id: docId,
-    category, // 'weather' | 'sticker' | 'tape'
+    category, // 'weather' | 'sticker' | 'tape' | 'gif'
     imageUrl,
     name: (name && name.trim()) || defaultLabel,
     fileName: file.name,
-    contentType: file.type || '',
+    contentType: resolvedContentType,
+    isGif,
     storagePath,
     createdAtMs: timestamp,
   };
