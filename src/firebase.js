@@ -5,8 +5,6 @@ import {
   setPersistence,
   browserLocalPersistence,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signOut,
   onAuthStateChanged,
 } from 'firebase/auth';
@@ -67,16 +65,12 @@ if (isFirebaseConfigured) {
   storage.maxUploadRetryTime = 2000;
   storage.maxOperationRetryTime = 2000;
   googleProvider = new GoogleAuthProvider();
-  // 리다이렉트 로그인 결과 처리
-  getRedirectResult(auth).catch((err) => {
-    console.error('[Auth Redirect Error]', err);
-  });
 }
 
 export { app, auth, db, storage, googleProvider };
 
 /**
- * 1. 구글 계정 로그인 (팝업 우선 시도 -> 팝업 차단 환경일 경우 리다이렉트 자동 전환)
+ * 1. 구글 계정 로그인 (PC 및 모바일 모든 환경에서 signInWithPopup 사용)
  */
 export async function loginWithGoogle(forceSelectAccount = false) {
   if (!isFirebaseConfigured || !auth || !googleProvider) {
@@ -89,21 +83,8 @@ export async function loginWithGoogle(forceSelectAccount = false) {
   if (forceSelectAccount) {
     provider.setCustomParameters({ prompt: 'select_account' });
   }
-  try {
-    await setPersistence(auth, browserLocalPersistence);
-    const result = await signInWithPopup(auth, provider);
-    return result.user;
-  } catch (err) {
-    // 내장 프리뷰 브라우저 등에서 팝업이 차단된 경우 리다이렉트 로그인으로 자동 전환
-    if (
-      err?.code === 'auth/popup-blocked' ||
-      err?.code === 'auth/operation-not-supported-in-this-environment'
-    ) {
-      await signInWithRedirect(auth, provider);
-      return null;
-    }
-    throw err;
-  }
+  const result = await signInWithPopup(auth, provider);
+  return result.user;
 }
 
 /**
