@@ -180,6 +180,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   const isDrawingRef = useRef(false);
   const currentStrokeRef = useRef(null);
   const wasTransformingRef = useRef(false);
+  const twoFingerTransformRef = useRef(null);
 
   // 실제 렌더링된 속지의 가로/세로 픽셀 크기 실시간 측정 (ResizeObserver)
   const [paperWidth, setPaperWidth] = useState(CANONICAL_WIDTH);
@@ -991,6 +992,114 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     };
   }, [draggingItem, transformingItem]);
 
+  // 텍스트 블록/스티커 2손가락 핀치 줌(확대/축소) 및 회전 제스처 처리
+  useEffect(() => {
+    const handleGlobalTouchMove = (e) => {
+      if (!twoFingerTransformRef.current) return;
+      if (!e.touches || e.touches.length < 2) return;
+
+      if (e.cancelable) e.preventDefault();
+
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const currentDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+      const currentAngle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
+      const currentMidX = (t1.clientX + t2.clientX) / 2;
+      const currentMidY = (t1.clientY + t2.clientY) / 2;
+
+      const {
+        id,
+        itemType,
+        startDist,
+        startAngle,
+        startScale,
+        startRotation,
+        startX,
+        startY,
+        startMidX,
+        startMidY,
+      } = twoFingerTransformRef.current;
+
+      // 1) 핀치 줌 (확대/축소: CSS scale 변형으로 줄바꿈은 그대로 유지)
+      const ratio = currentDist / Math.max(10, startDist);
+      const newScale = Math.min(4.0, Math.max(0.35, Number((startScale * ratio).toFixed(2))));
+
+      // 2) 회전 (두 손가락 각도 변화)
+      const deltaAngle = currentAngle - startAngle;
+      const newRotation = Math.round((startRotation + deltaAngle) % 360);
+
+      // 3) 이동 (두 손가락 중심점 이동)
+      const paperRect = canvasContainerRef.current?.getBoundingClientRect();
+      const uniformScale = paperRect && paperRect.width > 0 ? paperRect.width / CANONICAL_WIDTH : 1;
+      const deltaX = (currentMidX - startMidX) / uniformScale;
+      const deltaY = (currentMidY - startMidY) / uniformScale;
+      const maxCanonicalY =
+        paperRect && paperRect.height > 0 && uniformScale > 0
+          ? paperRect.height / uniformScale
+          : CANONICAL_HEIGHT;
+
+      const newX = Math.max(0, Math.min(CANONICAL_WIDTH - 20, startX + deltaX));
+      const newY = Math.max(0, Math.min(maxCanonicalY - 20, startY + deltaY));
+
+      if (itemType === 'text') {
+        updateTextBlock(id, {
+          scale: newScale,
+          rotation: newRotation,
+          x: newX,
+          y: newY,
+        });
+      } else {
+        updateSticker(id, {
+          scale: newScale,
+          rotation: newRotation,
+          x: newX,
+          y: newY,
+        });
+      }
+    };
+
+    const handleGlobalTouchEnd = (e) => {
+      if (twoFingerTransformRef.current && (!e.touches || e.touches.length < 2)) {
+        wasTransformingRef.current = true;
+        setTimeout(() => {
+          wasTransformingRef.current = false;
+        }, 200);
+        twoFingerTransformRef.current = null;
+      }
+    };
+
+    window.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+    window.addEventListener('touchend', handleGlobalTouchEnd);
+    window.addEventListener('touchcancel', handleGlobalTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchmove', handleGlobalTouchMove);
+      window.removeEventListener('touchend', handleGlobalTouchEnd);
+      window.removeEventListener('touchcancel', handleGlobalTouchEnd);
+    };
+  }, []);
+
+  // 데스크톱 트랙패드 핀치-투-줌 (Ctrl + Wheel) 지원
+  useEffect(() => {
+    const handleWheel = (e) => {
+      if (e.ctrlKey && selectedTextId) {
+        e.preventDefault();
+        const block = textBlocks.find(b => b.id === selectedTextId);
+        if (block) {
+          const factor = e.deltaY < 0 ? 1.05 : 0.95;
+          const currentScale = block.scale || 1;
+          const newScale = Math.min(4.0, Math.max(0.35, Number((currentScale * factor).toFixed(2))));
+          updateTextBlock(block.id, { scale: newScale });
+        }
+      }
+    };
+
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+    };
+  }, [selectedTextId, textBlocks]);
+
   // 와이드 화면 저장 완료 토스트 팝업 상태
   const [toastMessage, setToastMessage] = useState('');
   const toastTimerRef = useRef(null);
@@ -1408,6 +1517,33 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
               setSelectedStickerId(null);
             }
           }}
+          onTouchStart={(e) => {
+            if (e.touches && e.touches.length >= 2 && selectedTextId && activeToolMode === 'text') {
+              const block = textBlocks.find(b => b.id === selectedTextId);
+              if (block) {
+                if (e.cancelable) e.preventDefault();
+                const t1 = e.touches[0];
+                const t2 = e.touches[1];
+                const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                const angle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
+                const midX = (t1.clientX + t2.clientX) / 2;
+                const midY = (t1.clientY + t2.clientY) / 2;
+
+                twoFingerTransformRef.current = {
+                  id: block.id,
+                  itemType: 'text',
+                  startDist: dist,
+                  startAngle: angle,
+                  startScale: block.scale || 1,
+                  startRotation: block.rotation || 0,
+                  startX: block.x || 0,
+                  startY: block.y || 0,
+                  startMidX: midX,
+                  startMidY: midY,
+                };
+              }
+            }
+          }}
           onContextMenu={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -1477,6 +1613,34 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 setSelectedStickerId(null);
                 setActiveToolMode('text');
               }}
+              onTouchStart={(e) => {
+                if (e.touches && e.touches.length >= 2) {
+                  if (e.cancelable) e.preventDefault();
+                  e.stopPropagation();
+                  const t1 = e.touches[0];
+                  const t2 = e.touches[1];
+                  const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+                  const angle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * (180 / Math.PI);
+                  const midX = (t1.clientX + t2.clientX) / 2;
+                  const midY = (t1.clientY + t2.clientY) / 2;
+
+                  twoFingerTransformRef.current = {
+                    id: block.id,
+                    itemType: 'text',
+                    startDist: dist,
+                    startAngle: angle,
+                    startScale: block.scale || 1,
+                    startRotation: block.rotation || 0,
+                    startX: block.x || 0,
+                    startY: block.y || 0,
+                    startMidX: midX,
+                    startMidY: midY,
+                  };
+                  setSelectedTextId(block.id);
+                  setSelectedStickerId(null);
+                  setActiveToolMode('text');
+                }
+              }}
               style={{
                 left: `${leftPx}px`,
                 top: `${topPx}px`,
@@ -1487,74 +1651,34 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 transform: `rotate(${blockRotation}deg) scale(${blockScale})`,
                 transformOrigin: 'center center',
                 touchAction: 'none',
+                backgroundColor: 'transparent',
+                border: isSelected ? '1px solid rgba(0, 0, 0, 0.1)' : '1px solid transparent',
               }}
-              className={`absolute select-text transition-shadow p-1.5 ${
-                isSelected
-                  ? 'ring-1.5 ring-dashed ring-stone-800 rounded-xl bg-white/70 backdrop-blur-2xs'
-                  : ''
-              }`}
+              className="absolute select-text transition-all p-1.5 rounded-lg"
             >
-              {/* 선택 시 상단 드래그 바 및 조작 핸들 (흰색 바탕에 회색 보더 원, 검은색 아이콘) */}
+              {/* 선택 시 상단 미니멀 이동 바 및 우측 세로 핸들 (배경/원형버튼 제거, 미니멀 디자인) */}
               {isSelected && (
                 <>
-                  {/* 상단 중앙: 세련된 이동(드래그) 원형 핸들 */}
+                  {/* 상단 중앙: 슬림한 미니 이동 드래그 바 */}
                   <div
                     onPointerDown={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
                     onTouchStart={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
                     style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs cursor-move flex items-center justify-center z-30 touch-none active:scale-95 hover:bg-stone-50 select-none"
-                    title="드래그하여 상하좌우 이동"
+                    className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-10 h-4 flex items-center justify-center cursor-move z-30 touch-none group select-none"
+                    title="드래그하여 이동"
                   >
-                    <GripHorizontal size={12} strokeWidth={2.5} />
+                    <div className="w-7 h-1 rounded-full bg-black/20 group-hover:bg-black/50 transition-colors" />
                   </div>
 
-                  {/* 좌측 상단: 글상자 삭제 버튼 */}
-                  <button
-                    type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteTextBlock(block.id);
-                    }}
-                    style={{ transform: `scale(${invScale})` }}
-                    className="absolute -top-3 -left-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center z-30 active:scale-95 hover:bg-stone-50"
-                    title="글상자 삭제"
-                  >
-                    <X size={12} strokeWidth={2.5} />
-                  </button>
-
-                  {/* 우측 상단: 직접 회전(Rotate) 핸들 */}
-                  <div
-                    onPointerDown={(e) => handleTransformStart(e, 'rotate', 'text', block)}
-                    onTouchStart={(e) => handleTransformStart(e, 'rotate', 'text', block)}
-                    style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-grab active:cursor-grabbing z-30 touch-none hover:bg-stone-50"
-                    title="드래그하여 회전"
-                  >
-                    <RotateCw size={12} strokeWidth={2.5} />
-                  </div>
-
-                  {/* 우측 중앙: 가로 너비 조절 핸들 (줄바꿈 변경) */}
+                  {/* 우측 중앙: 세로로 긴 타입의 가로 너비 조절 핸들 (줄바꿈 변경) */}
                   <div
                     onPointerDown={(e) => handleTransformStart(e, 'width', 'text', block)}
                     onTouchStart={(e) => handleTransformStart(e, 'width', 'text', block)}
                     style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-ew-resize z-30 touch-none active:scale-110 hover:bg-stone-50"
+                    className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-10 flex items-center justify-center cursor-ew-resize z-30 touch-none group select-none"
                     title="드래그하여 가로 너비 조절 (줄바꿈 변경)"
                   >
-                    <ArrowLeftRight size={11} strokeWidth={2.5} />
-                  </div>
-
-                  {/* 우측 하단: 전체 확대/축소 핸들 (줄바꿈 유지) */}
-                  <div
-                    onPointerDown={(e) => handleTransformStart(e, 'resize', 'text', block)}
-                    onTouchStart={(e) => handleTransformStart(e, 'resize', 'text', block)}
-                    style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-nwse-resize z-30 touch-none active:scale-110 hover:bg-stone-50"
-                    title="드래그하여 전체 크기 조절 (줄바꿈 유지)"
-                  >
-                    <Maximize2 size={11} strokeWidth={2.5} />
+                    <div className="w-1.5 h-7 rounded-full bg-stone-400/80 group-hover:bg-stone-700 transition-colors shadow-2xs" />
                   </div>
                 </>
               )}
