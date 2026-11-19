@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Edit2, Maximize2, X, Smartphone, Monitor, Share2 } from 'lucide-react';
+import { Plus, Edit2 } from 'lucide-react';
 
 export default function Header({ 
   currentView, 
@@ -16,7 +16,6 @@ export default function Header({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(diaryName);
-  const [showPwaGuide, setShowPwaGuide] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -82,32 +81,52 @@ export default function Header({
           )}
         </div>
 
-        {/* 전체화면 / 홈 화면 앱 추가 안내 버튼 */}
-        <button
-          type="button"
-          onClick={() => setShowPwaGuide(true)}
-          className="mr-2 p-2 rounded-full border border-stone-200/90 bg-white text-stone-700 hover:bg-stone-100 active:scale-95 transition shadow-2xs shrink-0"
-          title="전체화면 / 주소창 제거 앱 모드 안내"
-        >
-          <Maximize2 size={16} strokeWidth={2.2} />
-        </button>
-
-        {/* 구글 로그인 / 로그아웃 버튼 */}
+        {/* 구글 로그인(원형 구글 로고) / 로그아웃(원형 구글 프로필) 버튼 */}
         {user ? (
           <button
             type="button"
             onClick={onLogout}
-            className="mr-2.5 px-3.5 py-2 rounded-full border border-stone-200 bg-white text-stone-700 hover:bg-stone-100 active:scale-95 transition text-xs font-bold shadow-2xs shrink-0"
+            className="mr-2.5 w-11 h-11 rounded-full p-0.5 border border-stone-200 bg-white hover:opacity-85 active:scale-95 transition shadow-2xs shrink-0 overflow-hidden flex items-center justify-center cursor-pointer"
+            title={`${user.displayName || user.email || '사용자'} (클릭 시 로그아웃)`}
           >
-            로그아웃
+            {user.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt={user.displayName || '구글 프로필'}
+                className="w-full h-full object-cover rounded-full select-none"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-full h-full rounded-full bg-stone-100 text-stone-700 flex items-center justify-center font-bold text-sm select-none">
+                {(user.displayName || user.email || 'G')[0].toUpperCase()}
+              </div>
+            )}
           </button>
         ) : (
           <button
             type="button"
             onClick={onLogin}
-            className="mr-2.5 px-3.5 py-2 rounded-full bg-black text-white hover:bg-stone-800 active:scale-95 transition text-xs font-bold shadow-xs shrink-0"
+            className="mr-2.5 w-11 h-11 rounded-full border border-stone-200 bg-white hover:bg-stone-50 active:scale-95 transition flex items-center justify-center shadow-2xs shrink-0 cursor-pointer"
+            title="구글 계정으로 로그인"
           >
-            구글 로그인
+            <svg className="w-5 h-5 select-none" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.03h3.88c2.27-2.09 3.66-5.17 3.66-9.12z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.03c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.27v3.13C3.25 21.31 7.31 24 12 24z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.57H1.27C.46 8.19 0 10.04 0 12s.46 3.81 1.27 5.43l4.01-3.14z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.25 2.69 1.27 6.57l4.01 3.14c.95-2.83 3.6-4.96 6.72-4.96z"
+              />
+            </svg>
           </button>
         )}
 
@@ -145,93 +164,6 @@ export default function Header({
           목록
         </button>
       </div>
-
-      {/* 전체화면 / 주소창 제거 앱 모드 안내 모달 */}
-      {showPwaGuide && (
-        <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn"
-          onClick={() => setShowPwaGuide(false)}
-        >
-          <div
-            className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-5 border border-stone-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
-              <div className="flex items-center space-x-2">
-                <Smartphone className="w-5 h-5 text-black" />
-                <h3 className="text-lg font-black text-black tracking-tight">
-                  전체화면(주소창 없는 앱) 설정
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowPwaGuide(false)}
-                className="p-1 rounded-full text-stone-400 hover:text-black hover:bg-stone-100 transition"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-xs sm:text-sm text-stone-700 leading-relaxed">
-              {/* 아이패드 / 아이폰 안내 */}
-              <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/70 space-y-1.5">
-                <div className="font-black text-black flex items-center space-x-1.5">
-                  <span>🍎 아이패드 / 아이폰 (Safari)</span>
-                </div>
-                <ol className="list-decimal list-inside space-y-1 text-stone-600 pl-0.5">
-                  <li>사파리 상단 <strong>[공유 버튼 (네모 위 화살표 ↑)]</strong> 터치</li>
-                  <li>메뉴에서 <strong>[홈 화면에 추가]</strong> 터치</li>
-                  <li>우측 상단 <strong>[추가]</strong> 터치</li>
-                </ol>
-                <p className="text-[11px] font-semibold text-stone-500 pt-1">
-                  ✨ 홈 화면에 생긴 <strong>'다이어리'</strong> 아이콘으로 실행하시면 상단 주소창이 100% 제거되어 진짜 네이티브 앱처럼 동작합니다!
-                </p>
-              </div>
-
-              {/* 안드로이드 / 갤럭시 탭 안내 */}
-              <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/70 space-y-1.5">
-                <div className="font-black text-black flex items-center space-x-1.5">
-                  <span>🤖 갤럭시 탭 / 안드로이드 (Chrome / 삼성 인터넷)</span>
-                </div>
-                <ol className="list-decimal list-inside space-y-1 text-stone-600 pl-0.5">
-                  <li>브라우저 우측 상단 <strong>[더보기 (⋮)]</strong> 메뉴 터치</li>
-                  <li><strong>[홈 화면에 추가]</strong> 또는 <strong>[앱 설치]</strong> 선택</li>
-                </ol>
-                <p className="text-[11px] font-semibold text-stone-500 pt-1">
-                  ✨ 설치된 앱 아이콘으로 실행하면 상단 툴바가 완전히 사라집니다.
-                </p>
-              </div>
-
-              {/* PC / 브라우저 전체화면 버튼 */}
-              <div className="pt-1 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (document.fullscreenElement) {
-                      document.exitFullscreen?.();
-                    } else if (document.documentElement.requestFullscreen) {
-                      document.documentElement.requestFullscreen().catch(() => {});
-                    }
-                  }}
-                  className="w-full py-2.5 px-4 rounded-xl bg-black hover:bg-stone-800 text-white font-bold text-xs flex items-center justify-center space-x-2 transition shadow-xs"
-                >
-                  <Monitor size={15} />
-                  <span>PC 브라우저 전체화면(F11) 전환 토글</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => setShowPwaGuide(false)}
-                className="w-full py-2.5 rounded-xl border border-stone-200 hover:bg-stone-50 text-stone-700 font-bold text-xs transition"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </header>
   );
 }
