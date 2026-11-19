@@ -265,35 +265,69 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
 
     const updateKeyboardPosition = () => {
-      const visibleBottom = vv.offsetTop + vv.height;
-      const windowDiff = Math.max(0, window.innerHeight - visibleBottom);
-
-      let containerDiff = 0;
-      if (editorRootRef.current) {
-        const rootRect = editorRootRef.current.getBoundingClientRect();
-        containerDiff = Math.max(0, rootRect.bottom - visibleBottom);
+      // iOS Safari에서 창 스크롤이 발생했을 경우 즉시 0으로 원복하여 상단 바 잘림 및 위치 어긋남 방지
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
       }
 
-      const nextOffset = Math.max(windowDiff, containerDiff);
-      setKeyboardOffset(nextOffset > 40 ? nextOffset : 0);
+      if (!window.visualViewport) {
+        setKeyboardOffset(0);
+        return;
+      }
+
+      const viewport = window.visualViewport;
+      // 1) 뷰포트 높이 차이로 키보드 높이 계산
+      // window.innerHeight (전체 화면 높이) - viewport.height (실제 보이는 뷰포트 높이)
+      const rawDiff = window.innerHeight - viewport.height;
+
+      // 2) 가상 키보드는 최소 150px 이상 (아이폰/아이패드/안드로이드 기준 200~380px)
+      // 주소창 최소화 등의 60px 이하 미세 변화는 키보드로 간주하지 않음
+      const isKeyboardActive = rawDiff > 60;
+      const calculatedOffset = isKeyboardActive ? Math.round(rawDiff) : 0;
+
+      setKeyboardOffset(calculatedOffset);
     };
 
     updateKeyboardPosition();
-    vv.addEventListener('resize', updateKeyboardPosition);
-    vv.addEventListener('scroll', updateKeyboardPosition);
+
+    if (vv) {
+      vv.addEventListener('resize', updateKeyboardPosition);
+      vv.addEventListener('scroll', updateKeyboardPosition);
+    }
     window.addEventListener('resize', updateKeyboardPosition);
-    window.addEventListener('focusin', updateKeyboardPosition);
-    window.addEventListener('focusout', updateKeyboardPosition);
+    window.addEventListener('scroll', updateKeyboardPosition);
+
+    // 포커스 진입/이탈 시 iOS 키보드 슬라이드 애니메이션(300ms)에 맞춘 다단계 오프셋 보정
+    const handleFocusIn = (e) => {
+      if (e.target && (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT')) {
+        updateKeyboardPosition();
+        setTimeout(updateKeyboardPosition, 50);
+        setTimeout(updateKeyboardPosition, 150);
+        setTimeout(updateKeyboardPosition, 300);
+        setTimeout(updateKeyboardPosition, 500);
+      }
+    };
+
+    const handleFocusOut = () => {
+      setTimeout(updateKeyboardPosition, 50);
+      setTimeout(updateKeyboardPosition, 200);
+      setTimeout(updateKeyboardPosition, 400);
+    };
+
+    window.addEventListener('focusin', handleFocusIn);
+    window.addEventListener('focusout', handleFocusOut);
 
     return () => {
-      vv.removeEventListener('resize', updateKeyboardPosition);
-      vv.removeEventListener('scroll', updateKeyboardPosition);
+      if (vv) {
+        vv.removeEventListener('resize', updateKeyboardPosition);
+        vv.removeEventListener('scroll', updateKeyboardPosition);
+      }
       window.removeEventListener('resize', updateKeyboardPosition);
-      window.removeEventListener('focusin', updateKeyboardPosition);
-      window.removeEventListener('focusout', updateKeyboardPosition);
+      window.removeEventListener('scroll', updateKeyboardPosition);
+      window.removeEventListener('focusin', handleFocusIn);
+      window.removeEventListener('focusout', handleFocusOut);
     };
   }, []);
 
@@ -728,9 +762,15 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     setSelectedTextId(newId);
     setSelectedStickerId(null);
     setActiveToolMode('text');
+    if (window.scrollY !== 0 || window.scrollX !== 0) {
+      window.scrollTo(0, 0);
+    }
 
     // 새로 생성된 글상자가 화면 밖일 경우 부드럽게 스크롤 이동
     setTimeout(() => {
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
+      }
       if (scrollContainerRef.current) {
         const targetPx = newY * scaleRatio;
         const currentScroll = scrollContainerRef.current.scrollTop;
@@ -1870,8 +1910,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         ================================================================
       */}
       <div
-        style={{ bottom: `calc(1rem + ${keyboardOffset}px)` }}
-        className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-40 w-[92%] max-w-lg flex flex-col space-y-2 pointer-events-none transition-[bottom] duration-150 ease-out"
+        style={{
+          bottom: `calc(${keyboardOffset > 0 ? '0.75rem' : 'max(1rem, env(safe-area-inset-bottom, 1rem))'} + ${keyboardOffset}px)`
+        }}
+        className="fixed lg:absolute bottom-4 left-1/2 transform -translate-x-1/2 z-40 w-[92%] max-w-lg flex flex-col space-y-2 pointer-events-none transition-[bottom] duration-150 ease-out"
       >
         
         {/* (1) 위쪽 상세 컨트롤 패널 (펜/텍스트/속지 모드일 때 표시) */}
