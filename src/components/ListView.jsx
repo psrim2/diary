@@ -526,6 +526,7 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
   const [searchTerm, setSearchTerm] = useState('');
   const [openSwipeCardId, setOpenSwipeCardId] = useState(null);
   const isUserTouchingRef = useRef(false);
+  const touchStartYRef = useRef(0);
 
   // 검색 필터링 & 최신 날짜순 정렬
   const filteredDiaries = [...diaries]
@@ -560,8 +561,22 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
 
   return (
     <div 
-      onTouchStart={() => {
+      onTouchStart={(e) => {
         isUserTouchingRef.current = true;
+        if (e.touches && e.touches[0]) {
+          touchStartYRef.current = e.touches[0].clientY;
+        }
+      }}
+      onTouchMove={(e) => {
+        // 검색창이 포커스된 상태에서 위/아래로 10px 이상 스와이프하면 키보드를 즉시 닫음
+        if (e.touches && e.touches[0]) {
+          const deltaY = Math.abs(e.touches[0].clientY - touchStartYRef.current);
+          if (deltaY > 10) {
+            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+              document.activeElement.blur();
+            }
+          }
+        }
       }}
       onTouchEnd={() => {
         isUserTouchingRef.current = false;
@@ -582,8 +597,7 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
         if (openSwipeCardId) {
           setOpenSwipeCardId(null);
         }
-        // 사용자가 터치로 직접 스크롤을 30px 이상 의미있게 내렸을 때만 키보드 내림 처리
-        // (상단 바운스/반동 및 검색결과 변경 시 scrollTop 급변으로 인한 의도치 않은 튕김 현상 방지)
+        // 사용자가 터치로 직접 스크롤을 30px 이상 의미있게 내렸을 때 키보드 내림 처리
         if (isUserTouchingRef.current && e.currentTarget.scrollTop > 30) {
           if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
             document.activeElement.blur();
@@ -591,11 +605,13 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
         }
       }}
       style={{
-        WebkitOverflowScrolling: 'touch',
-        overscrollBehaviorY: 'contain',
-        touchAction: 'pan-y',
+        WebkitOverflowScrolling: filteredDiaries.length === 0 ? 'auto' : 'touch',
+        overscrollBehaviorY: filteredDiaries.length === 0 ? 'none' : 'contain',
+        touchAction: filteredDiaries.length === 0 ? 'none' : 'pan-y',
       }}
-      className="flex flex-col h-full bg-[#fafafa] px-6 pb-28 overflow-y-auto no-scrollbar overscroll-contain"
+      className={`flex flex-col h-full bg-[#fafafa] px-6 pb-28 no-scrollbar ${
+        filteredDiaries.length === 0 ? 'overflow-y-hidden overscroll-none' : 'overflow-y-auto overscroll-contain'
+      }`}
     >
       
       {/* 1. 상단 둥근 알약형 검색창 */}

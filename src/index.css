@@ -4,7 +4,6 @@
 
 :root {
   --app-height: 100dvh;
-  --app-top: 0px;
 }
 
 /* 모바일 전체화면 앱 고정 및 iOS Safari 뷰포트 밀림 방지 */
@@ -15,9 +14,10 @@ html, body {
   max-height: var(--app-height, 100dvh);
   overflow: hidden;
   position: fixed;
-  top: var(--app-top, 0px);
+  top: 0;
   left: 0;
   right: 0;
+  bottom: 0;
   touch-action: manipulation;
   overscroll-behavior: none;
 }
