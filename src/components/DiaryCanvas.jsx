@@ -513,6 +513,34 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       layerOrder: getNextLayerOrder(),
       points: [{ x, y }]
     };
+
+    // 점 찍기(단일 탭) 시 오버레이 캔버스에 즉각적인 시각 피드백 렌더링
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const uniformScale = rect.width > 0 ? rect.width / CANONICAL_WIDTH : 1;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr * uniformScale, dpr * uniformScale);
+
+    if (activePenTool === 'eraser') {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = 'rgba(250, 250, 250, 0.85)';
+    } else if (activePenTool === 'highlighter') {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = penColor;
+      ctx.globalAlpha = 0.35;
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = penColor;
+      ctx.globalAlpha = activePenTool === 'pencil' ? 0.8 : 1.0;
+    }
+
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(0.6, penSize / 2), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   };
 
   const handlePointerMove = (e) => {
@@ -521,15 +549,14 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       e.preventDefault();
     }
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !currentStrokeRef.current) return;
 
-    const { x, y } = getCoordinates(e);
-    currentStrokeRef.current.points.push({ x, y });
+    // 애플펜슬 고주파수 Coalesced Events 지원 (지원 브라우저에서 중간 지점 누락 방지)
+    const events = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents().length > 0)
+      ? e.getCoalescedEvents()
+      : [e];
 
     const ctx = canvas.getContext('2d');
-    const pts = currentStrokeRef.current.points;
-    if (pts.length < 2) return;
-
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     // 세로 찌그러짐 방지: 가로 너비 기준의 균일 정비율 스케일링
@@ -560,12 +587,43 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       ctx.lineJoin = 'round';
     }
 
-    ctx.beginPath();
-    const p1 = pts[pts.length - 2];
-    const p2 = pts[pts.length - 1];
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
+    const pts = currentStrokeRef.current.points;
+
+    for (let i = 0; i < events.length; i++) {
+      const { x: rawX, y: rawY } = getCoordinates(events[i]);
+      const lastPt = pts[pts.length - 1];
+
+      // 1. 미세 센서 노이즈/손떨림 필터링: 직전 좌표와 거리가 1.2px 미만인 미세한 지터는 제외
+      const dist = Math.hypot(rawX - lastPt.x, rawY - lastPt.y);
+      if (dist < 1.2) continue;
+
+      // 2. 가중 지수 이동 평균(EMA)으로 애플펜슬 고주파 떨림을 매끄럽게 흡수
+      const smoothedX = lastPt.x * 0.2 + rawX * 0.8;
+      const smoothedY = lastPt.y * 0.2 + rawY * 0.8;
+
+      pts.push({ x: smoothedX, y: smoothedY });
+
+      // 3. 실시간 2차 베지어 곡선(Midpoint Quadratic Curve) 렌더링으로 직선 꺾임/지터 원천 제거
+      if (pts.length === 2) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.lineTo(pts[1].x, pts[1].y);
+        ctx.stroke();
+      } else if (pts.length > 2) {
+        const p0 = pts[pts.length - 3];
+        const p1 = pts[pts.length - 2];
+        const p2 = pts[pts.length - 1];
+
+        const mid1 = { x: (p0.x + p1.x) / 2, y: (p0.y + p1.y) / 2 };
+        const mid2 = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+
+        ctx.beginPath();
+        ctx.moveTo(mid1.x, mid1.y);
+        ctx.quadraticCurveTo(p1.x, p1.y, mid2.x, mid2.y);
+        ctx.stroke();
+      }
+    }
+
     ctx.restore();
   };
 
@@ -584,11 +642,19 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
     clearOverlayCanvas();
 
-    if (currentStrokeRef.current && currentStrokeRef.current.points.length > 1) {
-      const newHistory = strokesHistory.slice(0, historyIndex + 1);
-      newHistory.push(currentStrokeRef.current);
-      setStrokesHistory(newHistory);
-      setHistoryIndex(newHistory.length - 1);
+    if (currentStrokeRef.current) {
+      const pts = currentStrokeRef.current.points;
+      // 점(Dot)을 찍은 경우에도 정상 보존되도록 단일 점을 최소 2점으로 확장
+      if (pts.length === 1) {
+        pts.push({ x: pts[0].x + 0.1, y: pts[0].y + 0.1 });
+      }
+
+      if (pts.length >= 2) {
+        const newHistory = strokesHistory.slice(0, historyIndex + 1);
+        newHistory.push(currentStrokeRef.current);
+        setStrokesHistory(newHistory);
+        setHistoryIndex(newHistory.length - 1);
+      }
     }
     currentStrokeRef.current = null;
   };
@@ -900,7 +966,19 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     };
   }, [draggingItem, transformingItem]);
 
-  // 저장
+  // 와이드 화면 저장 완료 토스트 팝업 상태
+  const [toastMessage, setToastMessage] = useState('');
+  const toastTimerRef = useRef(null);
+
+  const showToast = (message = '저장되었습니다.') => {
+    setToastMessage(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage('');
+    }, 2400);
+  };
+
+  // 저장 (모바일: 이전화면 이동, 와이드: 화면 유지 + 토스트 팝업)
   const handleSaveDiary = () => {
     if (isSaving) return;
     setIsSaving(true);
@@ -918,6 +996,12 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     };
 
     onSave(finalDiary);
+    setTimeout(() => setIsSaving(false), 500);
+
+    // 와이드 버전(>=1024px)에서는 페이지 전환이 없으므로 토스트 알림 표시
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+      showToast('저장되었습니다.');
+    }
   };
 
   const currentPaperClass = PAPER_STYLES.find(p => p.id === paperStyle)?.class || 'paper-minimal-lined';
@@ -2182,6 +2266,21 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 );
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 
+        와이드 버전(2분할 뷰) 저장 완료 알림 토스트 팝업
+        - 모바일은 저장 시 캘린더/목록으로 페이지 전환이 일어나며,
+        - 와이드는 페이지 전환이 없으므로 감성적인 플로팅 토스트로 저장 완료를 명확히 안내
+        - 하단 도구 모음(툴바)과 겹치지 않고 다이어리 상단 중앙에 우아하게 표시
+      */}
+      {toastMessage && (
+        <div className="absolute top-5 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-fadeIn transition-all">
+          <div className="flex items-center space-x-2 bg-black/90 text-white px-5 py-2.5 rounded-full shadow-lg backdrop-blur-md text-sm font-medium tracking-tight">
+            <Check size={16} className="text-emerald-400 stroke-[3]" />
+            <span>{toastMessage}</span>
           </div>
         </div>
       )}

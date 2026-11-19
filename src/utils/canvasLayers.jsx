@@ -161,44 +161,61 @@ export function StrokeBandCanvas({ band }) {
       );
 
       (band?.operations || []).forEach((stroke) => {
-        if (!stroke?.points || stroke.points.length < 2) return;
+        if (!stroke?.points || stroke.points.length === 0) return;
         ctx.save();
-        ctx.beginPath();
 
         if (stroke.tool === 'eraser') {
           ctx.globalCompositeOperation = 'destination-out';
+          ctx.strokeStyle = '#000000';
+          ctx.fillStyle = '#000000';
           ctx.lineWidth = stroke.size;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
         } else if (stroke.tool === 'highlighter') {
           ctx.globalCompositeOperation = 'source-over';
           ctx.strokeStyle = stroke.color;
+          ctx.fillStyle = stroke.color;
           ctx.lineWidth = stroke.size;
           ctx.globalAlpha = 0.35;
           ctx.lineCap = 'square';
         } else {
           ctx.globalCompositeOperation = 'source-over';
           ctx.strokeStyle = stroke.color;
+          ctx.fillStyle = stroke.color;
           ctx.lineWidth = stroke.size;
           ctx.globalAlpha = stroke.tool === 'pencil' ? 0.8 : 1.0;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
         }
 
-        ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
-        for (let i = 1; i < stroke.points.length; i++) {
-          const midPoint = {
-            x: (stroke.points[i - 1].x + stroke.points[i].x) / 2,
-            y: (stroke.points[i - 1].y + stroke.points[i].y) / 2,
-          };
+        const pts = stroke.points;
+        if (pts.length === 1) {
+          ctx.beginPath();
+          ctx.arc(pts[0].x, pts[0].y, Math.max(1, stroke.size / 2), 0, Math.PI * 2);
+          ctx.fill();
+        } else if (pts.length === 2) {
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          ctx.lineTo(pts[1].x, pts[1].y);
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length - 1; i++) {
+            const xc = (pts[i].x + pts[i + 1].x) / 2;
+            const yc = (pts[i].y + pts[i + 1].y) / 2;
+            ctx.quadraticCurveTo(pts[i].x, pts[i].y, xc, yc);
+          }
+          const lastIdx = pts.length - 1;
           ctx.quadraticCurveTo(
-            stroke.points[i - 1].x,
-            stroke.points[i - 1].y,
-            midPoint.x,
-            midPoint.y
+            pts[lastIdx - 1].x,
+            pts[lastIdx - 1].y,
+            pts[lastIdx].x,
+            pts[lastIdx].y
           );
+          ctx.stroke();
         }
-        ctx.stroke();
+
         ctx.restore();
       });
 
