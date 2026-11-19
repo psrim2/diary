@@ -380,7 +380,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     return () => ro.disconnect();
   }, [updateCanvasDimensions]);
 
-  // 태블릿/모바일 터치 환경에서 펜 모드 중에도 2손가락 드래그 시 부드러운 화면 스크롤 지원
+  // 태블릿/모바일 터치 환경에서 펜 모드 중에도 2손가락 드래그 시 부드러운 화면 스크롤 지원 및 애플펜슬 롱프레스 툴팁 방지
   useEffect(() => {
     const canvas = canvasRef.current;
     const scrollEl = scrollContainerRef.current;
@@ -398,6 +398,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         clearOverlayCanvas();
       } else {
         isTwoFingerScroll = false;
+        // 단일 손가락 또는 애플펜슬 필기 시 iOS Safari 롱프레스 툴팁/콜아웃(공유, 복사 등) 즉시 방지
+        if (activeToolMode === 'pen' && e.cancelable) {
+          e.preventDefault();
+        }
       }
     };
 
@@ -408,6 +412,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         const deltaY = currentY - touchStartY;
         touchStartY = currentY;
         scrollEl.scrollTop -= deltaY;
+      } else if (activeToolMode === 'pen' && e.cancelable) {
+        // 단일 손가락 또는 애플펜슬 필기 시 기본 제스처 억제
+        e.preventDefault();
       }
     };
 
@@ -417,18 +424,48 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       }
     };
 
+    // 아이패드 애플펜슬 롱프레스 시 발생하는 Safari 컨텍스트 메뉴(공유/복사 툴팁) 캡처 단계에서 완벽 차단
+    const onContextMenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    };
+
     canvas.addEventListener('touchstart', onTouchStart, { passive: false });
     canvas.addEventListener('touchmove', onTouchMove, { passive: false });
     canvas.addEventListener('touchend', onTouchEnd);
     canvas.addEventListener('touchcancel', onTouchEnd);
+    canvas.addEventListener('contextmenu', onContextMenu, { capture: true });
 
     return () => {
       canvas.removeEventListener('touchstart', onTouchStart);
       canvas.removeEventListener('touchmove', onTouchMove);
       canvas.removeEventListener('touchend', onTouchEnd);
       canvas.removeEventListener('touchcancel', onTouchEnd);
+      canvas.removeEventListener('contextmenu', onContextMenu, { capture: true });
     };
-  }, [clearOverlayCanvas]);
+  }, [clearOverlayCanvas, activeToolMode]);
+
+  // 아이패드 및 모바일 기기에서 펜슬 필기 중 롱프레스 시 Safari 시스템 메뉴(공유/복사) 전역 차단
+  useEffect(() => {
+    const handleGlobalContextMenu = (e) => {
+      if (activeToolMode === 'pen') {
+        const target = e.target;
+        if (editorRootRef.current && editorRootRef.current.contains(target)) {
+          if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('contextmenu', handleGlobalContextMenu, { capture: true });
+    return () => {
+      window.removeEventListener('contextmenu', handleGlobalContextMenu, { capture: true });
+    };
+  }, [activeToolMode]);
 
   // 좌표 계산 (반응형 찌그러짐 방지: 가로 너비 기준 uniformScale로 x, y 모두 동일 배율 역변환)
   const getCoordinates = (e) => {
@@ -451,9 +488,12 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     };
   };
 
-  // 드로잉 이벤트
+  // 드로잉 이벤트 (아이패드 애플펜슬 필기 시 cancelable 이벤트 즉시 차단하여 사파리 롱프레스 툴팁 방지)
   const handlePointerDown = (e) => {
     if (activeToolMode !== 'pen') return;
+    if (e.cancelable) {
+      e.preventDefault();
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -477,6 +517,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
   const handlePointerMove = (e) => {
     if (!isDrawingRef.current || activeToolMode !== 'pen') return;
+    if (e.cancelable) {
+      e.preventDefault();
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -528,6 +571,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
   const handlePointerUp = (e) => {
     if (!isDrawingRef.current || activeToolMode !== 'pen') return;
+    if (e.cancelable) {
+      e.preventDefault();
+    }
     isDrawingRef.current = false;
 
     if (e.target.releasePointerCapture && e.pointerId) {
@@ -696,6 +742,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   // 드래그 이동 (마우스 및 모바일 터치 지원 - 글상자 및 스티커 상하좌우 이동)
   const handleItemDragStart = (e, type, id, currentX, currentY) => {
     e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
 
     const { clientX, clientY } = getEventClientCoords(e);
 
@@ -1212,11 +1259,21 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       */}
       <div 
         ref={scrollContainerRef}
+        onContextMenu={(e) => {
+          if (activeToolMode === 'pen') {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+        }}
         style={{
           WebkitOverflowScrolling: 'touch',
           overscrollBehaviorY: 'contain',
+          WebkitTouchCallout: 'none',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
         }}
-        className="flex-1 w-full overflow-y-auto overflow-x-hidden no-scrollbar px-3.5 sm:px-6 relative"
+        className="flex-1 w-full overflow-y-auto overflow-x-hidden no-scrollbar px-3.5 sm:px-6 relative select-none"
       >
         <div 
           ref={canvasContainerRef}
@@ -1226,10 +1283,18 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
               setSelectedStickerId(null);
             }
           }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }}
           style={{
             minHeight: `${paperHeightPx}px`,
+            WebkitTouchCallout: 'none',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
           }}
-          className={`w-full relative isolate ${currentPaperClass} transition-colors duration-200`}
+          className={`w-full relative isolate ${currentPaperClass} transition-colors duration-200 select-none`}
         >
         {/* (1-A) 생성 순서(layerOrder)별 드로잉 밴드 캔버스 레이어 */}
         {strokeBands.map((band) => (
@@ -1243,9 +1308,17 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }}
           style={{
             zIndex: activeToolMode === 'pen' ? 9999 : 0,
             touchAction: 'none',
+            WebkitTouchCallout: 'none',
+            WebkitUserSelect: 'none',
+            userSelect: 'none',
           }}
           className={`absolute inset-0 w-full h-full block ${
             activeToolMode === 'pen' ? 'cursor-crosshair touch-none' : 'pointer-events-none'

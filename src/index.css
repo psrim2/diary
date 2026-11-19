@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* iOS / iPadOS Safari 웹킷 롱프레스 공유/복사 툴팁 및 텍스트 선택 완전 방지 */
+*, *::before, *::after {
+  -webkit-touch-callout: none;
+}
+
+input, textarea, [contenteditable="true"] {
+  -webkit-touch-callout: default;
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
+canvas {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  touch-action: none !important;
+}
+
 /* 스크롤바 완전 숨김 유틸리티 */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
