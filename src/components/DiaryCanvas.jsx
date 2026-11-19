@@ -181,6 +181,26 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   const currentStrokeRef = useRef(null);
   const wasTransformingRef = useRef(false);
   const twoFingerTransformRef = useRef(null);
+  const textareaRefs = useRef({});
+  const newlyCreatedBlockIdRef = useRef(null);
+
+  // 새 글상자 생성 시 preventScroll: true로 포커스하여 Safari 윈도우 스크롤 및 뷰포트 밀림 방지
+  useEffect(() => {
+    if (selectedTextId && newlyCreatedBlockIdRef.current === selectedTextId) {
+      newlyCreatedBlockIdRef.current = null;
+      const timer = setTimeout(() => {
+        const el = textareaRefs.current[selectedTextId];
+        if (el) {
+          try {
+            el.focus({ preventScroll: true });
+          } catch {
+            el.focus();
+          }
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedTextId]);
 
   // 실제 렌더링된 속지의 가로/세로 픽셀 크기 실시간 측정 (ResizeObserver)
   const [paperWidth, setPaperWidth] = useState(CANONICAL_WIDTH);
@@ -271,6 +291,12 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       if (window.scrollY !== 0 || window.scrollX !== 0) {
         window.scrollTo(0, 0);
       }
+      if (document.body && document.body.scrollTop !== 0) {
+        document.body.scrollTop = 0;
+      }
+      if (document.documentElement && document.documentElement.scrollTop !== 0) {
+        document.documentElement.scrollTop = 0;
+      }
 
       if (!window.visualViewport) {
         setKeyboardOffset(0);
@@ -278,7 +304,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       }
 
       const viewport = window.visualViewport;
-      // 1) 뷰포트 높이 차이로 키보드 높이 계산
+      // 1) 뷰포트 높이 차이로 키보드 활성화 여부 감지
       // window.innerHeight (전체 화면 높이) - viewport.height (실제 보이는 뷰포트 높이)
       const rawDiff = window.innerHeight - viewport.height;
 
@@ -758,6 +784,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       scale: 1,
       layerOrder: getNextLayerOrder(),
     };
+    newlyCreatedBlockIdRef.current = newId;
     setTextBlocks(prev => [...prev, newBlock]);
     setSelectedTextId(newId);
     setSelectedStickerId(null);
@@ -766,7 +793,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       window.scrollTo(0, 0);
     }
 
-    // 새로 생성된 글상자가 키보드나 하단 툴바 뒤에 가려지지 않도록 안전 가시 영역으로 자동 스크롤
+    // 새로 생성된 글상자가 키보드나 하단 툴바 뒤에 가려지지 않도록 속지 내부만 부드럽게 스크롤
     const scrollToNewBlock = () => {
       if (window.scrollY !== 0 || window.scrollX !== 0) {
         window.scrollTo(0, 0);
@@ -774,9 +801,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       if (scrollContainerRef.current) {
         const targetPx = newY * scaleRatio;
         const currentScroll = scrollContainerRef.current.scrollTop;
-        const vvHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-        // 가상 키보드와 하단 플로팅 툴바를 충분히 감안한 안전 뷰포트 높이
-        const safeVisibleHeight = Math.max(160, vvHeight - 220);
+        const containerH = scrollContainerRef.current.clientHeight || (window.innerHeight - 250);
+        // 하단 플로팅 툴바(약 60px) 및 여유 마진 감안한 안전 가시 영역
+        const safeVisibleHeight = Math.max(120, containerH - 70);
 
         if (targetPx < currentScroll + 20 || targetPx > currentScroll + safeVisibleHeight - 20) {
           scrollContainerRef.current.scrollTo({
@@ -788,7 +815,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     };
 
     setTimeout(scrollToNewBlock, 50);
-    setTimeout(scrollToNewBlock, 280);
+    setTimeout(scrollToNewBlock, 250);
   };
 
   const updateTextBlock = (id, fields) => {
@@ -1191,6 +1218,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   return (
     <div 
       ref={editorRootRef}
+      style={{ height: 'var(--app-height, 100%)' }}
       className="flex flex-col h-full bg-[#fafafa] select-none overflow-hidden relative"
     >
       {/* 
@@ -1200,7 +1228,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         - 이로써 상단 세로 공간을 최소화함
         ================================================================
       */}
-      <div className="w-full px-6 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-2 shrink-0 flex lg:hidden items-center justify-between">
+      <div className="w-full px-6 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-2 shrink-0 flex lg:hidden items-center justify-between bg-[#fafafa] z-30 relative">
         <div className="flex items-center space-x-2.5">
           <button
             onClick={onBack}
@@ -1735,17 +1763,22 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
               <textarea
                 ref={(el) => {
                   if (el) {
+                    textareaRefs.current[block.id] = el;
                     el.style.height = 'auto';
                     el.style.height = `${Math.max(minBoxHeight, el.scrollHeight)}px`;
+                  } else {
+                    delete textareaRefs.current[block.id];
                   }
                 }}
-                autoFocus={isSelected}
                 value={block.text || ''}
                 placeholder={isSelected ? '텍스트를 입력하세요...' : ''}
                 onFocus={() => {
                   setSelectedTextId(block.id);
                   setSelectedStickerId(null);
                   setActiveToolMode('text');
+                  if (window.scrollY !== 0 || window.scrollX !== 0) {
+                    window.scrollTo(0, 0);
+                  }
                 }}
                 onChange={(e) => {
                   updateTextBlock(block.id, { text: e.target.value });
@@ -1914,14 +1947,14 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       {/* 
         ================================================================
         [하단 도구 모음 통합 컨테이너]
-        (모바일 키보드 자판 활성화 시 키보드 높이만큼 자동으로 위로 올라옴)
+        (Visual Viewport 기준으로 키보드 활성화 시 키보드 바로 위에 완벽 고정)
         ================================================================
       */}
       <div
         style={{
-          bottom: `calc(${keyboardOffset > 0 ? '0.75rem' : 'max(1rem, env(safe-area-inset-bottom, 1rem))'} + ${keyboardOffset}px)`
+          bottom: keyboardOffset > 0 ? '0.75rem' : 'max(1rem, env(safe-area-inset-bottom, 1rem))'
         }}
-        className="fixed lg:absolute bottom-4 left-1/2 transform -translate-x-1/2 z-40 w-[92%] max-w-lg flex flex-col space-y-2 pointer-events-none transition-[bottom] duration-150 ease-out"
+        className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-40 w-[92%] max-w-lg flex flex-col space-y-2 pointer-events-none transition-[bottom] duration-150 ease-out"
       >
         
         {/* (1) 위쪽 상세 컨트롤 패널 (펜/텍스트/속지 모드일 때 표시) */}

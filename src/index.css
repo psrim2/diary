@@ -2,18 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --app-height: 100dvh;
+  --app-top: 0px;
+}
+
 /* 모바일 전체화면 앱 고정 및 iOS Safari 뷰포트 밀림 방지 */
 html, body {
   width: 100%;
   height: 100%;
-  height: 100dvh;
+  height: var(--app-height, 100dvh);
+  max-height: var(--app-height, 100dvh);
   overflow: hidden;
   position: fixed;
-  top: 0;
+  top: var(--app-top, 0px);
   left: 0;
   right: 0;
-  bottom: 0;
   touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
 }
 
 /* iOS / iPadOS Safari 웹킷 롱프레스 공유/복사 툴팁 및 텍스트 선택 완전 방지 */
