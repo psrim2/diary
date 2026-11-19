@@ -87,6 +87,23 @@ function getEventClientCoords(e) {
   return { clientX: 0, clientY: 0 };
 }
 
+// 디바이스별 기본 활성 도구 모드 결정:
+// 모바일 스마트폰(< 640px) -> 타이핑('text')이 기본 Default
+// 태블릿(아이패드, 갤럭시탭 등) 및 PC -> 드로잉/손글씨('pen')가 기본 Default
+export function getDefaultToolMode() {
+  if (typeof window === 'undefined') return 'pen';
+
+  // 1. iPadOS 감지: Safari는 UA가 Macintosh이지만 maxTouchPoints > 1
+  const isIPad = /Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+  // 2. Android 태블릿 감지: Tablet 키워드가 있거나, Android이면서 Mobile이 없는 경우
+  const isAndroidTablet = /Tablet|Android(?!.*Mobile)/i.test(navigator.userAgent);
+
+  // 3. 모바일 스마트폰 판단: 태블릿이 아니면서 화면 가로 폭이 640px 미만인 경우
+  const isMobilePhone = !isIPad && !isAndroidTablet && window.innerWidth < 640;
+
+  return isMobilePhone ? 'text' : 'pen';
+}
+
 export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack }) {
   const initialNormalized = React.useMemo(() => normalizeDiaryLayers(diary), [diary]);
   const layerOrderCounterRef = useRef(initialNormalized.maxOrder);
@@ -104,7 +121,8 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   const [paperStyle, setPaperStyle] = useState(diary?.paperStyle || 'lined');
   
   // 하단 툴바 활성 모드: 'none' | 'text' | 'pen' | 'sticker' | 'paper'
-  const [activeToolMode, setActiveToolMode] = useState('pen');
+  // 모바일: 타이핑('text') Default / 태블릿 & PC: 드로잉('pen') Default
+  const [activeToolMode, setActiveToolMode] = useState(() => getDefaultToolMode());
 
   // 모달 상태
   const [isWeatherOpen, setIsWeatherOpen] = useState(false);
@@ -167,6 +185,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       setHistoryIndex(normalized.strokes.length ? normalized.strokes.length - 1 : -1);
       setSelectedTextId(null);
       setSelectedStickerId(null);
+      setActiveToolMode(getDefaultToolMode());
     }
   }, [diary]);
 
