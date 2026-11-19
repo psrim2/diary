@@ -5,7 +5,7 @@ const MONTH_NAMES_EN = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
-export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate }) {
+export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate, selectedDate }) {
   // 실제 오늘 날짜 기준
   const todayRef = new Date();
   const [currentDate, setCurrentDate] = useState(
@@ -322,22 +322,32 @@ export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate
                         onNewDiaryForDate(cell.dateStr);
                       }
                     }}
-                    className="flex flex-col items-center justify-center cursor-pointer transition-transform active:scale-95 group h-full py-1"
+                    className="flex flex-col items-center justify-center cursor-pointer transition-transform active:scale-95 group h-full py-0.5"
                   >
-                    {/* 날짜 숫자 */}
-                    {today ? (
-                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#1e1e1e] text-white flex items-center justify-center font-bold text-sm sm:text-base shadow-xs">
-                        {cell.day}
-                      </div>
-                    ) : (
-                      <span
-                        className={`text-base sm:text-lg font-bold leading-none ${
-                          isWeekend ? 'text-[#ff6b00]' : 'text-black'
-                        }`}
-                      >
-                        {cell.day}
-                      </span>
-                    )}
+                    {/* 날짜 숫자 컨테이너 - 오늘과 일반 날짜 모두 동일한 높이(w-8 h-8 sm:w-9 sm:h-9)를 보장하여 아래 스티커 높이를 완벽히 일치시킴 */}
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center shrink-0 relative">
+                      {/* 선택된 날짜 표시: 오늘 표시 원과 동일한 크기의 스트로크(stroke) (모바일 버전에서는 미표시, 2분할 뷰 lg에서만 표시) */}
+                      {cell.dateStr === selectedDate && !today && (
+                        <div className="hidden lg:block absolute inset-0 rounded-full border-2 border-black pointer-events-none" />
+                      )}
+                      {cell.dateStr === selectedDate && today && (
+                        <div className="hidden lg:block absolute -inset-0.5 rounded-full border-2 border-black pointer-events-none" />
+                      )}
+
+                      {today ? (
+                        <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#1e1e1e] text-white flex items-center justify-center font-bold text-sm sm:text-base shadow-xs">
+                          {cell.day}
+                        </div>
+                      ) : (
+                        <span
+                          className={`text-base sm:text-lg font-bold leading-none ${
+                            isWeekend ? 'text-[#ff6b00]' : 'text-black'
+                          }`}
+                        >
+                          {cell.day}
+                        </span>
+                      )}
+                    </div>
 
                     {/* 일기 작성 스티커 */}
                     <div className="min-h-[22px] flex items-center justify-center mt-0.5">

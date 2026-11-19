@@ -153,9 +153,11 @@ export function StrokeBandCanvas({ band }) {
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // 반응형 가로·세로 찌그러짐 방지: 가로 너비 기준의 균일 정비율(Uniform Scaling) 적용
+      const uniformScale = currentW > 0 ? currentW / CANONICAL_WIDTH : 1;
       ctx.scale(
-        dpr * (currentW / CANONICAL_WIDTH),
-        dpr * (currentH / CANONICAL_HEIGHT)
+        dpr * uniformScale,
+        dpr * uniformScale
       );
 
       (band?.operations || []).forEach((stroke) => {

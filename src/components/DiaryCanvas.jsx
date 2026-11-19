@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { 
   ArrowLeft, 
   Check, 
@@ -85,7 +85,7 @@ function getEventClientCoords(e) {
   return { clientX: 0, clientY: 0 };
 }
 
-export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
+export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack }) {
   const initialNormalized = React.useMemo(() => normalizeDiaryLayers(diary), [diary]);
   const layerOrderCounterRef = useRef(initialNormalized.maxOrder);
 
@@ -233,6 +233,54 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
   // 가로 너비 기준 유동 스케일 비율 (CANONICAL 360 대비 실제 렌더링 배율)
   const scaleRatio = paperWidth > 0 ? paperWidth / CANONICAL_WIDTH : 1;
 
+  // 본문 세로 스크롤 컨테이너 ref 및 가시 영역 높이 감지
+  const scrollContainerRef = useRef(null);
+  const [containerHeight, setContainerHeight] = useState(0);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const updateContainer = () => {
+      if (el.clientHeight > 0) {
+        setContainerHeight(el.clientHeight);
+      }
+    };
+    updateContainer();
+    const ro = new ResizeObserver(updateContainer);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // 컨텐츠(필기 스트로크, 스티커, 텍스트)의 가장 아래쪽 Y 좌표 계산 (실제 렌더링 픽셀)
+  const contentMaxBottomPx = useMemo(() => {
+    let maxY = 0;
+    stickers.forEach((s) => {
+      const approxH = (s.height || (s.imageUrl ? 240 : 60)) * (s.scale || 1);
+      const bottom = ((s.y || 0) + approxH) * scaleRatio;
+      if (bottom > maxY) maxY = bottom;
+    });
+    textBlocks.forEach((t) => {
+      const bottom = ((t.y || 0) + 90 * (t.scale || 1)) * scaleRatio;
+      if (bottom > maxY) maxY = bottom;
+    });
+    strokesHistory.forEach((stroke) => {
+      (stroke.points || []).forEach((pt) => {
+        const bottom = pt.y * scaleRatio;
+        if (bottom > maxY) maxY = bottom;
+      });
+    });
+    return maxY;
+  }, [stickers, textBlocks, strokesHistory, scaleRatio]);
+
+  // 속지 최소 높이 동적 계산:
+  // 1) 기본적으로 화면 높이보다 380px 더 길어서, 항상 하단 플로팅 툴바 위로 넉넉하게 스크롤 가능
+  // 2) 컨텐츠(손글씨, 스티커, 사진)가 아래로 내려갈수록 바닥 아래 380px 여유 공간을 두고 무한 확장되어 절대 잘리지 않음
+  const paperHeightPx = useMemo(() => {
+    const baseMin = (containerHeight > 0 ? containerHeight : 700) + 380;
+    const contentNeeded = contentMaxBottomPx > 0 ? contentMaxBottomPx + 380 : 0;
+    return Math.round(Math.max(baseMin, contentNeeded));
+  }, [containerHeight, contentMaxBottomPx]);
+
   // 모바일/태블릿 가상 키보드 높이 감지 (툴바가 키보드 위로 올라오도록 오프셋 계산)
   const [keyboardOffset, setKeyboardOffset] = useState(0);
 
@@ -332,7 +380,57 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
     return () => ro.disconnect();
   }, [updateCanvasDimensions]);
 
-  // 좌표 계산 (터치 및 마우스 위치를 CANONICAL 표준 360x520 좌표계로 정밀 역변환)
+  // 태블릿/모바일 터치 환경에서 펜 모드 중에도 2손가락 드래그 시 부드러운 화면 스크롤 지원
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const scrollEl = scrollContainerRef.current;
+    if (!canvas || !scrollEl) return;
+
+    let touchStartY = 0;
+    let isTwoFingerScroll = false;
+
+    const onTouchStart = (e) => {
+      if (e.touches && e.touches.length >= 2) {
+        isTwoFingerScroll = true;
+        touchStartY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        isDrawingRef.current = false;
+        currentStrokeRef.current = null;
+        clearOverlayCanvas();
+      } else {
+        isTwoFingerScroll = false;
+      }
+    };
+
+    const onTouchMove = (e) => {
+      if (isTwoFingerScroll && e.touches && e.touches.length >= 2) {
+        if (e.cancelable) e.preventDefault();
+        const currentY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const deltaY = currentY - touchStartY;
+        touchStartY = currentY;
+        scrollEl.scrollTop -= deltaY;
+      }
+    };
+
+    const onTouchEnd = (e) => {
+      if (!e.touches || e.touches.length < 2) {
+        isTwoFingerScroll = false;
+      }
+    };
+
+    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    canvas.addEventListener('touchend', onTouchEnd);
+    canvas.addEventListener('touchcancel', onTouchEnd);
+
+    return () => {
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchend', onTouchEnd);
+      canvas.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [clearOverlayCanvas]);
+
+  // 좌표 계산 (반응형 찌그러짐 방지: 가로 너비 기준 uniformScale로 x, y 모두 동일 배율 역변환)
   const getCoordinates = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
@@ -341,15 +439,15 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
     const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
     const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
 
-    const scaleX = rect.width > 0 ? CANONICAL_WIDTH / rect.width : 1;
-    const scaleY = rect.height > 0 ? CANONICAL_HEIGHT / rect.height : 1;
+    const uniformScale = rect.width > 0 ? rect.width / CANONICAL_WIDTH : 1;
 
-    const x = (clientX - rect.left) * scaleX;
-    const y = (clientY - rect.top) * scaleY;
+    const x = (clientX - rect.left) / uniformScale;
+    const y = (clientY - rect.top) / uniformScale;
+    const maxCanonicalY = rect.height > 0 && uniformScale > 0 ? rect.height / uniformScale : CANONICAL_HEIGHT;
 
     return {
       x: Math.max(0, Math.min(CANONICAL_WIDTH, x)),
-      y: Math.max(0, Math.min(CANONICAL_HEIGHT, y)),
+      y: Math.max(0, Math.min(maxCanonicalY, y)),
     };
   };
 
@@ -391,12 +489,12 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
 
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    const sX = rect.width > 0 ? rect.width / CANONICAL_WIDTH : 1;
-    const sY = rect.height > 0 ? rect.height / CANONICAL_HEIGHT : 1;
+    // 세로 찌그러짐 방지: 가로 너비 기준의 균일 정비율 스케일링
+    const uniformScale = rect.width > 0 ? rect.width / CANONICAL_WIDTH : 1;
 
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(dpr * sX, dpr * sY);
+    ctx.scale(dpr * uniformScale, dpr * uniformScale);
 
     if (activePenTool === 'eraser') {
       ctx.globalCompositeOperation = 'source-over';
@@ -719,13 +817,13 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
       if (draggingItem) {
         if (e.cancelable) e.preventDefault();
         const paperRect = canvasContainerRef.current?.getBoundingClientRect();
-        const sX = paperRect && paperRect.width > 0 ? CANONICAL_WIDTH / paperRect.width : 1;
-        const sY = paperRect && paperRect.height > 0 ? CANONICAL_HEIGHT / paperRect.height : 1;
-        const deltaX = (clientX - draggingItem.startX) * sX;
-        const deltaY = (clientY - draggingItem.startY) * sY;
+        const uniformScale = paperRect && paperRect.width > 0 ? paperRect.width / CANONICAL_WIDTH : 1;
+        const deltaX = (clientX - draggingItem.startX) / uniformScale;
+        const deltaY = (clientY - draggingItem.startY) / uniformScale;
+        const maxCanonicalY = paperRect && paperRect.height > 0 && uniformScale > 0 ? paperRect.height / uniformScale : CANONICAL_HEIGHT;
 
         const newX = Math.max(0, Math.min(CANONICAL_WIDTH - 20, draggingItem.origX + deltaX));
-        const newY = Math.max(0, Math.min(CANONICAL_HEIGHT - 20, draggingItem.origY + deltaY));
+        const newY = Math.max(0, Math.min(maxCanonicalY - 20, draggingItem.origY + deltaY));
 
         if (draggingItem.type === 'text') {
           updateTextBlock(draggingItem.id, { x: newX, y: newY });
@@ -786,20 +884,21 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
     >
       {/* 
         ================================================================
-        [상단] 1. 뒤로가기 + Daily Planner 레이블 ─── [ ✔ ] (검은색 원형 완료 버튼)
+        [상단] 1. 뒤로가기 + 다이어리 이름 레이블 ─── [ ✔ ] (검은색 원형 완료 버튼)
+        - 화면 전체 가로 풀(w-full)로 꽉 차게 배치
         ================================================================
       */}
-      <div className="px-6 pt-5 pb-2 shrink-0 flex items-center justify-between">
+      <div className="w-full px-6 pt-5 pb-2 shrink-0 flex items-center justify-between">
         <div className="flex items-center space-x-2.5">
           <button
             onClick={onBack}
-            className="text-black hover:opacity-70 transition p-1.5 -ml-1.5 rounded-full"
+            className="text-black hover:opacity-70 transition p-1.5 -ml-1.5 rounded-full lg:hidden"
             title="뒤로가기"
           >
             <ArrowLeft size={22} strokeWidth={2.5} />
           </button>
           <span className="text-sm font-semibold text-stone-400 tracking-tight">
-            Daily Planner
+            {diaryName || 'RIM’S DIARY'}
           </span>
         </div>
 
@@ -815,13 +914,20 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
 
       {/* 
         ================================================================
-        [상단] 2. 날짜 헤더:
-                 2026
-                 11.17 THU                  [ ○ ] (날씨/기분 스탬프 원형 버튼)
-                 ────────────────────────────────
+        [본문 영역] 다이어리 속지 / 필기 영역:
+        - 반응형으로 가로 100% (w-full) 풀 핏
         ================================================================
       */}
-      <div className="px-6 pt-1 pb-3 shrink-0">
+      <div className="w-full flex-1 flex flex-col min-h-0 relative">
+        {/* 
+          ================================================================
+          [상단] 2. 날짜 헤더: 반응형 가로 100% 풀 핏
+                   2026
+                   11.17 THU                  [ ○ ] (날씨/기분 스탬프 원형 버튼)
+                   ────────────────────────────────
+          ================================================================
+        */}
+        <div className="w-full px-6 pt-1 pb-3 shrink-0">
         <div className="flex items-end justify-between">
           {/* 날짜 헤더 (탭하면 날짜 변경 가능) */}
           <div className="relative cursor-pointer group" title="날짜 변경">
@@ -1100,21 +1206,31 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
 
       {/* 
         ================================================================
-        [본문] 모든 디바이스에서 100% 동일한 비율과 레이아웃을 보장하는 다이어리 속지
-        - 모바일에서는 화면을 시원하게 채우고, 태블릿/PC에서는 캘린더/목록과 동일한 넉넉한 노트 공간 제공
-        - 가로 너비 기준 상대 비율(%) 및 scaleRatio를 적용하여 획, 스티커, 텍스트 줄바꿈 위치가 완벽히 일치
+        [본문 스크롤 영역] 세로로 긴 이미지나 컨텐츠가 있을 때 자유롭게 세로 스크롤 가능
+        - 라운드 박스를 감싸는 스트로크(border)를 제거하여 깨끗한 아날로그 종이 질감 연출
         ================================================================
       */}
       <div 
-        ref={canvasContainerRef}
-        onClick={() => {
-          if (activeToolMode !== 'pen') {
-            setSelectedTextId(null);
-            setSelectedStickerId(null);
-          }
+        ref={scrollContainerRef}
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehaviorY: 'contain',
         }}
-        className={`flex-1 mx-3.5 sm:mx-6 mb-24 sm:mb-28 relative isolate overflow-hidden rounded-2xl sm:rounded-3xl shadow-xs border border-stone-200/90 ${currentPaperClass} transition-colors duration-200`}
+        className="flex-1 w-full overflow-y-auto overflow-x-hidden no-scrollbar px-3.5 sm:px-6 relative"
       >
+        <div 
+          ref={canvasContainerRef}
+          onClick={() => {
+            if (activeToolMode !== 'pen') {
+              setSelectedTextId(null);
+              setSelectedStickerId(null);
+            }
+          }}
+          style={{
+            minHeight: `${paperHeightPx}px`,
+          }}
+          className={`w-full relative isolate ${currentPaperClass} transition-colors duration-200`}
+        >
         {/* (1-A) 생성 순서(layerOrder)별 드로잉 밴드 캔버스 레이어 */}
         {strokeBands.map((band) => (
           <StrokeBandCanvas key={band.id} band={band} />
@@ -1161,7 +1277,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
           }
 
           const leftPercent = ((block.x || 0) / CANONICAL_WIDTH) * 100;
-          const topPercent = ((block.y || 0) / CANONICAL_HEIGHT) * 100;
+          const topPx = Math.round((block.y || 0) * scaleRatio);
           const scaledFontSize = Math.max(12, Math.round((block.fontSize || 22) * scaleRatio));
 
           return (
@@ -1182,7 +1298,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
               }}
               style={{
                 left: `${leftPercent}%`,
-                top: `${topPercent}%`,
+                top: `${topPx}px`,
                 maxWidth: '90%',
                 zIndex: blockZIndex,
                 transform: `rotate(${blockRotation}deg) scale(${blockScale})`,
@@ -1292,7 +1408,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
           const stickerZIndex = typeof sticker.layerOrder === 'number' ? sticker.layerOrder : idx + 1;
 
           const leftPercent = ((sticker.x || 0) / CANONICAL_WIDTH) * 100;
-          const topPercent = ((sticker.y || 0) / CANONICAL_HEIGHT) * 100;
+          const topPx = Math.round((sticker.y || 0) * scaleRatio);
           const isTape = sticker.category === 'tape' || sticker.type === 'tape';
           const basePixelW = isTape ? 112 : 56;
           const scaledPixelW = Math.max(24, Math.round(basePixelW * scaleRatio));
@@ -1311,7 +1427,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
               }}
               style={{
                 left: `${leftPercent}%`,
-                top: `${topPercent}%`,
+                top: `${topPx}px`,
                 zIndex: stickerZIndex,
                 transform: `rotate(${stickerRotation}deg) scale(${stickerScale})`,
                 transformOrigin: 'center center',
@@ -1371,6 +1487,15 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                   src={sticker.imageUrl}
                   alt={sticker.label || sticker.category || 'decoration'}
                   draggable={false}
+                  onLoad={(e) => {
+                    const naturalW = e.currentTarget.naturalWidth || 1;
+                    const naturalH = e.currentTarget.naturalHeight || 1;
+                    const baseW = (sticker.category === 'tape' || sticker.type === 'tape') ? 112 : 56;
+                    const canonicalImgH = (baseW * (naturalH / naturalW)) / (scaleRatio || 1);
+                    if (!sticker.height || Math.abs(sticker.height - canonicalImgH) > 10) {
+                      updateSticker(sticker.id, { height: Math.round(canonicalImgH) });
+                    }
+                  }}
                   style={{ width: `${scaledPixelW}px`, height: 'auto' }}
                   className="object-contain select-none pointer-events-none block"
                 />
@@ -1404,7 +1529,12 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
             </div>
           );
         })}
+        </div>
+
+        {/* 하단 플로팅 툴바에 가려지지 않도록 보장하는 안전 여백 스페이서 */}
+        <div className="w-full h-44 sm:h-52 shrink-0 pointer-events-none" />
       </div>
+    </div>
 
       {/* 
         ================================================================

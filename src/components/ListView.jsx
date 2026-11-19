@@ -11,7 +11,7 @@ const MONTH_NAMES_EN = [
 const DAY_NAMES_EN = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
 // 낱개 독립 슬라이딩 삭제 카드 컴포넌트
-function DiaryCard({ diary, onSelect, onDelete }) {
+function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
   const [translateX, setTranslateX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -51,6 +51,58 @@ function DiaryCard({ diary, onSelect, onDelete }) {
       ),
     [normalizedLayers]
   );
+
+  // 작성된 컨텐츠(손글씨, 텍스트, 스티커)의 실제 세로 최대 범위 계산
+  // - 불필요한 아래쪽 빈 종이 여백을 없애고 작성된 내용만 딱 나오도록 카드 세로 크기 동적 최적화
+  const canonicalContentHeight = React.useMemo(() => {
+    let maxY = 0;
+    let hasContent = false;
+
+    // 1) 손글씨 스트로크 바닥 계산 (지우개 획 제외)
+    (normalizedLayers.strokes || []).forEach((stroke) => {
+      if (stroke.tool === 'eraser') return;
+      (stroke.points || []).forEach((pt) => {
+        if (typeof pt.y === 'number' && !isNaN(pt.y)) {
+          hasContent = true;
+          if (pt.y > maxY) maxY = pt.y;
+        }
+      });
+    });
+
+    // 2) 텍스트 블록 바닥 계산
+    (normalizedLayers.textBlocks || []).forEach((block) => {
+      if (block.text && block.text.trim()) {
+        hasContent = true;
+        const lineCount = (block.text.split('\n') || []).length;
+        const fontSz = typeof block.fontSize === 'number' ? block.fontSize : 22;
+        const approxHeight = Math.max(28, lineCount * fontSz * 1.3) * (block.scale || 1);
+        const bottom = (block.y || 0) + approxHeight;
+        if (bottom > maxY) maxY = bottom;
+      }
+    });
+
+    // 3) 스티커/사진 바닥 계산 (캐릭터 스티커는 기본 52px, 마스킹테이프는 28px, 사진은 140px)
+    (normalizedLayers.stickers || []).forEach((sticker) => {
+      hasContent = true;
+      const isPhoto = sticker.isPhoto || sticker.type === 'photo';
+      const isTape = sticker.type === 'tape' || sticker.category === 'tape';
+      const defaultH = isPhoto ? 140 : isTape ? 28 : 52;
+      const baseH = typeof sticker.height === 'number' && sticker.height > 0 && sticker.height <= 200
+        ? sticker.height
+        : defaultH;
+      const approxHeight = baseH * (sticker.scale || 1);
+      const bottom = (sticker.y || 0) + approxHeight;
+      if (bottom > maxY) maxY = bottom;
+    });
+
+    if (!hasContent || maxY <= 0) {
+      // 작성된 컨텐츠가 거의 없는 경우: 최소 높이 120px로 아담하게 표시
+      return 120;
+    }
+
+    // 작성된 내용 바로 아래 깔끔한 여백(+24px)을 두어 내용만 딱 나오도록 맞춤 (최소 120px)
+    return Math.max(120, Math.round(maxY + 24));
+  }, [normalizedLayers]);
 
   const cardPaperRef = useRef(null);
   const [previewScale, setPreviewScale] = useState(0.85);
@@ -190,8 +242,12 @@ function DiaryCard({ diary, onSelect, onDelete }) {
       {/* [앞면: 박스 묶음 전체 슬라이딩] */}
       <div
         style={{ transform: `translateX(${translateX}px)` }}
-        className={`relative z-10 bg-white rounded-3xl border border-stone-200/90 p-4 sm:p-5 shadow-xs cursor-pointer transition-transform ${
+        className={`relative z-10 bg-white rounded-3xl p-4 sm:p-5 shadow-xs cursor-pointer transition-all ${
           isSwiping ? '' : 'duration-200 ease-out'
+        } ${
+          isSelected
+            ? 'border border-stone-200/90 lg:border-2 lg:border-black lg:shadow-sm'
+            : 'border border-stone-200/90'
         }`}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -221,19 +277,19 @@ function DiaryCard({ diary, onSelect, onDelete }) {
           )}
         </div>
 
-        {/* 박스 본문: 작성 화면과 100% 동일한 비례와 위치를 유지하는 규격(CANONICAL 360x520) 종이 속지 */}
+        {/* 박스 본문: 작성된 내용 높이에 꼭 맞춰 빈 여백을 최소화한 가변 종이 속지 */}
         <div ref={cardPaperRef} className="w-full flex justify-center overflow-hidden">
           <div
             style={{
               width: `${CANONICAL_WIDTH * previewScale}px`,
-              height: `${CANONICAL_HEIGHT * previewScale}px`,
+              height: `${canonicalContentHeight * previewScale}px`,
             }}
             className="relative shrink-0 overflow-hidden rounded-2xl border border-stone-200/60 shadow-2xs"
           >
             <div
               style={{
                 width: `${CANONICAL_WIDTH}px`,
-                height: `${CANONICAL_HEIGHT}px`,
+                height: `${canonicalContentHeight}px`,
                 transform: `scale(${previewScale})`,
                 transformOrigin: 'top left',
               }}
@@ -245,7 +301,7 @@ function DiaryCard({ diary, onSelect, onDelete }) {
                   key={band.id}
                   band={band}
                   width={CANONICAL_WIDTH}
-                  height={CANONICAL_HEIGHT}
+                  height={canonicalContentHeight}
                 />
               ))}
 
@@ -365,7 +421,7 @@ function DiaryCard({ diary, onSelect, onDelete }) {
   );
 }
 
-export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewDiary }) {
+export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewDiary, selectedDiaryId, selectedDate }) {
   const [searchTerm, setSearchTerm] = useState('');
 
   // 검색 필터링 & 최신 날짜순 정렬
@@ -459,6 +515,7 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
                     <DiaryCard
                       key={diary.id}
                       diary={diary}
+                      isSelected={selectedDiaryId === diary.id || (selectedDate && selectedDate === diary.date)}
                       onSelect={onSelectDiary}
                       onDelete={onDeleteDiary}
                     />

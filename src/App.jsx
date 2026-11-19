@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Header from './components/Header';
 import CalendarView from './components/CalendarView';
 import ListView from './components/ListView';
@@ -305,7 +305,7 @@ function DiaryMainApp() {
 
   // 새 일기 작성 시작 (기본값: 실제 오늘 날짜)
   const handleNewDiary = (targetDate = getTodayDateStr()) => {
-    setPreviousView(currentView);
+    setPreviousView(currentView === 'editor' ? (previousView || 'calendar') : currentView);
     const existing = diaries.find(d => d.date === targetDate);
     if (existing) {
       setSelectedDiary(existing);
@@ -327,7 +327,7 @@ function DiaryMainApp() {
 
   // 특정 일기 선택
   const handleSelectDiary = (diary) => {
-    setPreviousView(currentView);
+    setPreviousView(currentView === 'editor' ? (previousView || 'calendar') : currentView);
     setSelectedDiary(diary);
     setCurrentView('editor');
   };
@@ -335,6 +335,23 @@ function DiaryMainApp() {
   // 일기 삭제 (로컬 상태 반영 + 로그인 시 Firestore 삭제)
   const handleDeleteDiary = async (id) => {
     setDiaries(prev => prev.filter(d => d.id !== id));
+    if (selectedDiary?.id === id) {
+      const remainingDate = selectedDiary.date || getTodayDateStr();
+      setSelectedDiary({
+        id: `entry-${remainingDate}-${Date.now()}`,
+        date: remainingDate,
+        title: '',
+        weather: '',
+        paperStyle: 'lined',
+        thumbnailMood: '',
+        textBlocks: [],
+        stickers: [],
+        strokes: []
+      });
+    }
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setCurrentView(previousView || 'calendar');
+    }
     if (user) {
       try {
         await deleteDiaryFromCloud(user.uid, id);
@@ -378,76 +395,118 @@ function DiaryMainApp() {
       }
     }
 
-    setCurrentView('calendar');
-    setSelectedDiary(null);
+    setSelectedDiary(finalDiaryToSave);
+
+    // 모바일 1분할 화면에서는 저장 후 캘린더/목록으로 복귀
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setCurrentView(previousView || 'calendar');
+    }
   };
 
+  // 2분할 뷰(태블릿 가로/PC)에서 우측에 보여줄 활성 다이어리 계산
+  const activeEditorDiary = useMemo(() => {
+    if (selectedDiary) {
+      const latest = diaries.find(d => d.id === selectedDiary.id || d.date === selectedDiary.date);
+      return latest || selectedDiary;
+    }
+    const todayStr = getTodayDateStr();
+    const existingToday = diaries.find(d => d.date === todayStr);
+    if (existingToday) return existingToday;
+    return {
+      id: `entry-${todayStr}-${Date.now()}`,
+      date: todayStr,
+      title: '',
+      weather: '',
+      paperStyle: 'lined',
+      thumbnailMood: '',
+      textBlocks: [],
+      stickers: [],
+      strokes: []
+    };
+  }, [selectedDiary, diaries]);
+
   return (
-    <div className={`min-h-screen w-full flex flex-col items-center justify-start font-sans text-stone-800 relative transition-colors duration-300 p-0 sm:p-4 ${
-      currentView === 'editor' ? 'desk-background' : 'bg-stone-100'
-    }`}>
+    <div className="w-full h-[100dvh] flex flex-col items-center justify-start font-sans text-stone-800 relative p-0 overflow-hidden bg-[#fafafa]">
       {/* 
-        모바일 ~ 태블릿 ~ PC 완전 반응형 레이아웃
-        - 캘린더, 목록, 다이어리 상세 작성창 모두 일관된 max-w-2xl(672px) 규격으로 넉넉하고 쾌적한 필기 공간 제공
+        모바일 & 태블릿 세로(<1024px): 100% 전체화면 핏 (100dvh, 테두리 없음), 단일 화면 전환식 (달력/목록 ↔ 작성창)
+        - 다이어리 상세 입력창은 최대 크기(max-w-2xl) 유지 및 가로 중앙 정렬
+        태블릿 가로 & PC(>=1024px): 라운드 테두리 없는 전체화면 2분할 뷰 (좌: 캘린더/목록, 우: 다이어리 상세/작성창 동시 노출)
       */}
-      <div className={`w-full max-w-2xl h-screen sm:h-[92vh] bg-[#fafafa] flex flex-col sm:rounded-3xl sm:shadow-lg sm:border sm:border-stone-200/90 overflow-hidden relative ${
-        currentView === 'editor' ? 'diary-editor-window' : ''
-      }`}>
+      <div className="w-full h-full lg:h-screen flex flex-col lg:flex-row overflow-hidden bg-[#fafafa]">
         
-        {/* 상단 네비게이션 헤더 (에디터 화면이 아닐 때) */}
-        {currentView !== 'editor' && (
-          <Header
-            currentView={currentView}
-            setCurrentView={setCurrentView}
-            onNewDiary={() => handleNewDiary(getTodayDateStr())}
-            diaryName={diaryName}
-            setDiaryName={handleUpdateDiaryName}
-            user={user}
-            isAuthLoading={isAuthLoading}
-            isSyncing={isSyncing}
-            authError={authError}
-            onLogin={handleGoogleLogin}
-            onLogout={handleRequestLogout}
-          />
-        )}
-
-        {/* 메인 뷰 컨텐츠 */}
-        <main className="flex-1 overflow-hidden relative">
-          {currentView === 'calendar' && (
-            <CalendarView
-              diaries={diaries}
-              onSelectDiary={handleSelectDiary}
-              onNewDiaryForDate={handleNewDiary}
-            />
-          )}
-
-          {currentView === 'list' && (
-            <ListView
-              diaries={diaries}
-              onSelectDiary={handleSelectDiary}
-              onDeleteDiary={handleDeleteDiary}
+        {/* ================================================================ */}
+        {/* [좌측 패널] 캘린더 / 목록 (모바일 & 태블릿 세로에서는 editor 모드일 때 숨김, 와이드 대화면은 가변 40vw로 표시) */}
+        {/* ================================================================ */}
+        <div className={`h-full flex-col bg-[#fafafa] overflow-hidden ${
+          currentView === 'editor' ? 'hidden lg:flex' : 'flex'
+        } w-full lg:w-[40vw] lg:shrink-0 lg:border-r lg:border-stone-200/90`}>
+          <div className="w-full flex-1 flex flex-col h-full overflow-hidden">
+            {/* 상단 네비게이션 헤더 */}
+            <Header
+              currentView={currentView === 'editor' ? (previousView || 'calendar') : currentView}
+              setCurrentView={(view) => {
+                setCurrentView(view);
+                setPreviousView(view);
+              }}
               onNewDiary={() => handleNewDiary(getTodayDateStr())}
+              diaryName={diaryName}
+              setDiaryName={handleUpdateDiaryName}
+              user={user}
+              isAuthLoading={isAuthLoading}
+              isSyncing={isSyncing}
+              authError={authError}
+              onLogin={handleGoogleLogin}
+              onLogout={handleRequestLogout}
             />
-          )}
 
-          {currentView === 'editor' && (
-            <DiaryCanvas
-              diary={selectedDiary}
-              onSave={handleSaveDiary}
-              onDelete={async (id) => {
-                if (id) {
-                  await handleDeleteDiary(id);
-                }
-                setCurrentView(previousView || 'calendar');
-                setSelectedDiary(null);
-              }}
-              onBack={() => {
-                setCurrentView(previousView || 'calendar');
-                setSelectedDiary(null);
-              }}
-            />
-          )}
-        </main>
+            {/* 메인 뷰: 캘린더 또는 목록 */}
+            <div className="flex-1 overflow-hidden relative">
+              {(currentView === 'calendar' || (currentView === 'editor' && (previousView || 'calendar') === 'calendar')) && (
+                <CalendarView
+                  diaries={diaries}
+                  onSelectDiary={handleSelectDiary}
+                  onNewDiaryForDate={handleNewDiary}
+                  selectedDate={activeEditorDiary?.date}
+                />
+              )}
+
+              {(currentView === 'list' || (currentView === 'editor' && previousView === 'list')) && (
+                <ListView
+                  diaries={diaries}
+                  onSelectDiary={handleSelectDiary}
+                  onDeleteDiary={handleDeleteDiary}
+                  onNewDiary={() => handleNewDiary(getTodayDateStr())}
+                  selectedDiaryId={activeEditorDiary?.id}
+                  selectedDate={activeEditorDiary?.date}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ================================================================ */}
+        {/* [우측 패널] 다이어리 상세 작성창 (모바일 & 태블릿 세로는 editor 모드일 때만 표시, 태블릿 가로/PC는 항상 2분할로 표시) */}
+        {/* ================================================================ */}
+        <div className={`h-full flex-col min-w-0 bg-[#fafafa] overflow-hidden ${
+          currentView === 'editor' ? 'flex flex-1 w-full' : 'hidden lg:flex lg:flex-1'
+        }`}>
+          <DiaryCanvas
+            key={activeEditorDiary?.id || activeEditorDiary?.date}
+            diary={activeEditorDiary}
+            diaryName={diaryName}
+            onSave={handleSaveDiary}
+            onDelete={async (id) => {
+              if (id) {
+                await handleDeleteDiary(id);
+              }
+            }}
+            onBack={() => {
+              setCurrentView(previousView || 'calendar');
+              setSelectedDiary(null);
+            }}
+          />
+        </div>
+      </div>
 
         {/* (1) 앱 최초 실행 시: 구글 계정 연동 여부 확인 팝업 */}
         {!isAuthLoading && isAccountPromptOpen && (
@@ -509,6 +568,5 @@ function DiaryMainApp() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
+    );
+  }
