@@ -7,6 +7,7 @@ import AdminPage from './components/AdminPage';
 import { INITIAL_DIARIES } from './constants';
 import {
   loginWithGoogle,
+  handleRedirectLoginResult,
   logoutUser,
   subscribeToAuthChanges,
   subscribeToUserDiaries,
@@ -173,6 +174,12 @@ function DiaryMainApp() {
       }
       setIsAuthLoading(false);
     });
+
+    // 모바일/PWA 리디렉션 로그인 복귀 시 결과 처리
+    handleRedirectLoginResult().catch((err) => {
+      console.warn('[Auth] 리디렉션 로그인 결과 확인:', err);
+    });
+
     return () => unsubscribeAuth();
   }, []);
 
@@ -252,21 +259,41 @@ function DiaryMainApp() {
       await loginWithGoogle();
     } catch (err) {
       console.error('[Auth] 구글 로그인 실패:', err);
-      const code = err?.code || '';
-      let message = err?.message || '로그인 중 오류가 발생했습니다.';
+      const code = String(err?.code || '').toLowerCase();
+      const message = String(err?.message || '').toLowerCase();
 
-      if (code === 'auth/user-cancelled' || code === 'auth/popup-closed-by-user') {
+      // 사용자가 팝업 창을 직접 닫은 경우는 불필요한 경고창 없이 무시
+      if (
+        code.includes('user-cancelled') ||
+        code.includes('popup-closed-by-user') ||
+        message.includes('popup-closed-by-user')
+      ) {
         return;
-      } else if (code === 'auth/operation-not-allowed' || code === 'auth/configuration-not-found') {
-        message =
-          'Firebase 콘솔(Authentication > Sign-in method)에서 "Google" 로그인 제공업체를 먼저 [사용 설정] 후 저장해 주세요.';
-      } else if (code === 'auth/unauthorized-domain') {
-        message =
-          '현재 접속한 도메인이 Firebase 콘솔(Authentication > Settings > 승인된 도메인)에 등록되어 있지 않습니다.';
       }
 
-      setAuthError(message);
-      alert(message);
+      let userMsg = '구글 로그인 중 오류가 발생했습니다.';
+
+      if (code.includes('unauthorized-domain') || message.includes('unauthorized-domain')) {
+        const currentHost = typeof window !== 'undefined' ? window.location.hostname : '현재 도메인';
+        userMsg = `[Firebase 승인된 도메인 등록 필요]\n현재 도메인("${currentHost}")이 Firebase 승인 목록에 없습니다.\n\n해결 방법:\n1. Firebase 콘솔(console.firebase.google.com) 접속\n2. Authentication > Settings(설정) > Authorized domains(승인된 도메인)\n3. [도메인 추가] 클릭 후 "${currentHost}" 입력 및 저장`;
+      } else if (
+        code.includes('operation-not-allowed') ||
+        code.includes('configuration-not-found') ||
+        message.includes('operation-not-allowed')
+      ) {
+        userMsg =
+          'Firebase 콘솔(Authentication > Sign-in method)에서 "Google" 로그인 제공업체가 활성화되어 있는지 확인해 주세요.';
+      } else if (code.includes('popup-blocked') || message.includes('popup-blocked')) {
+        userMsg =
+          '브라우저에서 로그인 팝업이 차단되었습니다. 팝업 차단을 해제하거나 잠시 후 다시 시도해 주세요.';
+      } else if (code.includes('network-request-failed') || message.includes('network-request-failed')) {
+        userMsg = '인터넷 연결이 불안정합니다. 네트워크 상태를 확인해 주세요.';
+      } else if (err?.message) {
+        userMsg = `구글 로그인 실패: ${err.message}`;
+      }
+
+      setAuthError(userMsg);
+      alert(userMsg);
     }
   };
 

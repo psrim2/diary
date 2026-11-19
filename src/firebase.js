@@ -5,6 +5,8 @@ import {
   setPersistence,
   browserLocalPersistence,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
 } from 'firebase/auth';
@@ -69,11 +71,21 @@ if (isFirebaseConfigured) {
 
 export { app, auth, db, storage, googleProvider };
 
+// iOS 또는 PWA 독립실행형(Standalone) 환경 감지
+export function isIOSOrStandalonePWA() {
+  if (typeof window === 'undefined') return false;
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isStandalone =
+    window.navigator.standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches;
+  return isIOS || isStandalone;
+}
+
 /**
- * 1. 구글 계정 로그인 (PC 및 모바일 모든 환경에서 signInWithPopup 사용)
+ * 1. 구글 계정 로그인 (PC/일반 브라우저는 signInWithPopup, iOS/PWA 또는 팝업 차단 환경은 signInWithRedirect 지원)
  */
 export async function loginWithGoogle(forceSelectAccount = false) {
-  if (!isFirebaseConfigured || !auth || !googleProvider) {
+  if (!isFirebaseConfigured || !auth) {
     console.warn(
       '[Firebase] 환경변수(.env) 또는 src/firebase.js에 Firebase 설정 키를 입력해 주세요.'
     );
@@ -83,8 +95,50 @@ export async function loginWithGoogle(forceSelectAccount = false) {
   if (forceSelectAccount) {
     provider.setCustomParameters({ prompt: 'select_account' });
   }
-  const result = await signInWithPopup(auth, provider);
-  return result.user;
+
+  // iOS 또는 PWA 홈 화면 바로가기 환경에서는 브라우저 팝업이 원천 차단되므로 바로 리디렉션 방식 사용
+  if (isIOSOrStandalonePWA()) {
+    try {
+      await signInWithRedirect(auth, provider);
+      return null;
+    } catch (redirectErr) {
+      console.warn('[Auth] signInWithRedirect 시도 실패, 팝업으로 재시도:', redirectErr);
+    }
+  }
+
+  try {
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (err) {
+    const errCode = String(err?.code || '').toLowerCase();
+    const errMsg = String(err?.message || '').toLowerCase();
+
+    // 팝업이 브라우저에 의해 차단되었거나 지원되지 않는 환경인 경우 리디렉션 방식으로 자동 폴백
+    if (
+      errCode.includes('popup-blocked') ||
+      errCode.includes('operation-not-supported') ||
+      errMsg.includes('popup-blocked')
+    ) {
+      console.log('[Auth] 팝업 차단 감지, signInWithRedirect로 자동 전환');
+      await signInWithRedirect(auth, provider);
+      return null;
+    }
+    throw err;
+  }
+}
+
+/**
+ * 리디렉션 로그인 결과 확인 (모바일/PWA 리디렉션 복귀 시)
+ */
+export async function handleRedirectLoginResult() {
+  if (!isFirebaseConfigured || !auth) return null;
+  try {
+    const result = await getRedirectResult(auth);
+    return result?.user || null;
+  } catch (err) {
+    console.error('[Auth] getRedirectResult 오류:', err);
+    throw err;
+  }
 }
 
 /**
