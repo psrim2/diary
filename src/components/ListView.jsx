@@ -11,7 +11,7 @@ const MONTH_NAMES_EN = [
 const DAY_NAMES_EN = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
 // 낱개 독립 슬라이딩 삭제 카드 컴포넌트
-function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
+function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipeOpen, onSwipeClose }) {
   const [translateX, setTranslateX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -21,6 +21,15 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
   const currentDeltaXRef = useRef(0);
   const isHorizontalRef = useRef(false);
   const canvasRef = useRef(null);
+
+  // 외부(스크롤 등)에서 스와이프 닫힘 요청 시 부드럽게 원복
+  useEffect(() => {
+    if (!isSwipeOpen && translateX !== 0 && !isSwiping) {
+      setTranslateX(0);
+    } else if (isSwipeOpen && translateX !== -90 && !isSwiping) {
+      setTranslateX(-90);
+    }
+  }, [isSwipeOpen, isSwiping]);
 
   // 날짜 안전 파싱
   const dateParts = diary?.date ? String(diary.date).split('-') : [];
@@ -240,19 +249,20 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
 
   const handleTouchEnd = (e) => {
     if (!isHorizontalRef.current) {
-      setTranslateX(0);
+      if (isSwipeOpen) {
+        onSwipeClose();
+      }
       return;
     }
     e.stopPropagation();
 
     const deltaX = currentDeltaXRef.current;
-    if (deltaX < -70) {
-      setIsDeleting(true);
-      setTimeout(() => {
-        onDelete(diary.id);
-      }, 250);
+    if (deltaX < -45) {
+      setTranslateX(-90);
+      onSwipeOpen();
     } else {
       setTranslateX(0);
+      onSwipeClose();
     }
     setIsSwiping(false);
     isHorizontalRef.current = false;
@@ -260,7 +270,6 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
 
   // 마우스 제스처
   const handleMouseDown = (e) => {
-    e.stopPropagation();
     startXRef.current = e.clientX;
     startYRef.current = e.clientY;
     currentDeltaXRef.current = 0;
@@ -287,13 +296,12 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
 
-      if (currentDeltaXRef.current < -70) {
-        setIsDeleting(true);
-        setTimeout(() => {
-          onDelete(diary.id);
-        }, 250);
+      if (currentDeltaXRef.current < -45) {
+        setTranslateX(-90);
+        onSwipeOpen();
       } else {
         setTranslateX(0);
+        onSwipeClose();
       }
       setIsSwiping(false);
       isHorizontalRef.current = false;
@@ -309,18 +317,22 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
         isDeleting ? 'max-h-0 opacity-0 mb-0 py-0 overflow-hidden' : 'mb-4'
       }`}
     >
-      {/* [뒷면 삭제 액션] */}
+      {/* [뒷면 삭제 액션: 고정 후 직접 클릭 시에만 삭제] */}
       <div 
-        className="absolute inset-y-0 right-0 w-28 flex items-center justify-center cursor-pointer z-0 pr-3"
+        className="absolute inset-y-0 right-0 w-24 flex items-center justify-center cursor-pointer z-0 pr-2"
         onClick={(e) => {
           e.stopPropagation();
-          onDelete(diary.id);
+          setIsDeleting(true);
+          setTimeout(() => {
+            onDelete(diary.id);
+            onSwipeClose();
+          }, 200);
         }}
         title="일기 삭제"
       >
-        <div className="flex flex-col items-center space-y-1 text-black hover:opacity-75 transition-opacity">
-          <Trash2 size={24} strokeWidth={2.3} />
-          <span className="text-xs font-black tracking-tight">삭제</span>
+        <div className="flex flex-col items-center space-y-1 text-red-500 hover:text-red-600 transition-colors p-2 active:scale-95">
+          <Trash2 size={22} strokeWidth={2.3} />
+          <span className="text-[11px] font-bold tracking-tight">삭제</span>
         </div>
       </div>
 
@@ -339,9 +351,12 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleMouseDown}
         onClick={() => {
-          if (Math.abs(translateX) < 6) {
-            onSelect(diary);
+          if (isSwipeOpen || Math.abs(translateX) > 10) {
+            setTranslateX(0);
+            onSwipeClose();
+            return;
           }
+          onSelect(diary);
         }}
       >
         {/* 박스 상단 헤더: [15 SUN] ──────── [대표 스티커] */}
@@ -362,14 +377,14 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
           )}
         </div>
 
-        {/* 박스 본문: 작성된 내용 높이에 꼭 맞춰 빈 여백을 최소화한 가변 종이 속지 */}
-        <div ref={cardPaperRef} className="w-full flex justify-center overflow-hidden">
+        {/* 박스 본문: 라운드 박스 없이 상단 1px solid #222 구분선 적용 */}
+        <div ref={cardPaperRef} className="w-full border-t border-[#222] pt-2.5 overflow-hidden flex justify-center">
           <div
             style={{
               width: `${CANONICAL_WIDTH * previewScale}px`,
               height: `${canonicalContentHeight * previewScale}px`,
             }}
-            className="relative shrink-0 overflow-hidden rounded-2xl border border-stone-200/60 shadow-2xs"
+            className="relative shrink-0 overflow-hidden"
           >
             <div
               style={{
@@ -509,6 +524,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
 
 export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewDiary, selectedDiaryId, selectedDate }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [openSwipeCardId, setOpenSwipeCardId] = useState(null);
 
   // 검색 필터링 & 최신 날짜순 정렬
   const filteredDiaries = [...diaries]
@@ -544,6 +560,10 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
   return (
     <div 
       onScroll={() => {
+        // 스크롤 시 열려 있는 스와이프 삭제 카드가 있으면 제자리로 복귀
+        if (openSwipeCardId) {
+          setOpenSwipeCardId(null);
+        }
         // 목록 스크롤 시 가상 키보드를 내려서 결과 화면을 넓게 볼 수 있도록 자동 블러 처리
         if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
           document.activeElement.blur();
@@ -600,8 +620,8 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
 
             return (
               <div key={key}>
-                {/* 월 헤더: 해당 월의 실제 번호와 연도 표기 (예: 12  2026 December) */}
-                <div className="pt-2 pb-3 shrink-0">
+                {/* 월 헤더: 해당 월의 실제 번호와 연도 표기 (카드 날짜/날씨와 수직 정렬을 맞추기 위해 px-4 sm:px-5 적용) */}
+                <div className="pt-2 pb-3 shrink-0 px-4 sm:px-5">
                   <div className="flex items-end justify-between">
                     <div className="text-5xl sm:text-6xl font-black text-black leading-none tracking-tight">
                       {group.month}
@@ -627,6 +647,9 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
                       isSelected={selectedDiaryId === diary.id || (selectedDate && selectedDate === diary.date)}
                       onSelect={onSelectDiary}
                       onDelete={onDeleteDiary}
+                      isSwipeOpen={openSwipeCardId === diary.id}
+                      onSwipeOpen={() => setOpenSwipeCardId(diary.id)}
+                      onSwipeClose={() => setOpenSwipeCardId(null)}
                     />
                   ))}
                 </div>

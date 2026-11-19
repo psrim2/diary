@@ -1242,35 +1242,37 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           ================================================================
         */}
         <div className="w-full px-6 pt-1 lg:pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-3 shrink-0">
-        <div className="flex items-end justify-between">
-          {/* 날짜 헤더 (탭하면 날짜 변경 가능) */}
-          <div className="relative cursor-pointer group" title="날짜 변경">
-            <div className="text-base sm:text-lg font-black text-black leading-tight tracking-tight">
-              {yearNum}
-            </div>
-
-            <div className="text-2xl sm:text-3xl font-black text-black tracking-tight leading-none mt-1 group-hover:opacity-75 transition-opacity">
-              {monthNum}.{dayNum} {dayEn}
-            </div>
-
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-              title="날짜 변경"
-            />
+          {/* 1) 연도 (상단) */}
+          <div className="text-base sm:text-lg font-black text-black leading-tight tracking-tight">
+            {yearNum}
           </div>
 
-          {/* 우측 대표 날씨/스티커 아이콘 버튼 + 와이드 전용 체크 버튼 */}
-          <div className="flex items-center space-x-2.5 pb-0.5">
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setIsWeatherOpen(!isWeatherOpen)}
-                className="w-11 h-11 bg-transparent border-0 p-0 active:scale-95 transition flex items-center justify-center"
-                title="날씨 / 대표 스티커 선택"
-              >
+          {/* 2) 날짜 행 + 우측 플러스/스티커/체크 버튼 (년도를 제외한 날짜와 세로 중앙 정렬) */}
+          <div className="flex items-center justify-between mt-1">
+            {/* 날짜 텍스트 (탭하면 날짜 변경) */}
+            <div className="relative cursor-pointer group" title="날짜 변경">
+              <div className="text-2xl sm:text-3xl font-black text-black tracking-tight leading-none group-hover:opacity-75 transition-opacity">
+                {monthNum}.{dayNum} {dayEn}
+              </div>
+
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                title="날짜 변경"
+              />
+            </div>
+
+            {/* 우측 대표 날씨/스티커 아이콘 버튼 + 와이드 전용 체크 버튼 (날짜와 정확한 세로 중앙 정렬) */}
+            <div className="flex items-center space-x-2.5">
+              <div className="relative flex items-center">
+                <button
+                  type="button"
+                  onClick={() => setIsWeatherOpen(!isWeatherOpen)}
+                  className="w-10 h-10 bg-transparent border-0 p-0 active:scale-95 transition flex items-center justify-center"
+                  title="날씨 / 대표 스티커 선택"
+                >
                 {weather ? (
                   isImageAsset(weather) ? (
                     <img
