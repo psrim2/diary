@@ -14,16 +14,32 @@
     <meta name="theme-color" content="#fafafa" />
     <meta name="format-detection" content="telephone=no" />
 
-    <!-- 앱 아이콘 및 매니페스트 -->
+    <!-- 앱 아이콘, 매니페스트 및 iOS PWA 스플래시 화면 -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="apple-touch-startup-image" href="/splash.png" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&family=Nanum+Myeongjo:wght@400;700&family=Nanum+Pen+Script&family=Gowun+Dodum&family=Gaegu:wght@400;700&display=swap" rel="stylesheet">
   </head>
   <body class="bg-[#fafafa] text-stone-800 antialiased select-none">
-    <div id="root"></div>
+    <div id="root">
+      <!-- PWA / 초기 로딩 스플래시 화면 (새 파비콘 디자인 기반) -->
+      <div id="app-splash" style="position:fixed;inset:0;background:#fafafa;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;font-family:-apple-system,BlinkMacSystemFont,'Pretendard',sans-serif;-webkit-user-select:none;user-select:none;">
+        <div style="width:116px;height:116px;border-radius:26px;overflow:hidden;box-shadow:0 16px 36px rgba(0,0,0,0.07);margin-bottom:20px;display:flex;align-items:center;justify-content:center;background:#fff;animation:splashPulse 1.8s ease-in-out infinite;">
+          <img src="/favicon.svg" alt="LAZY DIARY" style="width:100%;height:100%;object-fit:contain;display:block;" />
+        </div>
+        <div style="font-size:23px;font-weight:900;color:#111;letter-spacing:-0.5px;margin-bottom:6px;">LAZY DIARY</div>
+        <div style="font-size:13px;font-weight:500;color:#78716c;">손글씨와 스티커로 기록하는 하루</div>
+      </div>
+      <style>
+        @keyframes splashPulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.03); }
+        }
+      </style>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

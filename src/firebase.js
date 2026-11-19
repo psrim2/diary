@@ -82,7 +82,7 @@ export function isIOSOrStandalonePWA() {
 }
 
 /**
- * 1. 구글 계정 로그인 (PC/일반 브라우저는 signInWithPopup, iOS/PWA 또는 팝업 차단 환경은 signInWithRedirect 지원)
+ * 1. 구글 계정 로그인 (iOS Standalone PWA 및 모바일/PC 모두에서 인앱 팝업 최우선 지원)
  */
 export async function loginWithGoogle(forceSelectAccount = false) {
   if (!isFirebaseConfigured || !auth) {
@@ -96,16 +96,8 @@ export async function loginWithGoogle(forceSelectAccount = false) {
     provider.setCustomParameters({ prompt: 'select_account' });
   }
 
-  // iOS 또는 PWA 홈 화면 바로가기 환경에서는 브라우저 팝업이 원천 차단되므로 바로 리디렉션 방식 사용
-  if (isIOSOrStandalonePWA()) {
-    try {
-      await signInWithRedirect(auth, provider);
-      return null;
-    } catch (redirectErr) {
-      console.warn('[Auth] signInWithRedirect 시도 실패, 팝업으로 재시도:', redirectErr);
-    }
-  }
-
+  // 1. signInWithPopup 최우선 시도
+  // iOS Standalone PWA 및 모바일 브라우저 환경에서 외부 사파리로 튕기지 않고 인앱 인증 시트(WebSheet)로 가장 매끄럽고 안정적으로 로그인 완료
   try {
     const result = await signInWithPopup(auth, provider);
     return result.user;
@@ -113,17 +105,24 @@ export async function loginWithGoogle(forceSelectAccount = false) {
     const errCode = String(err?.code || '').toLowerCase();
     const errMsg = String(err?.message || '').toLowerCase();
 
-    // 팝업이 브라우저에 의해 차단되었거나 지원되지 않는 환경인 경우 리디렉션 방식으로 자동 폴백
+    // 사용자가 팝업/시트 창을 직접 닫거나 취소한 경우는 리디렉션하지 않고 즉시 종료
     if (
-      errCode.includes('popup-blocked') ||
-      errCode.includes('operation-not-supported') ||
-      errMsg.includes('popup-blocked')
+      errCode.includes('popup-closed-by-user') ||
+      errCode.includes('user-cancelled') ||
+      errMsg.includes('popup-closed-by-user')
     ) {
-      console.log('[Auth] 팝업 차단 감지, signInWithRedirect로 자동 전환');
+      throw err;
+    }
+
+    // 인앱 팝업이 차단되었거나 지원되지 않는 특수 환경에서만 signInWithRedirect로 자동 폴백
+    console.warn('[Auth] signInWithPopup 실패, signInWithRedirect로 폴백 시도:', err);
+    try {
       await signInWithRedirect(auth, provider);
       return null;
+    } catch (redirectErr) {
+      console.error('[Auth] signInWithRedirect 실패:', redirectErr);
+      throw redirectErr;
     }
-    throw err;
   }
 }
 

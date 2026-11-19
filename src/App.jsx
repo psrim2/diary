@@ -176,9 +176,24 @@ function DiaryMainApp() {
     });
 
     // 모바일/PWA 리디렉션 로그인 복귀 시 결과 처리
-    handleRedirectLoginResult().catch((err) => {
-      console.warn('[Auth] 리디렉션 로그인 결과 확인:', err);
-    });
+    handleRedirectLoginResult()
+      .then((redirectUser) => {
+        if (redirectUser) {
+          const userSnapshot = {
+            uid: redirectUser.uid,
+            displayName: redirectUser.displayName || '',
+            email: redirectUser.email || '',
+            photoURL: redirectUser.photoURL || '',
+          };
+          localStorage.setItem('analog_diary_auth_user', JSON.stringify(userSnapshot));
+          localStorage.setItem('analog_diary_account_prompt_seen', 'true');
+          setUser(redirectUser);
+          setIsAccountPromptOpen(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('[Auth] 리디렉션 로그인 결과 확인:', err);
+      });
 
     return () => unsubscribeAuth();
   }, []);
@@ -253,10 +268,13 @@ function DiaryMainApp() {
   // 구글 로그인 핸들러
   const handleGoogleLogin = async () => {
     setAuthError(null);
-    localStorage.setItem('analog_diary_account_prompt_seen', 'true');
-    setIsAccountPromptOpen(false);
     try {
-      await loginWithGoogle();
+      const loggedInUser = await loginWithGoogle();
+      if (loggedInUser) {
+        localStorage.setItem('analog_diary_account_prompt_seen', 'true');
+        setIsAccountPromptOpen(false);
+        setUser(loggedInUser);
+      }
     } catch (err) {
       console.error('[Auth] 구글 로그인 실패:', err);
       const code = String(err?.code || '').toLowerCase();
