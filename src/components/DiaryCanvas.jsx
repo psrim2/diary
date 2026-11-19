@@ -666,8 +666,47 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     setPenColor(selectedHex);
   };
 
-  // 텍스트 블록 생성 (기본 폰트 사이즈: 16px, 기본 너비: 100% / CANONICAL_WIDTH, 기본 정렬: 좌측)
+  // 텍스트 블록 생성 (드로잉이 있다면 드로잉이 끝나는 Y축 시점에 생성, 기본 폰트: 16px, 가로: 100%)
   const handleAddTextBlock = () => {
+    // 1) 활성 드로잉(손글씨/펜) 중 가장 아래쪽(최대 Y축) 좌표 탐색
+    const activeStrokes = strokesHistory.slice(0, historyIndex + 1);
+    let maxDrawingY = 0;
+    activeStrokes.forEach((stroke) => {
+      if (stroke.tool === 'eraser') return;
+      (stroke.points || []).forEach((pt) => {
+        if (typeof pt.y === 'number' && pt.y > maxDrawingY) {
+          maxDrawingY = pt.y;
+        }
+      });
+    });
+
+    // 2) 기존 텍스트 블록들의 바닥 Y 좌표 계산 (중복 겹침 방지)
+    let maxTextBottomY = 0;
+    textBlocks.forEach((tb) => {
+      const lineCount = (tb.text || '').split('\n').length || 1;
+      const approxHeight = Math.max(32, lineCount * (tb.fontSize || 16) * 1.5) * (tb.scale || 1);
+      const bottom = (tb.y || 0) + approxHeight;
+      if (bottom > maxTextBottomY) {
+        maxTextBottomY = bottom;
+      }
+    });
+
+    let newY = 20;
+    if (maxDrawingY > 0) {
+      // 드로잉이 끝나는 시점 바로 아래에 생성
+      newY = Math.round(maxDrawingY + 12);
+      // 만약 이미 그 아래에 작성된 글상자가 있다면 겹치지 않게 그 아래로 배치
+      if (maxTextBottomY > newY) {
+        newY = Math.round(maxTextBottomY + 12);
+      }
+    } else {
+      if (maxTextBottomY > 0) {
+        newY = Math.round(maxTextBottomY + 12);
+      } else {
+        newY = 20 + textBlocks.length * 45;
+      }
+    }
+
     const newId = `t-${Date.now()}`;
     const newBlock = {
       id: newId,
@@ -677,7 +716,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       color: penColor || '#111111',
       textAlign: 'left',
       x: 0,
-      y: Math.min(CANONICAL_HEIGHT - 80, 20 + textBlocks.length * 45),
+      y: newY,
       width: CANONICAL_WIDTH,
       rotation: 0,
       scale: 1,
@@ -687,6 +726,21 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     setSelectedTextId(newId);
     setSelectedStickerId(null);
     setActiveToolMode('text');
+
+    // 새로 생성된 글상자가 화면 밖일 경우 부드럽게 스크롤 이동
+    setTimeout(() => {
+      if (scrollContainerRef.current) {
+        const targetPx = newY * scaleRatio;
+        const currentScroll = scrollContainerRef.current.scrollTop;
+        const clientHeight = scrollContainerRef.current.clientHeight;
+        if (targetPx < currentScroll || targetPx > currentScroll + clientHeight - 140) {
+          scrollContainerRef.current.scrollTo({
+            top: Math.max(0, targetPx - 60),
+            behavior: 'smooth'
+          });
+        }
+      }
+    }, 50);
   };
 
   const updateTextBlock = (id, fields) => {
