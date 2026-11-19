@@ -684,8 +684,8 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     // 2) 기존 텍스트 블록들의 바닥 Y 좌표 계산 (중복 겹침 방지)
     let maxTextBottomY = 0;
     textBlocks.forEach((tb) => {
-      const lineCount = (tb.text || '').split('\n').length || 1;
-      const approxHeight = Math.max(32, lineCount * (tb.fontSize || 16) * 1.5) * (tb.scale || 1);
+      const lineCount = Math.max(3, (tb.text || '').split('\n').length);
+      const approxHeight = Math.max(84, lineCount * (tb.fontSize || 18) * 1.5) * (tb.scale || 1);
       const bottom = (tb.y || 0) + approxHeight;
       if (bottom > maxTextBottomY) {
         maxTextBottomY = bottom;
@@ -1463,6 +1463,8 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           const canonicalW = typeof block.width === 'number' ? block.width : CANONICAL_WIDTH;
           const widthPx = Math.round(canonicalW * scaleRatio);
           const scaledFontSize = Math.max(10, Math.round((block.fontSize || 18) * scaleRatio));
+          const scaledLineHeight = Math.max(20, Math.round(28 * scaleRatio));
+          const minBoxHeight = scaledLineHeight * 3;
           const textColor = block.color || '#111111';
 
           return (
@@ -1479,6 +1481,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 left: `${leftPx}px`,
                 top: `${topPx}px`,
                 width: `${widthPx}px`,
+                minHeight: `${minBoxHeight + 12}px`,
                 maxWidth: `${Math.max(60, paperWidth - leftPx)}px`,
                 zIndex: blockZIndex,
                 transform: `rotate(${blockRotation}deg) scale(${blockScale})`,
@@ -1491,18 +1494,18 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   : ''
               }`}
             >
-              {/* 선택 시 상단 드래그 바 및 조작 핸들 */}
+              {/* 선택 시 상단 드래그 바 및 조작 핸들 (흰색 바탕에 회색 보더 원, 검은색 아이콘) */}
               {isSelected && (
                 <>
-                  {/* 상단 중앙: 세련되고 슬림한 플로팅 이동(드래그) 캡슐 핸들 */}
+                  {/* 상단 중앙: 세련된 이동(드래그) 원형 핸들 */}
                   <div
                     onPointerDown={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
                     onTouchStart={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
                     style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -top-3 left-1/2 -translate-x-1/2 h-6 px-2.5 bg-stone-900 text-stone-300 hover:text-white rounded-full shadow-md cursor-move flex items-center justify-center space-x-1 z-30 touch-none active:scale-95 transition-all select-none"
+                    className="absolute -top-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs cursor-move flex items-center justify-center z-30 touch-none active:scale-95 hover:bg-stone-50 select-none"
                     title="드래그하여 상하좌우 이동"
                   >
-                    <GripHorizontal size={13} strokeWidth={2.5} />
+                    <GripHorizontal size={12} strokeWidth={2.5} />
                   </div>
 
                   {/* 좌측 상단: 글상자 삭제 버튼 */}
@@ -1515,10 +1518,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                       deleteTextBlock(block.id);
                     }}
                     style={{ transform: `scale(${invScale})` }}
-                    className="absolute -top-3 -left-3 w-6 h-6 rounded-full bg-stone-800 text-white shadow flex items-center justify-center z-30 active:scale-95"
+                    className="absolute -top-3 -left-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center z-30 active:scale-95 hover:bg-stone-50"
                     title="글상자 삭제"
                   >
-                    <X size={12} />
+                    <X size={12} strokeWidth={2.5} />
                   </button>
 
                   {/* 우측 상단: 직접 회전(Rotate) 핸들 */}
@@ -1526,10 +1529,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     onPointerDown={(e) => handleTransformStart(e, 'rotate', 'text', block)}
                     onTouchStart={(e) => handleTransformStart(e, 'rotate', 'text', block)}
                     style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-black text-white shadow flex items-center justify-center cursor-grab active:cursor-grabbing z-30 touch-none"
+                    className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-grab active:cursor-grabbing z-30 touch-none hover:bg-stone-50"
                     title="드래그하여 회전"
                   >
-                    <RotateCw size={12} />
+                    <RotateCw size={12} strokeWidth={2.5} />
                   </div>
 
                   {/* 우측 중앙: 가로 너비 조절 핸들 (줄바꿈 변경) */}
@@ -1537,10 +1540,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     onPointerDown={(e) => handleTransformStart(e, 'width', 'text', block)}
                     onTouchStart={(e) => handleTransformStart(e, 'width', 'text', block)}
                     style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -right-3.5 top-1/2 -translate-y-1/2 w-6 h-8 rounded-full bg-stone-900 text-white shadow-md flex items-center justify-center cursor-ew-resize z-30 touch-none active:scale-110"
+                    className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-ew-resize z-30 touch-none active:scale-110 hover:bg-stone-50"
                     title="드래그하여 가로 너비 조절 (줄바꿈 변경)"
                   >
-                    <ArrowLeftRight size={12} strokeWidth={2.5} />
+                    <ArrowLeftRight size={11} strokeWidth={2.5} />
                   </div>
 
                   {/* 우측 하단: 전체 확대/축소 핸들 (줄바꿈 유지) */}
@@ -1548,20 +1551,20 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     onPointerDown={(e) => handleTransformStart(e, 'resize', 'text', block)}
                     onTouchStart={(e) => handleTransformStart(e, 'resize', 'text', block)}
                     style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-black text-white shadow flex items-center justify-center cursor-nwse-resize z-30 touch-none active:scale-110"
+                    className="absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-nwse-resize z-30 touch-none active:scale-110 hover:bg-stone-50"
                     title="드래그하여 전체 크기 조절 (줄바꿈 유지)"
                   >
-                    <Maximize2 size={12} />
+                    <Maximize2 size={11} strokeWidth={2.5} />
                   </div>
                 </>
               )}
 
-              {/* 본문 텍스트에어리어 (직접 타이핑 입력 & 내용에 맞춰 자동 높이 조절) */}
+              {/* 본문 텍스트에어리어 (기본 3줄 높이 확보로 우측 버튼 간 간격 넉넉하게 보장) */}
               <textarea
                 ref={(el) => {
                   if (el) {
                     el.style.height = 'auto';
-                    el.style.height = `${Math.max(32, el.scrollHeight)}px`;
+                    el.style.height = `${Math.max(minBoxHeight, el.scrollHeight)}px`;
                   }
                 }}
                 autoFocus={isSelected}
@@ -1575,11 +1578,11 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 onChange={(e) => {
                   updateTextBlock(block.id, { text: e.target.value });
                   e.target.style.height = 'auto';
-                  e.target.style.height = `${Math.max(32, e.target.scrollHeight)}px`;
+                  e.target.style.height = `${Math.max(minBoxHeight, e.target.scrollHeight)}px`;
                 }}
                 onInput={(e) => {
                   e.target.style.height = 'auto';
-                  e.target.style.height = `${Math.max(32, e.target.scrollHeight)}px`;
+                  e.target.style.height = `${Math.max(minBoxHeight, e.target.scrollHeight)}px`;
                 }}
                 style={{
                   fontFamily: block.fontFamily || "'Pretendard', sans-serif",
@@ -1587,9 +1590,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   color: textColor,
                   textAlign: block.textAlign || 'left',
                   lineHeight: 1.5,
+                  minHeight: `${minBoxHeight}px`,
                 }}
                 className="w-full bg-transparent border-0 focus:ring-0 p-1 resize-none overflow-hidden outline-none block"
-                rows={1}
+                rows={3}
               />
             </div>
           );
@@ -1648,10 +1652,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                       deleteSticker(sticker.id);
                     }}
                     style={{ transform: `scale(${invScale})` }}
-                    className="absolute -top-3 -left-3 w-6 h-6 rounded-full bg-stone-800 text-white shadow flex items-center justify-center z-30"
+                    className="absolute -top-3 -left-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center z-30 active:scale-95 hover:bg-stone-50"
                     title="스티커 삭제"
                   >
-                    <X size={12} />
+                    <X size={12} strokeWidth={2.5} />
                   </button>
 
                   {/* 우측 상단: 직접 회전(Rotate) 드래그 핸들 */}
@@ -1659,10 +1663,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     onPointerDown={(e) => handleTransformStart(e, 'rotate', 'sticker', sticker)}
                     onTouchStart={(e) => handleTransformStart(e, 'rotate', 'sticker', sticker)}
                     style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-black text-white shadow flex items-center justify-center cursor-grab active:cursor-grabbing z-30 touch-none"
+                    className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-grab active:cursor-grabbing z-30 touch-none hover:bg-stone-50"
                     title="드래그하여 회전"
                   >
-                    <RotateCw size={12} />
+                    <RotateCw size={12} strokeWidth={2.5} />
                   </div>
 
                   {/* 우측 하단: 직접 크기조절(Resize) 드래그 핸들 */}
@@ -1670,10 +1674,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     onPointerDown={(e) => handleTransformStart(e, 'resize', 'sticker', sticker)}
                     onTouchStart={(e) => handleTransformStart(e, 'resize', 'sticker', sticker)}
                     style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-black text-white shadow flex items-center justify-center cursor-nwse-resize z-30 touch-none"
+                    className="absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-nwse-resize z-30 touch-none active:scale-110 hover:bg-stone-50"
                     title="드래그하여 크기 조절"
                   >
-                    <Maximize2 size={12} />
+                    <Maximize2 size={11} strokeWidth={2.5} />
                   </div>
                 </>
               )}
@@ -1897,10 +1901,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 <button
                   type="button"
                   onClick={handleAddTextBlock}
-                  className="flex items-center space-x-1 bg-black text-white px-2.5 sm:px-3 py-1.5 rounded-xl hover:bg-stone-800 active:scale-95 transition font-medium shadow-2xs shrink-0"
+                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white text-stone-900 border border-stone-300 hover:bg-stone-50 active:scale-95 transition shadow-2xs flex items-center justify-center shrink-0"
+                  title="새 글상자 추가"
                 >
-                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span>새 글상자</span>
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
                 </button>
 
                 {selectedText && (
