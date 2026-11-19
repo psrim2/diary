@@ -491,6 +491,12 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   // 드로잉 이벤트 (아이패드 애플펜슬 필기 시 cancelable 이벤트 즉시 차단하여 사파리 롱프레스 툴팁 방지)
   const handlePointerDown = (e) => {
     if (activeToolMode !== 'pen') return;
+
+    // 팜 리젝션(Palm Rejection): 면적이 넓은 손바닥 접촉 터치 노이즈 무시
+    if (e.pointerType === 'touch' && ((e.width && e.width > 24) || (e.height && e.height > 24))) {
+      return;
+    }
+
     if (e.cancelable) {
       e.preventDefault();
     }
@@ -1662,10 +1668,13 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   onLoad={(e) => {
                     const naturalW = e.currentTarget.naturalWidth || 1;
                     const naturalH = e.currentTarget.naturalHeight || 1;
-                    const baseW = (sticker.category === 'tape' || sticker.type === 'tape') ? 112 : 56;
-                    const canonicalImgH = (baseW * (naturalH / naturalW)) / (scaleRatio || 1);
-                    if (!sticker.height || Math.abs(sticker.height - canonicalImgH) > 10) {
-                      updateSticker(sticker.id, { height: Math.round(canonicalImgH) });
+                    const isTape = sticker.category === 'tape' || sticker.type === 'tape';
+                    const isPhoto = sticker.isPhoto || sticker.type === 'photo';
+                    const baseW = isTape ? 112 : isPhoto ? 140 : 56;
+                    const maxH = isTape ? 32 : isPhoto ? 180 : 56;
+                    const canonicalImgH = Math.min(maxH, Math.round(baseW * (naturalH / naturalW)));
+                    if (!sticker.height || Math.abs(sticker.height - canonicalImgH) > 4) {
+                      updateSticker(sticker.id, { height: canonicalImgH });
                     }
                   }}
                   style={{ width: `${scaledPixelW}px`, height: 'auto' }}

@@ -29,7 +29,7 @@ function getTodayDateStr() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-// 날짜별 단일 일기 원칙: 동일한 날짜(YYYY-MM-DD)를 가진 중복 일기를 1개로 병합/정리
+// 날짜별 단일 일기 원칙: 동일한 날짜(YYYY-MM-DD)를 가진 중복 일기를 1개로 병합/정리 (최신 수정본 updatedAt 우선)
 function deduplicateDiariesByDate(diaryList) {
   if (!Array.isArray(diaryList)) return [];
   const map = new Map();
@@ -40,22 +40,31 @@ function deduplicateDiariesByDate(diaryList) {
     if (!existing) {
       map.set(dateKey, diary);
     } else {
-      // 둘 다 존재하는 경우, 실제 작성 내용(텍스트, 획, 스티커)이 더 풍부한 쪽을 유지
-      const existingScore =
-        (existing.textBlocks?.length || 0) * 10 +
-        (existing.strokes?.length || 0) * 2 +
-        (existing.stickers?.length || 0) * 5 +
-        (existing.weather ? 2 : 0) +
-        (existing.summary ? 5 : 0);
-      const currentScore =
-        (diary.textBlocks?.length || 0) * 10 +
-        (diary.strokes?.length || 0) * 2 +
-        (diary.stickers?.length || 0) * 5 +
-        (diary.weather ? 2 : 0) +
-        (diary.summary ? 5 : 0);
+      const existingTime = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+      const currentTime = new Date(diary.updatedAt || diary.createdAt || 0).getTime();
 
-      if (currentScore >= existingScore) {
+      if (currentTime > existingTime) {
         map.set(dateKey, diary);
+      } else if (currentTime < existingTime) {
+        // 기존 문서가 더 최신이므로 유지
+      } else {
+        // 타임스탬프가 동일하거나 없는 경우 컨텐츠 점수 기준 비교
+        const existingScore =
+          (existing.textBlocks?.length || 0) * 10 +
+          (existing.strokes?.length || 0) * 2 +
+          (existing.stickers?.length || 0) * 5 +
+          (existing.weather ? 2 : 0) +
+          (existing.summary ? 5 : 0);
+        const currentScore =
+          (diary.textBlocks?.length || 0) * 10 +
+          (diary.strokes?.length || 0) * 2 +
+          (diary.stickers?.length || 0) * 5 +
+          (diary.weather ? 2 : 0) +
+          (diary.summary ? 5 : 0);
+
+        if (currentScore >= existingScore) {
+          map.set(dateKey, diary);
+        }
       }
     }
   });
@@ -178,8 +187,13 @@ function DiaryMainApp() {
     const initCloudSync = async () => {
       setIsSyncing(true);
       try {
-        // 비로그인 상태에서 작성된 로컬 일기가 있다면 클라우드로 먼저 병합
-        await syncLocalDiariesToCloud(user.uid, diariesRef.current);
+        // 비로그인(게스트) 상태에서 새로 작성된 로컬 일기가 있는 경우에만 클라우드로 1회 업로드 병합
+        // (이미 로그인된 계정은 Firestore가 Single Source of Truth이므로 다른 기기의 옛 캐시로 인한 부활 원천 차단)
+        const hasUnsyncedGuest = localStorage.getItem('analog_diary_has_unsynced_guest_data') === 'true';
+        if (hasUnsyncedGuest) {
+          await syncLocalDiariesToCloud(user.uid, diariesRef.current);
+          localStorage.removeItem('analog_diary_has_unsynced_guest_data');
+        }
 
         if (isCancelled) return;
 
@@ -334,7 +348,15 @@ function DiaryMainApp() {
 
   // 일기 삭제 (로컬 상태 반영 + 로그인 시 Firestore 삭제)
   const handleDeleteDiary = async (id) => {
-    setDiaries(prev => prev.filter(d => d.id !== id));
+    // 1. 로컬 상태 및 localStorage에서 즉시 삭제
+    setDiaries(prev => {
+      const updated = prev.filter(d => d.id !== id);
+      try {
+        localStorage.setItem('analog_diary_entries', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
     if (selectedDiary?.id === id) {
       const remainingDate = selectedDiary.date || getTodayDateStr();
       setSelectedDiary({
@@ -373,14 +395,24 @@ function DiaryMainApp() {
     const finalDiaryToSave = {
       ...updatedDiary,
       id: targetId,
+      updatedAt: new Date().toISOString(),
     };
+
+    // 비로그인 상태에서 작성된 경우 게스트 동기화 플래그 설정
+    if (!user) {
+      localStorage.setItem('analog_diary_has_unsynced_guest_data', 'true');
+    }
 
     setDiaries((prev) => {
       // 동일 id 또는 동일 date를 가진 기존 항목을 모두 제거 후 신규 저장본 추가
       const filtered = prev.filter(
         (d) => d.id !== finalDiaryToSave.id && d.date !== finalDiaryToSave.date
       );
-      return deduplicateDiariesByDate([finalDiaryToSave, ...filtered]);
+      const updated = deduplicateDiariesByDate([finalDiaryToSave, ...filtered]);
+      try {
+        localStorage.setItem('analog_diary_entries', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
     });
 
     if (user) {

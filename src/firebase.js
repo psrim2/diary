@@ -120,11 +120,18 @@ export function subscribeToUserDiaries(uid, onUpdate, onError) {
   const diariesRef = collection(db, 'users', uid, 'diaries');
   return onSnapshot(
     diariesRef,
-    (snapshot) => {
+    async (snapshot) => {
+      // 멀티 디바이스 간 삭제된 항목 부활 방지: deleted_ids 목록 조회
+      let deletedIds = new Set();
+      try {
+        const deletedSnap = await getDocs(collection(db, 'users', uid, 'deleted_ids'));
+        deletedIds = new Set(deletedSnap.docs.map((d) => d.id));
+      } catch (err) {}
+
       const cloudDiaries = [];
       snapshot.docs.forEach((docSnap) => {
-        if (LEGACY_SAMPLE_IDS.has(docSnap.id)) {
-          // 이전에 자동 업로드되었던 기본 샘플 더미 데이터는 클라우드에서 자동 삭제
+        if (LEGACY_SAMPLE_IDS.has(docSnap.id) || deletedIds.has(docSnap.id)) {
+          // 삭제된 묘비(tombstone)에 등록된 일기는 Firestore에서 영구 삭제
           deleteDoc(doc(db, 'users', uid, 'diaries', docSnap.id)).catch(() => {});
           return;
         }
@@ -160,6 +167,11 @@ export async function saveDiaryToCloud(uid, diary) {
     },
     { merge: true }
   );
+
+  // 만약 이전에 삭제 목록에 등록된 적이 있다면 새로 작성/저장 시 삭제 묘비에서 제거
+  try {
+    await deleteDoc(doc(db, 'users', uid, 'deleted_ids', String(diary.id)));
+  } catch (err) {}
 }
 
 /**
@@ -171,6 +183,17 @@ export async function deleteDiaryFromCloud(uid, diaryId) {
 
   const diaryRef = doc(db, 'users', uid, 'diaries', String(diaryId));
   await deleteDoc(diaryRef);
+
+  // 멀티 디바이스 간 삭제된 항목이 다른 기기를 켰을 때 다시 부활하지 못하도록 영구 묘비(tombstone) 등록
+  try {
+    const tombstoneRef = doc(db, 'users', uid, 'deleted_ids', String(diaryId));
+    await setDoc(tombstoneRef, {
+      id: String(diaryId),
+      deletedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn('[Firestore] tombstone 등록 오류:', err);
+  }
 }
 
 /**
@@ -186,12 +209,19 @@ export async function syncLocalDiariesToCloud(uid, localDiaries = []) {
   const existingSnap = await getDocs(diariesRef);
   const existingIds = new Set(existingSnap.docs.map((d) => d.id));
 
+  // 삭제된 묘비(tombstones) 목록 조회 (다른 기기에서 이미 삭제한 일기는 절대 재업로드하지 않음)
+  let deletedIds = new Set();
+  try {
+    const deletedSnap = await getDocs(collection(db, 'users', uid, 'deleted_ids'));
+    deletedIds = new Set(deletedSnap.docs.map((d) => d.id));
+  } catch (err) {}
+
   const batch = writeBatch(db);
   let hasNewItems = false;
 
   localDiaries.forEach((diary) => {
     const idStr = String(diary?.id || '');
-    if (idStr && !LEGACY_SAMPLE_IDS.has(idStr) && !existingIds.has(idStr)) {
+    if (idStr && !LEGACY_SAMPLE_IDS.has(idStr) && !existingIds.has(idStr) && !deletedIds.has(idStr)) {
       const docRef = doc(db, 'users', uid, 'diaries', idStr);
       batch.set(docRef, {
         ...diary,

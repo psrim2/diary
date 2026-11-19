@@ -58,18 +58,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
     let maxY = 0;
     let hasContent = false;
 
-    // 1) 손글씨 스트로크 바닥 계산 (지우개 획 제외)
-    (normalizedLayers.strokes || []).forEach((stroke) => {
-      if (stroke.tool === 'eraser') return;
-      (stroke.points || []).forEach((pt) => {
-        if (typeof pt.y === 'number' && !isNaN(pt.y)) {
-          hasContent = true;
-          if (pt.y > maxY) maxY = pt.y;
-        }
-      });
-    });
-
-    // 2) 텍스트 블록 바닥 계산
+    // 1) 텍스트 블록 바닥 계산
     (normalizedLayers.textBlocks || []).forEach((block) => {
       if (block.text && block.text.trim()) {
         hasContent = true;
@@ -81,27 +70,117 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
       }
     });
 
-    // 3) 스티커/사진 바닥 계산 (캐릭터 스티커는 기본 52px, 마스킹테이프는 28px, 사진은 140px)
+    // 2) 스티커/사진 바닥 계산
+    // (카드 뷰에서는 캐릭터/GIF 스티커가 w-14/56px로 렌더링되므로 최대 높이를 56px로 엄격히 제한하여 불필요한 빈 여백 방지)
     (normalizedLayers.stickers || []).forEach((sticker) => {
       hasContent = true;
       const isPhoto = sticker.isPhoto || sticker.type === 'photo';
       const isTape = sticker.type === 'tape' || sticker.category === 'tape';
-      const defaultH = isPhoto ? 140 : isTape ? 28 : 52;
-      const baseH = typeof sticker.height === 'number' && sticker.height > 0 && sticker.height <= 200
-        ? sticker.height
-        : defaultH;
+      const defaultH = isPhoto ? 140 : isTape ? 24 : 56;
+      const baseH = isPhoto
+        ? Math.min(180, typeof sticker.height === 'number' && sticker.height > 0 ? sticker.height : defaultH)
+        : isTape
+        ? Math.min(28, typeof sticker.height === 'number' && sticker.height > 0 ? sticker.height : defaultH)
+        : Math.min(56, typeof sticker.height === 'number' && sticker.height > 0 ? sticker.height : defaultH);
       const approxHeight = baseH * (sticker.scale || 1);
       const bottom = (sticker.y || 0) + approxHeight;
       if (bottom > maxY) maxY = bottom;
     });
+
+    // 3) 지우개 획 영역 감지 (지워진 선 아래쪽의 유령 좌표 제외용)
+    const eraserStrokes = (normalizedLayers.strokes || []).filter((s) => s.tool === 'eraser');
+    const eraserBoxes = eraserStrokes.map((s) => {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, strokeMaxY = -Infinity;
+      (s.points || []).forEach((p) => {
+        if (typeof p.x === 'number' && typeof p.y === 'number') {
+          if (p.x < minX) minX = p.x;
+          if (p.x > maxX) maxX = p.x;
+          if (p.y < minY) minY = p.y;
+          if (p.y > strokeMaxY) strokeMaxY = p.y;
+        }
+      });
+      const radius = (s.size || 20) + 16;
+      return { minX: minX - radius, maxX: maxX + radius, minY: minY - radius, maxY: strokeMaxY + radius };
+    });
+
+    // 4) 유효한 손글씨 스트로크 바닥 계산 (지우개 획 및 오작동 팜 터치 점 제외)
+    // - 보이지 않는 투명/흰색 잉크 제외
+    // - 본문과 동떨어진 팜 터치 노이즈 점 제외
+    const validDrawStrokes = (normalizedLayers.strokes || []).filter((s) => {
+      if (s.tool === 'eraser') return false;
+      const c = (s.color || '').toLowerCase().trim();
+      if (c === '#ffffff' || c === '#fff' || c === 'white' || c === 'transparent') return false;
+      return Array.isArray(s.points) && s.points.length > 0;
+    });
+
+    const analyzedStrokes = validDrawStrokes.map((stroke) => {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, strokeMaxY = -Infinity;
+      let pathLen = 0;
+      let unErasedPoints = 0;
+
+      for (let i = 0; i < stroke.points.length; i++) {
+        const pt = stroke.points[i];
+        if (typeof pt.x === 'number' && typeof pt.y === 'number' && !isNaN(pt.y)) {
+          const isErased = eraserBoxes.some(
+            (b) => pt.x >= b.minX && pt.x <= b.maxX && pt.y >= b.minY && pt.y <= b.maxY
+          );
+          if (!isErased) {
+            unErasedPoints++;
+            if (pt.x < minX) minX = pt.x;
+            if (pt.x > maxX) maxX = pt.x;
+            if (pt.y < minY) minY = pt.y;
+            if (pt.y > strokeMaxY) strokeMaxY = pt.y;
+            if (i > 0) {
+              const prev = stroke.points[i - 1];
+              pathLen += Math.hypot(pt.x - prev.x, pt.y - prev.y);
+            }
+          }
+        }
+      }
+
+      const isSubstantial = unErasedPoints >= 3 && (pathLen > 8 || (strokeMaxY - minY) > 5);
+      return {
+        stroke,
+        unErasedPoints,
+        minY,
+        strokeMaxY,
+        isSubstantial,
+      };
+    }).filter((s) => s.unErasedPoints > 0 && isFinite(s.minY) && isFinite(s.strokeMaxY));
+
+    // 유의미한 본문 컨텐츠(텍스트, 스티커, 실질적 필기 획)의 최대 바닥선 계산
+    let coreMaxY = maxY;
+    analyzedStrokes.forEach((s) => {
+      if (s.isSubstantial) {
+        hasContent = true;
+        if (s.strokeMaxY > coreMaxY) coreMaxY = s.strokeMaxY;
+      }
+    });
+
+    // 미세 접촉점(1~2점 단일 탭 / 팜 터치 점)은 유의미한 본문 바닥선(+45px) 이내에 있을 때만 정상 필기(마침표 등)로 인정
+    analyzedStrokes.forEach((s) => {
+      if (!s.isSubstantial) {
+        if (coreMaxY > 0) {
+          if (s.strokeMaxY <= coreMaxY + 45) {
+            hasContent = true;
+            if (s.strokeMaxY > maxY) maxY = s.strokeMaxY;
+          }
+        } else {
+          hasContent = true;
+          if (s.strokeMaxY > maxY) maxY = s.strokeMaxY;
+        }
+      }
+    });
+
+    if (coreMaxY > maxY) maxY = coreMaxY;
 
     if (!hasContent || maxY <= 0) {
       // 작성된 컨텐츠가 거의 없는 경우: 최소 높이 120px로 아담하게 표시
       return 120;
     }
 
-    // 작성된 내용 바로 아래 깔끔한 여백(+24px)을 두어 내용만 딱 나오도록 맞춤 (최소 120px)
-    return Math.max(120, Math.round(maxY + 24));
+    // 작성된 내용 바로 아래 깔끔한 여백(+20px)을 두어 내용만 딱 나오도록 맞춤 (최소 120px)
+    return Math.max(120, Math.round(maxY + 20));
   }, [normalizedLayers]);
 
   const cardPaperRef = useRef(null);
