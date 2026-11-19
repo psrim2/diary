@@ -16,7 +16,7 @@ export const FONTS = [
 ];
 
 export const PEN_TOOLS = [
-  { id: 'pen', name: '만년필', size: 2.2, opacity: 1.0, type: 'pen' },
+  { id: 'pen', name: '만년필', size: 1.1, opacity: 1.0, type: 'pen' },
   { id: 'pencil', name: '연필', size: 1.8, opacity: 0.85, type: 'pencil' },
   { id: 'highlighter', name: '형광펜', size: 16, opacity: 0.35, type: 'highlighter' },
   { id: 'eraser', name: '지우개', size: 24, opacity: 1.0, type: 'eraser' },

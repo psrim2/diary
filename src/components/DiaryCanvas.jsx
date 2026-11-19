@@ -165,11 +165,11 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     }
   }, [activeToolMode]);
 
-  // 펜 드로잉 & 컬러
+  // 펜 드로잉 & 컬러 (만년필 기본 굵기: 기존 2.2의 절반인 1.1)
   const [activePenTool, setActivePenTool] = useState('pen');
   const [penColor, setPenColor] = useState('#111111');
   const [customColor, setCustomColor] = useState('#d97706'); // 사용자가 컬러 피커로 고른 커스텀 색상
-  const [penSize, setPenSize] = useState(2.2);
+  const [penSize, setPenSize] = useState(1.1);
   const [strokesHistory, setStrokesHistory] = useState(initialNormalized.strokes);
   const [historyIndex, setHistoryIndex] = useState(
     initialNormalized.strokes.length ? initialNormalized.strokes.length - 1 : -1
@@ -931,15 +931,16 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     >
       {/* 
         ================================================================
-        [상단] 1. 뒤로가기 + 다이어리 이름 레이블 ─── [ ✔ ] (검은색 원형 완료 버튼)
-        - 화면 전체 가로 풀(w-full)로 꽉 차게 배치
+        [상단] 1. 모바일 전용 상단 바: 뒤로가기 + 다이어리 이름 레이블 ─── [ ✔ ]
+        - 와이드 화면(lg: >=1024px)에서는 이전 버튼 및 다이어리명이 불필요하므로 완전히 숨김(lg:hidden)
+        - 이로써 상단 세로 공간을 최소화함
         ================================================================
       */}
-      <div className="w-full px-6 pt-5 pb-2 shrink-0 flex items-center justify-between">
+      <div className="w-full px-6 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-2 shrink-0 flex lg:hidden items-center justify-between">
         <div className="flex items-center space-x-2.5">
           <button
             onClick={onBack}
-            className="text-black hover:opacity-70 transition p-1.5 -ml-1.5 rounded-full lg:hidden"
+            className="text-black hover:opacity-70 transition p-1.5 -ml-1.5 rounded-full"
             title="뒤로가기"
           >
             <ArrowLeft size={22} strokeWidth={2.5} />
@@ -949,7 +950,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           </span>
         </div>
 
-        {/* 우측 상단: [ ✔ ] 검은색 원형 저장 완료 버튼 */}
+        {/* 모바일 화면 전용: [ ✔ ] 검은색 원형 저장 완료 버튼 */}
         <button
           onClick={handleSaveDiary}
           className="w-11 h-11 rounded-full bg-black hover:bg-stone-800 active:scale-95 text-white transition flex items-center justify-center shadow-xs"
@@ -970,11 +971,13 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           ================================================================
           [상단] 2. 날짜 헤더: 반응형 가로 100% 풀 핏
                    2026
-                   11.17 THU                  [ ○ ] (날씨/기분 스탬프 원형 버튼)
+                   11.17 THU                  [ ○ 스티커 ] [ ✔ 완료 (와이드 전용) ]
                    ────────────────────────────────
+                   - 와이드 화면에서는 상단 바가 없으므로 pt-5 pb-3으로 최적화하여 
+                     전체 상단 세로 사이즈를 최소화하고, 체크 버튼이 날짜 스티커 옆에 위치
           ================================================================
         */}
-        <div className="w-full px-6 pt-1 pb-3 shrink-0">
+        <div className="w-full px-6 pt-1 lg:pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-3 shrink-0">
         <div className="flex items-end justify-between">
           {/* 날짜 헤더 (탭하면 날짜 변경 가능) */}
           <div className="relative cursor-pointer group" title="날짜 변경">
@@ -995,30 +998,31 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
             />
           </div>
 
-          {/* 우측 대표 날씨/스티커 아이콘 버튼 */}
-          <div className="relative pb-0.5">
-            <button
-              type="button"
-              onClick={() => setIsWeatherOpen(!isWeatherOpen)}
-              className="w-11 h-11 bg-transparent border-0 p-0 active:scale-95 transition flex items-center justify-center"
-              title="날씨 / 대표 스티커 선택"
-            >
-              {weather ? (
-                isImageAsset(weather) ? (
-                  <img
-                    src={weather}
-                    alt="대표 아이콘"
-                    className="w-10 h-10 object-contain block select-none"
-                  />
+          {/* 우측 대표 날씨/스티커 아이콘 버튼 + 와이드 전용 체크 버튼 */}
+          <div className="flex items-center space-x-2.5 pb-0.5">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsWeatherOpen(!isWeatherOpen)}
+                className="w-11 h-11 bg-transparent border-0 p-0 active:scale-95 transition flex items-center justify-center"
+                title="날씨 / 대표 스티커 선택"
+              >
+                {weather ? (
+                  isImageAsset(weather) ? (
+                    <img
+                      src={weather}
+                      alt="대표 아이콘"
+                      className="w-10 h-10 object-contain block select-none"
+                    />
+                  ) : (
+                    <span className="text-3xl leading-none select-none">{weather}</span>
+                  )
                 ) : (
-                  <span className="text-3xl leading-none select-none">{weather}</span>
-                )
-              ) : (
-                <Plus size={24} className="text-black" strokeWidth={2.5} />
-              )}
-            </button>
+                  <Plus size={24} className="text-black" strokeWidth={2.5} />
+                )}
+              </button>
 
-            {isWeatherOpen && (
+              {isWeatherOpen && (
               <div 
                 className="absolute right-0 top-full mt-2 bg-white border border-stone-200 rounded-2xl shadow-xl overflow-hidden z-50 w-64 animate-fadeIn"
                 onClick={(e) => e.stopPropagation()}
@@ -1245,7 +1249,18 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
               </div>
             )}
           </div>
+
+          {/* 와이드 버전(lg: >=1024px) 전용 [ ✔ ] 저장 완료 버튼: 날씨/스티커 버튼 바로 옆에 위치 */}
+          <button
+            type="button"
+            onClick={handleSaveDiary}
+            className="hidden lg:flex w-10 h-10 rounded-full bg-black hover:bg-stone-800 active:scale-95 text-white transition items-center justify-center shadow-xs shrink-0"
+            title="다이어리 저장 완료"
+          >
+            <Check size={18} strokeWidth={3} />
+          </button>
         </div>
+      </div>
 
         {/* 선명한 블랙 가로 구분선 */}
         <div className="w-full h-[1.5px] bg-black mt-3 sm:mt-4" />
@@ -1751,8 +1766,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     <span className="text-xs text-stone-500 font-medium">굵기</span>
                     <input
                       type="range"
-                      min={activePenTool === 'highlighter' ? 8 : 1}
+                      min={activePenTool === 'highlighter' ? 8 : 0.5}
                       max={activePenTool === 'highlighter' ? 32 : 8}
+                      step={activePenTool === 'highlighter' ? 1 : 0.1}
                       value={penSize}
                       onChange={(e) => setPenSize(Number(e.target.value))}
                       className="w-16 sm:w-20 accent-black cursor-pointer"

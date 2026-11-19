@@ -50,7 +50,7 @@ export default function Header({
   };
 
   return (
-    <header className="px-6 pt-5 pb-2 shrink-0 bg-[#fafafa]">
+    <header className="px-6 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-2 shrink-0 bg-[#fafafa]">
       {/* 1. 최상단: [타이틀 (클릭 시 수정)] ─── [+] 버튼 (저장버튼과 동일한 w-11 h-11 규격) */}
       <div className="flex items-center justify-between">
         <div className="flex-1 mr-3">

@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="coverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2c2a29"/>
+      <stop offset="100%" stop-color="#18181b"/>
+    </linearGradient>
+    <linearGradient id="pageGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#e5e2da"/>
+      <stop offset="100%" stop-color="#faf8f5"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a"/>
+      <stop offset="50%" stop-color="#eab308"/>
+      <stop offset="100%" stop-color="#ca8a04"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- 배경 다이어리 커버 -->
+  <rect x="56" y="46" width="400" height="420" rx="44" fill="url(#coverGrad)" filter="url(#shadow)" stroke="#44403c" stroke-width="4"/>
+
+  <!-- 다이어리 제본 가죽 밴드 / 음각 라인 -->
+  <line x1="120" y1="46" x2="120" y2="466" stroke="#18181b" stroke-width="8"/>
+  <line x1="122" y1="46" x2="122" y2="466" stroke="#52525b" stroke-width="2"/>
+
+  <!-- 속지 종이 페이지 -->
+  <rect x="144" y="80" width="280" height="352" rx="16" fill="url(#pageGrad)" stroke="#d6d3d1" stroke-width="2"/>
+
+  <!-- 종이 위의 아날로그 라인들 -->
+  <line x1="174" y1="140" x2="394" y2="140" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
+  <line x1="174" y1="185" x2="394" y2="185" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
+  <line x1="174" y1="230" x2="394" y2="230" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
+  <line x1="174" y1="275" x2="394" y2="275" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
+  <line x1="174" y1="320" x2="394" y2="320" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
+  <line x1="174" y1="365" x2="394" y2="365" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- 북마크 리본 (레드) -->
+  <path d="M 284 46 L 284 210 L 304 185 L 324 210 L 324 46 Z" fill="#dc2626"/>
+
+  <!-- 골드 만년필 펜촉 아이콘 (오른쪽 아래 감성 배치) -->
+  <g transform="translate(300, 240) rotate(45) scale(1.1)">
+    <path d="M 40 10 L 58 45 L 50 90 L 30 90 L 22 45 Z" fill="url(#goldGrad)" stroke="#854d0e" stroke-width="2"/>
+    <circle cx="40" cy="50" r="4.5" fill="#1c1917"/>
+    <line x1="40" y1="10" x2="40" y2="45.5" stroke="#1c1917" stroke-width="2.5"/>
+    <path d="M 30 90 L 50 90 L 52 110 L 28 110 Z" fill="#292524"/>
+  </g>
+</svg>
