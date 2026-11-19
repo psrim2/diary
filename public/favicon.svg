@@ -1,49 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <linearGradient id="coverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#2c2a29"/>
-      <stop offset="100%" stop-color="#18181b"/>
-    </linearGradient>
-    <linearGradient id="pageGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#e5e2da"/>
-      <stop offset="100%" stop-color="#faf8f5"/>
-    </linearGradient>
-    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fef08a"/>
-      <stop offset="50%" stop-color="#eab308"/>
-      <stop offset="100%" stop-color="#ca8a04"/>
-    </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-opacity="0.25"/>
-    </filter>
-  </defs>
-
-  <!-- 배경 다이어리 커버 -->
-  <rect x="56" y="46" width="400" height="420" rx="44" fill="url(#coverGrad)" filter="url(#shadow)" stroke="#44403c" stroke-width="4"/>
-
-  <!-- 다이어리 제본 가죽 밴드 / 음각 라인 -->
-  <line x1="120" y1="46" x2="120" y2="466" stroke="#18181b" stroke-width="8"/>
-  <line x1="122" y1="46" x2="122" y2="466" stroke="#52525b" stroke-width="2"/>
-
-  <!-- 속지 종이 페이지 -->
-  <rect x="144" y="80" width="280" height="352" rx="16" fill="url(#pageGrad)" stroke="#d6d3d1" stroke-width="2"/>
-
-  <!-- 종이 위의 아날로그 라인들 -->
-  <line x1="174" y1="140" x2="394" y2="140" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
-  <line x1="174" y1="185" x2="394" y2="185" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
-  <line x1="174" y1="230" x2="394" y2="230" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
-  <line x1="174" y1="275" x2="394" y2="275" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
-  <line x1="174" y1="320" x2="394" y2="320" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
-  <line x1="174" y1="365" x2="394" y2="365" stroke="#e7e5e4" stroke-width="3" stroke-linecap="round"/>
-
-  <!-- 북마크 리본 (레드) -->
-  <path d="M 284 46 L 284 210 L 304 185 L 324 210 L 324 46 Z" fill="#dc2626"/>
-
-  <!-- 골드 만년필 펜촉 아이콘 (오른쪽 아래 감성 배치) -->
-  <g transform="translate(300, 240) rotate(45) scale(1.1)">
-    <path d="M 40 10 L 58 45 L 50 90 L 30 90 L 22 45 Z" fill="url(#goldGrad)" stroke="#854d0e" stroke-width="2"/>
-    <circle cx="40" cy="50" r="4.5" fill="#1c1917"/>
-    <line x1="40" y1="10" x2="40" y2="45.5" stroke="#1c1917" stroke-width="2.5"/>
-    <path d="M 30 90 L 50 90 L 52 110 L 28 110 Z" fill="#292524"/>
-  </g>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="512" height="512" fill="white"/>
+<path d="M46.08 148.48C46.08 91.9261 91.926 46.08 148.48 46.08H363.52C420.074 46.08 465.92 91.9261 465.92 148.48V363.52C465.92 420.074 420.074 465.92 363.52 465.92H148.48C91.926 465.92 46.08 420.074 46.08 363.52V148.48Z" fill="#52D1FF"/>
+<path d="M363.52 46.08C378.084 46.08 391.936 49.1242 404.48 54.605V457.39C391.936 462.871 378.085 465.92 363.52 465.92V46.08Z" fill="#222222"/>
+<path d="M378.88 465.92H373.76V46.08H378.88V465.92Z" fill="white" fill-opacity="0.3"/>
+<path d="M394.24 465.92H389.12V46.08H394.24V465.92Z" fill="white" fill-opacity="0.3"/>
+<path d="M202.675 390.05C205.671 390.05 208.253 390.647 210.415 391.84C212.577 393.023 214.241 394.725 215.405 396.945C216.578 399.165 217.165 401.822 217.165 404.915C217.165 408.017 216.578 410.685 215.405 412.915C214.241 415.145 212.567 416.857 210.385 418.05C208.213 419.243 205.615 419.84 202.59 419.84H192.03V390.05H202.675ZM198.325 414.445H202.325C204.187 414.445 205.755 414.114 207.025 413.455C208.305 412.786 209.265 411.751 209.905 410.355C210.554 408.949 210.88 407.135 210.88 404.915C210.88 402.714 210.555 400.916 209.905 399.52C209.265 398.124 208.31 397.094 207.04 396.435C205.77 395.776 204.202 395.445 202.34 395.445H198.325V414.445Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path d="M228.125 419.84H221.83V390.05H228.125V419.84Z" fill="white"/>
+<path d="M260.365 419.84H253.615L251.41 413.045H240.655L238.445 419.84H231.695L241.98 390.05H250.095L260.365 419.84ZM242.255 408.13H249.815L246.155 396.86H245.92L242.255 408.13Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path d="M275.7 390.05C277.949 390.05 279.87 390.455 281.46 391.26C283.06 392.055 284.281 393.181 285.115 394.645C285.958 396.099 286.38 397.812 286.38 399.78C286.38 401.757 285.952 403.46 285.1 404.885C284.247 406.3 283.009 407.389 281.39 408.145C281.301 408.187 281.206 408.22 281.115 408.26L287.44 419.84H280.485L274.845 409.28H270.245V419.84H263.95V390.05H275.7ZM270.245 404.22H274.525C275.727 404.22 276.725 404.054 277.52 403.725C278.315 403.395 278.907 402.899 279.295 402.24C279.693 401.581 279.89 400.759 279.89 399.78C279.89 398.792 279.692 397.958 279.295 397.28C278.907 396.601 278.31 396.089 277.505 395.74C276.71 395.381 275.707 395.2 274.495 395.2H270.245V404.22Z" fill-rule="evenodd" clip-rule="evenodd" fill="white"/>
+<path d="M301.69 402.88H301.98L308.775 390.05H315.83L304.965 409.31V419.84H298.71V409.31L287.845 390.05H294.9L301.69 402.88Z" fill="white"/>
 </svg>
