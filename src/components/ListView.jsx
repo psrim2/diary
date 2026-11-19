@@ -525,6 +525,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
 export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewDiary, selectedDiaryId, selectedDate }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [openSwipeCardId, setOpenSwipeCardId] = useState(null);
+  const isUserTouchingRef = useRef(false);
 
   // 검색 필터링 & 최신 날짜순 정렬
   const filteredDiaries = [...diaries]
@@ -559,14 +560,34 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
 
   return (
     <div 
-      onScroll={() => {
+      onTouchStart={() => {
+        isUserTouchingRef.current = true;
+      }}
+      onTouchEnd={() => {
+        isUserTouchingRef.current = false;
+      }}
+      onTouchCancel={() => {
+        isUserTouchingRef.current = false;
+      }}
+      onClick={(e) => {
+        // 검색창 및 버튼 외의 빈 배경 터치/클릭 시 키보드를 깔끔하게 내림
+        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
+          if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+            document.activeElement.blur();
+          }
+        }
+      }}
+      onScroll={(e) => {
         // 스크롤 시 열려 있는 스와이프 삭제 카드가 있으면 제자리로 복귀
         if (openSwipeCardId) {
           setOpenSwipeCardId(null);
         }
-        // 목록 스크롤 시 가상 키보드를 내려서 결과 화면을 넓게 볼 수 있도록 자동 블러 처리
-        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
-          document.activeElement.blur();
+        // 사용자가 터치로 직접 스크롤을 30px 이상 의미있게 내렸을 때만 키보드 내림 처리
+        // (상단 바운스/반동 및 검색결과 변경 시 scrollTop 급변으로 인한 의도치 않은 튕김 현상 방지)
+        if (isUserTouchingRef.current && e.currentTarget.scrollTop > 30) {
+          if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+            document.activeElement.blur();
+          }
         }
       }}
       style={{
@@ -599,19 +620,25 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
         )}
       </div>
 
-      {/* 2. 월별 그룹 일기 카드 피드 */}
+      {/* 2. 월별 그룹 일기 카드 피드 (검색결과 없거나 일기 없을 때: 낙엽 이미지 및 테두리 박스 없이 미니멀 플랫 디자인) */}
       {filteredDiaries.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center bg-white rounded-3xl border border-stone-200 p-6 my-auto">
-          <span className="text-4xl mb-3">🍂</span>
-          <p className="text-sm font-bold text-stone-800">기록된 일기가 없어요</p>
-          <p className="text-xs text-stone-400 mt-1">오늘 있었던 작은 순간을 기록해보세요.</p>
-          <button
-            onClick={onNewDiary}
-            className="mt-4 px-4 py-2 bg-black text-white rounded-xl text-xs font-medium hover:bg-stone-800 transition"
-          >
-            첫 일기 작성하기
-          </button>
-        </div>
+        searchTerm.trim() ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center my-auto select-none">
+            <p className="text-sm font-semibold text-stone-700">검색 결과가 없어요</p>
+            <p className="text-xs text-stone-400 mt-1.5">다른 검색어로 다시 시도해보세요.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-center my-auto select-none">
+            <p className="text-sm font-semibold text-stone-700">기록된 일기가 없어요</p>
+            <p className="text-xs text-stone-400 mt-1.5">오늘 있었던 작은 순간을 기록해보세요.</p>
+            <button
+              onClick={onNewDiary}
+              className="mt-5 px-4 py-2 bg-black text-white rounded-xl text-xs font-medium hover:bg-stone-800 active:scale-95 transition cursor-pointer"
+            >
+              첫 일기 작성하기
+            </button>
+          </div>
+        )
       ) : (
         <div className="pt-1 pb-10 space-y-6">
           {monthKeys.map((key) => {
