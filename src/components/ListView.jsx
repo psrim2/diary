@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Trash2 } from 'lucide-react';
+import { Search, Trash2, X } from 'lucide-react';
 import { PAPER_STYLES } from '../constants';
 import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas, CANONICAL_WIDTH, CANONICAL_HEIGHT } from '../utils/canvasLayers';
 
@@ -209,7 +209,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
 
   // 터치 제스처
   const handleTouchStart = (e) => {
-    e.stopPropagation();
+    // 주의: touchstart에서 e.stopPropagation()을 호출하면 부모 목록의 네이티브 세로 스크롤 제스처 초기화가 차단됨
     startXRef.current = e.touches[0].clientX;
     startYRef.current = e.touches[0].clientY;
     currentDeltaXRef.current = 0;
@@ -327,7 +327,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
       {/* [앞면: 박스 묶음 전체 슬라이딩] */}
       <div
         style={{ transform: `translateX(${translateX}px)` }}
-        className={`relative z-10 bg-white rounded-3xl p-4 sm:p-5 shadow-xs cursor-pointer transition-all ${
+        className={`relative z-10 bg-white rounded-3xl p-4 sm:p-5 shadow-xs cursor-pointer transition-all touch-pan-y ${
           isSwiping ? '' : 'duration-200 ease-out'
         } ${
           isSelected
@@ -542,7 +542,20 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
   const monthKeys = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
 
   return (
-    <div className="flex flex-col h-full bg-[#fafafa] px-6 pb-6 overflow-y-auto no-scrollbar">
+    <div 
+      onScroll={() => {
+        // 목록 스크롤 시 가상 키보드를 내려서 결과 화면을 넓게 볼 수 있도록 자동 블러 처리
+        if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
+          document.activeElement.blur();
+        }
+      }}
+      style={{
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehaviorY: 'contain',
+        touchAction: 'pan-y',
+      }}
+      className="flex flex-col h-full bg-[#fafafa] px-6 pb-28 overflow-y-auto no-scrollbar overscroll-contain"
+    >
       
       {/* 1. 상단 둥근 알약형 검색창 */}
       <div className="relative my-2.5 shrink-0">
@@ -552,8 +565,18 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="기억하고 싶은 순간, 단어, 날짜 검색..."
-          className="w-full pl-11 pr-4 py-2.5 bg-white border border-stone-200/90 rounded-full text-xs sm:text-sm text-stone-800 placeholder-stone-400/80 focus:outline-hidden focus:ring-1 focus:ring-black shadow-2xs transition"
+          className="w-full pl-11 pr-11 py-2.5 bg-white border border-stone-200/90 rounded-full text-xs sm:text-sm text-stone-800 placeholder-stone-400/80 focus:outline-hidden focus:ring-1 focus:ring-black shadow-2xs transition"
         />
+        {searchTerm && (
+          <button
+            type="button"
+            onClick={() => setSearchTerm('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-stone-200/80 text-stone-600 hover:bg-stone-300 active:scale-95 transition flex items-center justify-center cursor-pointer"
+            title="검색어 지우기"
+          >
+            <X size={13} strokeWidth={2.5} />
+          </button>
+        )}
       </div>
 
       {/* 2. 월별 그룹 일기 카드 피드 */}

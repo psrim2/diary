@@ -719,8 +719,8 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     // 2) 기존 텍스트 블록들의 바닥 Y 좌표 계산 (중복 겹침 방지)
     let maxTextBottomY = 0;
     textBlocks.forEach((tb) => {
-      const lineCount = Math.max(3, (tb.text || '').split('\n').length);
-      const approxHeight = Math.max(84, lineCount * (tb.fontSize || 18) * 1.5) * (tb.scale || 1);
+      const lineCount = Math.max(1, (tb.text || '').split('\n').length);
+      const approxHeight = Math.max(28, lineCount * (tb.fontSize || 18) * 1.5) * (tb.scale || 1);
       const bottom = (tb.y || 0) + approxHeight;
       if (bottom > maxTextBottomY) {
         maxTextBottomY = bottom;
@@ -739,7 +739,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       if (maxTextBottomY > 0) {
         newY = Math.round(maxTextBottomY + 12);
       } else {
-        newY = 20 + textBlocks.length * 45;
+        newY = 20 + textBlocks.length * 36;
       }
     }
 
@@ -766,23 +766,29 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       window.scrollTo(0, 0);
     }
 
-    // 새로 생성된 글상자가 화면 밖일 경우 부드럽게 스크롤 이동
-    setTimeout(() => {
+    // 새로 생성된 글상자가 키보드 뒤에 가려지지 않도록 안전 가시 영역으로 자동 스크롤
+    const scrollToNewBlock = () => {
       if (window.scrollY !== 0 || window.scrollX !== 0) {
         window.scrollTo(0, 0);
       }
       if (scrollContainerRef.current) {
         const targetPx = newY * scaleRatio;
         const currentScroll = scrollContainerRef.current.scrollTop;
-        const clientHeight = scrollContainerRef.current.clientHeight;
-        if (targetPx < currentScroll || targetPx > currentScroll + clientHeight - 140) {
+        const vvHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        // 가상 키보드와 상하단 툴바를 감안한 실제 눈에 보이는 안전 뷰포트 높이
+        const safeVisibleHeight = Math.max(160, vvHeight - 160);
+
+        if (targetPx < currentScroll + 20 || targetPx > currentScroll + safeVisibleHeight - 40) {
           scrollContainerRef.current.scrollTo({
-            top: Math.max(0, targetPx - 60),
+            top: Math.max(0, Math.round(targetPx - (safeVisibleHeight * 0.3))),
             behavior: 'smooth'
           });
         }
       }
-    }, 50);
+    };
+
+    setTimeout(scrollToNewBlock, 50);
+    setTimeout(scrollToNewBlock, 280);
   };
 
   const updateTextBlock = (id, fields) => {
@@ -1640,7 +1646,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           const widthPx = Math.round(canonicalW * scaleRatio);
           const scaledFontSize = Math.max(10, Math.round((block.fontSize || 18) * scaleRatio));
           const scaledLineHeight = Math.max(20, Math.round(28 * scaleRatio));
-          const minBoxHeight = scaledLineHeight * 3;
+          const minBoxHeight = scaledLineHeight * 1;
           const textColor = block.color || '#111111';
 
           return (
@@ -1685,7 +1691,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 left: `${leftPx}px`,
                 top: `${topPx}px`,
                 width: `${widthPx}px`,
-                minHeight: `${minBoxHeight + 12}px`,
+                minHeight: `${minBoxHeight + 8}px`,
                 maxWidth: `${Math.max(60, paperWidth - leftPx)}px`,
                 zIndex: blockZIndex,
                 transform: `rotate(${blockRotation}deg) scale(${blockScale})`,
@@ -1723,7 +1729,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 </>
               )}
 
-              {/* 본문 텍스트에어리어 (기본 3줄 높이 확보로 우측 버튼 간 간격 넉넉하게 보장) */}
+              {/* 본문 텍스트에어리어 (기본 1줄 높이 생성, 입력 내용에 따라 자연스럽게 자동 높이 확장) */}
               <textarea
                 ref={(el) => {
                   if (el) {
@@ -1757,7 +1763,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   minHeight: `${minBoxHeight}px`,
                 }}
                 className="w-full bg-transparent border-0 focus:ring-0 p-1 resize-none overflow-hidden outline-none block"
-                rows={3}
+                rows={1}
               />
             </div>
           );
