@@ -766,7 +766,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       window.scrollTo(0, 0);
     }
 
-    // 새로 생성된 글상자가 키보드 뒤에 가려지지 않도록 안전 가시 영역으로 자동 스크롤
+    // 새로 생성된 글상자가 키보드나 하단 툴바 뒤에 가려지지 않도록 안전 가시 영역으로 자동 스크롤
     const scrollToNewBlock = () => {
       if (window.scrollY !== 0 || window.scrollX !== 0) {
         window.scrollTo(0, 0);
@@ -775,10 +775,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         const targetPx = newY * scaleRatio;
         const currentScroll = scrollContainerRef.current.scrollTop;
         const vvHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-        // 가상 키보드와 상하단 툴바를 감안한 실제 눈에 보이는 안전 뷰포트 높이
-        const safeVisibleHeight = Math.max(160, vvHeight - 160);
+        // 가상 키보드와 하단 플로팅 툴바를 충분히 감안한 안전 뷰포트 높이
+        const safeVisibleHeight = Math.max(160, vvHeight - 220);
 
-        if (targetPx < currentScroll + 20 || targetPx > currentScroll + safeVisibleHeight - 40) {
+        if (targetPx < currentScroll + 20 || targetPx > currentScroll + safeVisibleHeight - 20) {
           scrollContainerRef.current.scrollTo({
             top: Math.max(0, Math.round(targetPx - (safeVisibleHeight * 0.3))),
             behavior: 'smooth'
