@@ -8,15 +8,16 @@ export const PAPER_STYLES = [
 ];
 
 export const FONTS = [
+  { id: 'paperlogy', name: '페이퍼로지', family: "'Paperlogy', sans-serif", defaultSize: 18, weight: 600 },
+  { id: 'sans', name: '고딕체', family: "'Pretendard', sans-serif", defaultSize: 15 },
   { id: 'gaegu', name: '개구체', family: "'Gaegu', cursive", defaultSize: 20 },
   { id: 'hand', name: '손글씨체', family: "'Nanum Pen Script', cursive", defaultSize: 22 },
   { id: 'caveat', name: '영문필기체', family: "'Caveat', cursive", defaultSize: 22 },
   { id: 'serif', name: '명조체', family: "'Nanum Myeongjo', serif", defaultSize: 16 },
-  { id: 'sans', name: '고딕체', family: "'Pretendard', sans-serif", defaultSize: 15 },
 ];
 
 export const PEN_TOOLS = [
-  { id: 'pen', name: '만년필', size: 1.1, opacity: 1.0, type: 'pen' },
+  { id: 'pen', name: '만년필', size: 2.2, opacity: 1.0, type: 'pen' },
   { id: 'pencil', name: '연필', size: 1.8, opacity: 0.85, type: 'pencil' },
   { id: 'highlighter', name: '형광펜', size: 16, opacity: 0.35, type: 'highlighter' },
   { id: 'eraser', name: '지우개', size: 24, opacity: 1.0, type: 'eraser' },

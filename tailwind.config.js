@@ -22,9 +22,9 @@ export default {
         }
       },
       fontFamily: {
+        sans: ['Paperlogy', 'Paperlogy-6SemiBold', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif'],
         hand: ['Nanum Pen Script', 'Caveat', 'cursive'],
         serif: ['Nanum Myeongjo', 'Georgia', 'serif'],
-        sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif'],
       }
     },
   },

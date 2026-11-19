@@ -160,11 +160,11 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     }
   }, [activeToolMode]);
 
-  // 펜 드로잉 & 컬러 (만년필 기본 굵기: 기존 2.2의 절반인 1.1)
+  // 펜 드로잉 & 컬러 (만년필 기본 굵기: 2.2)
   const [activePenTool, setActivePenTool] = useState('pen');
   const [penColor, setPenColor] = useState('#111111');
   const [customColor, setCustomColor] = useState('#d97706'); // 사용자가 컬러 피커로 고른 커스텀 색상
-  const [penSize, setPenSize] = useState(1.1);
+  const [penSize, setPenSize] = useState(2.2);
   const [strokesHistory, setStrokesHistory] = useState(initialNormalized.strokes);
   const [historyIndex, setHistoryIndex] = useState(
     initialNormalized.strokes.length ? initialNormalized.strokes.length - 1 : -1
@@ -792,7 +792,8 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     const newBlock = {
       id: newId,
       text: '',
-      fontFamily: "'Pretendard', sans-serif",
+      fontFamily: "'Paperlogy', sans-serif",
+      fontWeight: 600,
       fontSize: 18,
       color: penColor || '#111111',
       textAlign: 'left',
@@ -1809,7 +1810,8 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   e.target.style.height = `${Math.max(minBoxHeight, e.target.scrollHeight)}px`;
                 }}
                 style={{
-                  fontFamily: block.fontFamily || "'Pretendard', sans-serif",
+                  fontFamily: block.fontFamily || "'Paperlogy', sans-serif",
+                  fontWeight: block.fontWeight || (block.fontFamily && !block.fontFamily.includes('Paperlogy') ? 'normal' : 600),
                   fontSize: `${scaledFontSize}px`,
                   color: textColor,
                   textAlign: block.textAlign || 'left',
@@ -2146,10 +2148,17 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     <Plus className="w-4 h-4 stroke-[2.5]" />
                   </button>
 
-                  {/* 폰트 선택 드롭다운 (기본: 고딕체) */}
+                  {/* 폰트 선택 드롭다운 (기본: 페이퍼로지) */}
                   <select
-                    value={selectedText.fontFamily || "'Pretendard', sans-serif"}
-                    onChange={(e) => updateTextBlock(selectedText.id, { fontFamily: e.target.value })}
+                    value={selectedText.fontFamily || "'Paperlogy', sans-serif"}
+                    onChange={(e) => {
+                      const selectedFamily = e.target.value;
+                      const fontObj = FONTS.find(f => f.family === selectedFamily);
+                      updateTextBlock(selectedText.id, { 
+                        fontFamily: selectedFamily,
+                        fontWeight: fontObj?.weight || (selectedFamily.includes('Paperlogy') ? 600 : 'normal')
+                      });
+                    }}
                     className="bg-white rounded-xl border border-stone-200/90 px-2 py-1.5 text-xs text-stone-800 font-medium cursor-pointer shadow-2xs outline-none shrink-0"
                   >
                     {FONTS.map(f => (
