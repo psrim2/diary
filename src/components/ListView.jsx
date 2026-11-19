@@ -62,7 +62,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
     (normalizedLayers.textBlocks || []).forEach((block) => {
       if (block.text && block.text.trim()) {
         hasContent = true;
-        const fontSz = typeof block.fontSize === 'number' ? block.fontSize : 16;
+        const fontSz = typeof block.fontSize === 'number' ? block.fontSize : 18;
         const blockW = typeof block.width === 'number' ? block.width : CANONICAL_WIDTH;
         const charsPerLine = Math.max(8, Math.floor(blockW / (fontSz * 0.65)));
         const paragraphs = (block.text || '').split('\n');
@@ -419,8 +419,8 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
                       zIndex: typeof block.layerOrder === 'number' ? block.layerOrder : idx + 1,
                       transform: `rotate(${block.rotation || 0}deg) scale(${block.scale || 1})`,
                       transformOrigin: 'center center',
-                      fontFamily: block.fontFamily || "'Gaegu', cursive",
-                      fontSize: `${block.fontSize || 16}px`,
+                      fontFamily: block.fontFamily || "'Pretendard', sans-serif",
+                      fontSize: `${block.fontSize || 18}px`,
                       color: textColor,
                       textAlign: block.textAlign || 'left',
                       lineHeight: 1.5,

@@ -12,6 +12,7 @@ import {
   RotateCcw, 
   Maximize2,
   ArrowLeftRight,
+  GripHorizontal,
   X,
   AlignLeft,
   AlignCenter,
@@ -711,8 +712,8 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     const newBlock = {
       id: newId,
       text: '',
-      fontFamily: "'Gaegu', cursive",
-      fontSize: 16,
+      fontFamily: "'Pretendard', sans-serif",
+      fontSize: 18,
       color: penColor || '#111111',
       textAlign: 'left',
       x: 0,
@@ -1461,7 +1462,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           const topPx = Math.round((block.y || 0) * scaleRatio);
           const canonicalW = typeof block.width === 'number' ? block.width : CANONICAL_WIDTH;
           const widthPx = Math.round(canonicalW * scaleRatio);
-          const scaledFontSize = Math.max(10, Math.round((block.fontSize || 16) * scaleRatio));
+          const scaledFontSize = Math.max(10, Math.round((block.fontSize || 18) * scaleRatio));
           const textColor = block.color || '#111111';
 
           return (
@@ -1493,15 +1494,15 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
               {/* 선택 시 상단 드래그 바 및 조작 핸들 */}
               {isSelected && (
                 <>
-                  {/* 상단 드래그 이동 핸들 바 (상하좌우 자유 이동) */}
+                  {/* 상단 중앙: 세련되고 슬림한 플로팅 이동(드래그) 캡슐 핸들 */}
                   <div
                     onPointerDown={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
                     onTouchStart={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
-                    style={{ touchAction: 'none' }}
-                    className="w-full h-4 bg-stone-400/20 hover:bg-stone-400/40 rounded-t-lg cursor-move flex items-center justify-center mb-1 touch-none"
+                    style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
+                    className="absolute -top-3 left-1/2 -translate-x-1/2 h-6 px-2.5 bg-stone-900 text-stone-300 hover:text-white rounded-full shadow-md cursor-move flex items-center justify-center space-x-1 z-30 touch-none active:scale-95 transition-all select-none"
                     title="드래그하여 상하좌우 이동"
                   >
-                    <div className="w-8 h-1 bg-stone-500 rounded-full" />
+                    <GripHorizontal size={13} strokeWidth={2.5} />
                   </div>
 
                   {/* 좌측 상단: 글상자 삭제 버튼 */}
@@ -1581,7 +1582,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   e.target.style.height = `${Math.max(32, e.target.scrollHeight)}px`;
                 }}
                 style={{
-                  fontFamily: block.fontFamily || "'Gaegu', cursive",
+                  fontFamily: block.fontFamily || "'Pretendard', sans-serif",
                   fontSize: `${scaledFontSize}px`,
                   color: textColor,
                   textAlign: block.textAlign || 'left',
@@ -1904,9 +1905,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
                 {selectedText && (
                   <>
-                    {/* 폰트 선택 드롭다운 */}
+                    {/* 폰트 선택 드롭다운 (기본: 고딕체) */}
                     <select
-                      value={selectedText.fontFamily || "'Gaegu', cursive"}
+                      value={selectedText.fontFamily || "'Pretendard', sans-serif"}
                       onChange={(e) => updateTextBlock(selectedText.id, { fontFamily: e.target.value })}
                       className="bg-white rounded-xl border border-stone-200/90 px-2 py-1 text-xs text-stone-800 font-medium cursor-pointer shadow-2xs outline-none"
                     >
@@ -1915,9 +1916,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                       ))}
                     </select>
 
-                    {/* 폰트 크기 드롭다운 (기본 16px) */}
+                    {/* 폰트 크기 드롭다운 (기본: 18px) */}
                     <select
-                      value={selectedText.fontSize || 16}
+                      value={selectedText.fontSize || 18}
                       onChange={(e) => updateTextBlock(selectedText.id, { fontSize: Number(e.target.value) })}
                       className="bg-white rounded-xl border border-stone-200/90 px-2 py-1 text-xs text-stone-800 font-medium cursor-pointer shadow-2xs outline-none"
                     >
