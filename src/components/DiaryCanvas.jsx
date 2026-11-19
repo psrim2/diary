@@ -11,6 +11,7 @@ import {
   RotateCw, 
   RotateCcw, 
   Maximize2,
+  ArrowLeftRight,
   X,
   AlignLeft,
   AlignCenter,
@@ -126,31 +127,6 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   const [textBlocks, setTextBlocks] = useState(initialNormalized.textBlocks);
   const [selectedTextId, setSelectedTextId] = useState(null);
 
-  // 인스타그램 스토리 스타일 텍스트 입력 에디터 상태
-  const [isStoryTextOpen, setIsStoryTextOpen] = useState(false);
-  const [editingTextId, setEditingTextId] = useState(null);
-  const [editingText, setEditingText] = useState('');
-  const [editingFont, setEditingFont] = useState("'Gaegu', cursive");
-  const [editingSize, setEditingSize] = useState(24);
-  const [editingColor, setEditingColor] = useState('#111111');
-  const [editingAlign, setEditingAlign] = useState('center'); // 'left' | 'center' | 'right'
-  const [editingBgStyle, setEditingBgStyle] = useState('none'); // 'none' | 'light' | 'dark' | 'color'
-  const storyTextareaRef = useRef(null);
-
-  // 스토리 텍스트 에디터 열릴 때 오토포커스
-  useEffect(() => {
-    if (isStoryTextOpen) {
-      const timer = setTimeout(() => {
-        if (storyTextareaRef.current) {
-          storyTextareaRef.current.focus();
-          const len = storyTextareaRef.current.value.length;
-          storyTextareaRef.current.setSelectionRange(len, len);
-        }
-      }, 60);
-      return () => clearTimeout(timer);
-    }
-  }, [isStoryTextOpen]);
-
   // 스티커
   const [stickers, setStickers] = useState(initialNormalized.stickers);
   const [selectedStickerId, setSelectedStickerId] = useState(null);
@@ -202,6 +178,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   const canvasContainerRef = useRef(null);
   const isDrawingRef = useRef(false);
   const currentStrokeRef = useRef(null);
+  const wasTransformingRef = useRef(false);
 
   // 실제 렌더링된 속지의 가로/세로 픽셀 크기 실시간 측정 (ResizeObserver)
   const [paperWidth, setPaperWidth] = useState(CANONICAL_WIDTH);
@@ -689,90 +666,27 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     setPenColor(selectedHex);
   };
 
-  // 인스타그램 스토리 스타일 텍스트 입력창 열기 (신규 작성 또는 기존 수정)
-  const openStoryTextEditor = (existingBlock = null) => {
-    setActiveToolMode('text');
-    if (existingBlock) {
-      setEditingTextId(existingBlock.id);
-      setEditingText(existingBlock.text || '');
-      setEditingFont(existingBlock.fontFamily || "'Gaegu', cursive");
-      setEditingSize(existingBlock.fontSize || 24);
-      setEditingColor(existingBlock.color || penColor || '#111111');
-      setEditingAlign(existingBlock.textAlign || 'center');
-      setEditingBgStyle(existingBlock.bgStyle || 'none');
-    } else {
-      const newId = `t-${Date.now()}`;
-      setEditingTextId(newId);
-      setEditingText('');
-      setEditingFont("'Gaegu', cursive");
-      setEditingSize(24);
-      setEditingColor(penColor || '#111111');
-      setEditingAlign('center');
-      setEditingBgStyle('none');
-    }
-    setIsStoryTextOpen(true);
-    setSelectedStickerId(null);
-  };
-
-  // 인스타그램 스토리 텍스트 입력 완료 ('완료' 클릭 또는 바깥 배경 탭)
-  const handleFinishStoryText = () => {
-    const rawValue = storyTextareaRef.current?.value ?? editingText;
-    const trimmed = (rawValue || '').trim();
-    if (!trimmed) {
-      // 텍스트가 비어있으면 기존 블록 삭제, 신규면 생성 취소
-      if (editingTextId) {
-        setTextBlocks(prev => prev.filter(t => t.id !== editingTextId));
-      }
-      setSelectedTextId(null);
-      setIsStoryTextOpen(false);
-      return;
-    }
-
-    const defaultX = Math.round(CANONICAL_WIDTH * 0.05);
-
-    setTextBlocks(prev => {
-      const exists = prev.find(t => t.id === editingTextId);
-      if (exists) {
-        return prev.map(t =>
-          t.id === editingTextId
-            ? {
-                ...t,
-                text: rawValue,
-                fontFamily: editingFont,
-                fontSize: editingSize,
-                color: editingColor,
-                textAlign: editingAlign,
-                bgStyle: editingBgStyle,
-              }
-            : t
-        );
-      } else {
-        const newBlock = {
-          id: editingTextId,
-          text: rawValue,
-          fontFamily: editingFont,
-          fontSize: editingSize,
-          color: editingColor,
-          textAlign: editingAlign,
-          bgStyle: editingBgStyle,
-          x: defaultX,
-          y: Math.min(CANONICAL_HEIGHT - 60, 40 + prev.length * 45),
-          rotation: 0,
-          scale: 1,
-          layerOrder: getNextLayerOrder(),
-        };
-        return [...prev, newBlock];
-      }
-    });
-
-    setSelectedTextId(editingTextId);
-    setActiveToolMode('text');
-    setIsStoryTextOpen(false);
-  };
-
-  // 레거시 호환용 추가 핸들러
+  // 텍스트 블록 생성 (기본 폰트 사이즈: 16px, 기본 너비: 100% / CANONICAL_WIDTH, 기본 정렬: 좌측)
   const handleAddTextBlock = () => {
-    openStoryTextEditor(null);
+    const newId = `t-${Date.now()}`;
+    const newBlock = {
+      id: newId,
+      text: '',
+      fontFamily: "'Gaegu', cursive",
+      fontSize: 16,
+      color: penColor || '#111111',
+      textAlign: 'left',
+      x: 0,
+      y: Math.min(CANONICAL_HEIGHT - 80, 20 + textBlocks.length * 45),
+      width: CANONICAL_WIDTH,
+      rotation: 0,
+      scale: 1,
+      layerOrder: getNextLayerOrder(),
+    };
+    setTextBlocks(prev => [...prev, newBlock]);
+    setSelectedTextId(newId);
+    setSelectedStickerId(null);
+    setActiveToolMode('text');
   };
 
   const updateTextBlock = (id, fields) => {
@@ -851,7 +765,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     }
   };
 
-  // 오브젝트(스티커/텍스트) 직접 크기조절(resize) 및 회전(rotate) 시작 핸들러
+  // 오브젝트(스티커/텍스트) 직접 크기조절(resize)/너비조절(width) 및 회전(rotate) 시작 핸들러
   const handleTransformStart = (e, mode, itemType, item) => {
     e.stopPropagation();
     if (e.cancelable) e.preventDefault();
@@ -859,11 +773,31 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     const boxEl = e.currentTarget.closest('[data-object-box="true"]');
     if (!boxEl) return;
 
+    const { clientX, clientY } = getEventClientCoords(e);
+
+    // 가로 너비 조절 모드 (텍스트 박스 전용: 줄바꿈 변경)
+    if (mode === 'width') {
+      setDraggingItem(null);
+      setTransformingItem({
+        mode: 'width',
+        itemType, // 'text'
+        id: item.id,
+        startX: clientX,
+        startY: clientY,
+        origWidth: item.width || CANONICAL_WIDTH,
+        origScale: item.scale || 1,
+        origRotation: item.rotation || 0,
+        origX: item.x || 0,
+      });
+      setSelectedTextId(item.id);
+      setSelectedStickerId(null);
+      setActiveToolMode('text');
+      return;
+    }
+
     const rect = boxEl.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
-
-    const { clientX, clientY } = getEventClientCoords(e);
 
     const startAngle = Math.atan2(clientY - centerY, clientX - centerX) * (180 / Math.PI);
     const startDist = Math.max(12, Math.hypot(clientX - centerX, clientY - centerY));
@@ -902,6 +836,29 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
       if (transformingItem) {
         if (e.cancelable) e.preventDefault();
+
+        // 1) 가로 너비 조절 (글상자 줄바꿈 변경)
+        if (transformingItem.mode === 'width') {
+          const paperRect = canvasContainerRef.current?.getBoundingClientRect();
+          const uniformScale = paperRect && paperRect.width > 0 ? paperRect.width / CANONICAL_WIDTH : 1;
+          const currentScale = transformingItem.origScale || 1;
+
+          // 로컬 회전각 투영 계산 (회전된 글상자에서도 자연스럽게 너비 조절)
+          const rad = ((transformingItem.origRotation || 0) * Math.PI) / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+          const rawDx = (clientX - transformingItem.startX) / uniformScale;
+          const rawDy = (clientY - transformingItem.startY) / uniformScale;
+          const localDeltaX = (rawDx * cos + rawDy * sin) / currentScale;
+
+          const minW = 60;
+          const maxW = CANONICAL_WIDTH;
+          const newWidth = Math.max(minW, Math.min(maxW, Math.round(transformingItem.origWidth + localDeltaX)));
+          updateTextBlock(transformingItem.id, { width: newWidth });
+          return;
+        }
+
+        // 2) 회전 조절
         if (transformingItem.mode === 'rotate') {
           const currentAngle =
             Math.atan2(clientY - transformingItem.centerY, clientX - transformingItem.centerX) *
@@ -915,6 +872,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
             updateSticker(transformingItem.id, { rotation: newRotation });
           }
         } else if (transformingItem.mode === 'resize') {
+          // 3) 전체 확대/축소 (CSS scale 변형으로 줄바꿈은 100% 동일하게 유지)
           const currentDist = Math.hypot(
             clientX - transformingItem.centerX,
             clientY - transformingItem.centerY
@@ -953,6 +911,12 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     };
 
     const handleGlobalUp = () => {
+      if (draggingItem || transformingItem) {
+        wasTransformingRef.current = true;
+        setTimeout(() => {
+          wasTransformingRef.current = false;
+        }, 200);
+      }
       setDraggingItem(null);
       setTransformingItem(null);
     };
@@ -1382,7 +1346,8 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       >
         <div 
           ref={canvasContainerRef}
-          onClick={() => {
+          onClick={(e) => {
+            if (wasTransformingRef.current) return;
             if (activeToolMode !== 'pen') {
               setSelectedTextId(null);
               setSelectedStickerId(null);
@@ -1430,7 +1395,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           }`}
         />
 
-        {/* (2) 텍스트 블록 레이어 (인스타그램 스토리 스티커 스타일) */}
+        {/* (2) 텍스트 블록 레이어 (캔버스 직접 입력 박스 형태) */}
         {textBlocks.map((block, idx) => {
           const isSelected = selectedTextId === block.id;
           const blockScale = block.scale || 1;
@@ -1438,61 +1403,43 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           const invScale = 1 / blockScale;
           const blockZIndex = typeof block.layerOrder === 'number' ? block.layerOrder : idx + 1;
 
-          // 배경 배지 스타일
-          let bgClass = '';
-          let textColor = block.color || '#111111';
-          let customBgStyle = undefined;
-
-          if (block.bgStyle === 'light') {
-            bgClass = 'bg-white/95 text-stone-900 rounded-2xl shadow-sm px-3.5 py-1.5';
-          } else if (block.bgStyle === 'dark') {
-            bgClass = 'bg-black/90 text-white rounded-2xl shadow-sm px-3.5 py-1.5';
-            textColor = '#ffffff';
-          } else if (block.bgStyle === 'color') {
-            bgClass = 'text-white rounded-2xl shadow-sm px-3.5 py-1.5';
-            customBgStyle = { backgroundColor: block.color || '#111111' };
-            textColor = '#ffffff';
-          }
-
-          const leftPercent = ((block.x || 0) / CANONICAL_WIDTH) * 100;
+          const leftPx = Math.round((block.x || 0) * scaleRatio);
           const topPx = Math.round((block.y || 0) * scaleRatio);
-          const scaledFontSize = Math.max(12, Math.round((block.fontSize || 22) * scaleRatio));
+          const canonicalW = typeof block.width === 'number' ? block.width : CANONICAL_WIDTH;
+          const widthPx = Math.round(canonicalW * scaleRatio);
+          const scaledFontSize = Math.max(10, Math.round((block.fontSize || 16) * scaleRatio));
+          const textColor = block.color || '#111111';
 
           return (
             <div
               key={block.id}
               data-object-box="true"
-              onPointerDown={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
-              onTouchStart={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedTextId(block.id);
                 setSelectedStickerId(null);
                 setActiveToolMode('text');
               }}
-              onDoubleClick={(e) => {
-                e.stopPropagation();
-                openStoryTextEditor(block);
-              }}
               style={{
-                left: `${leftPercent}%`,
+                left: `${leftPx}px`,
                 top: `${topPx}px`,
-                maxWidth: '90%',
+                width: `${widthPx}px`,
+                maxWidth: `${Math.max(60, paperWidth - leftPx)}px`,
                 zIndex: blockZIndex,
                 transform: `rotate(${blockRotation}deg) scale(${blockScale})`,
                 transformOrigin: 'center center',
                 touchAction: 'none',
               }}
-              className={`absolute cursor-move select-none touch-none p-1 transition-shadow ${
+              className={`absolute select-text transition-shadow p-1.5 ${
                 isSelected
-                  ? 'ring-1.5 ring-dashed ring-stone-800 rounded-2xl bg-stone-100/40 backdrop-blur-2xs'
+                  ? 'ring-1.5 ring-dashed ring-stone-800 rounded-xl bg-white/70 backdrop-blur-2xs'
                   : ''
               }`}
             >
-              {/* 선택 시 상단 이동 바 및 조작 핸들 */}
+              {/* 선택 시 상단 드래그 바 및 조작 핸들 */}
               {isSelected && (
                 <>
-                  {/* 상단 드래그 이동 핸들 바 */}
+                  {/* 상단 드래그 이동 핸들 바 (상하좌우 자유 이동) */}
                   <div
                     onPointerDown={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
                     onTouchStart={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
@@ -1503,7 +1450,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     <div className="w-8 h-1 bg-stone-500 rounded-full" />
                   </div>
 
-                  {/* 좌측 상단: 삭제 버튼 */}
+                  {/* 좌측 상단: 글상자 삭제 버튼 */}
                   <button
                     type="button"
                     onPointerDown={(e) => e.stopPropagation()}
@@ -1519,23 +1466,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     <X size={12} />
                   </button>
 
-                  {/* 상단 중앙: 내용 수정(인스타그램 에디터 열기) 버튼 */}
-                  <button
-                    type="button"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openStoryTextEditor(block);
-                    }}
-                    style={{ transform: `scale(${invScale})` }}
-                    className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-2.5 h-5 rounded-full bg-black text-white text-[10px] font-bold shadow flex items-center justify-center space-x-1 z-30 active:scale-95"
-                    title="텍스트 내용 수정"
-                  >
-                    <span>Aa 수정</span>
-                  </button>
-
-                  {/* 우측 상단: 직접 회전 핸들 */}
+                  {/* 우측 상단: 직접 회전(Rotate) 핸들 */}
                   <div
                     onPointerDown={(e) => handleTransformStart(e, 'rotate', 'text', block)}
                     onTouchStart={(e) => handleTransformStart(e, 'rotate', 'text', block)}
@@ -1546,33 +1477,65 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     <RotateCw size={12} />
                   </div>
 
-                  {/* 우측 하단: 직접 크기조절 핸들 */}
+                  {/* 우측 중앙: 가로 너비 조절 핸들 (줄바꿈 변경) */}
+                  <div
+                    onPointerDown={(e) => handleTransformStart(e, 'width', 'text', block)}
+                    onTouchStart={(e) => handleTransformStart(e, 'width', 'text', block)}
+                    style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
+                    className="absolute -right-3.5 top-1/2 -translate-y-1/2 w-6 h-8 rounded-full bg-stone-900 text-white shadow-md flex items-center justify-center cursor-ew-resize z-30 touch-none active:scale-110"
+                    title="드래그하여 가로 너비 조절 (줄바꿈 변경)"
+                  >
+                    <ArrowLeftRight size={12} strokeWidth={2.5} />
+                  </div>
+
+                  {/* 우측 하단: 전체 확대/축소 핸들 (줄바꿈 유지) */}
                   <div
                     onPointerDown={(e) => handleTransformStart(e, 'resize', 'text', block)}
                     onTouchStart={(e) => handleTransformStart(e, 'resize', 'text', block)}
                     style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-black text-white shadow flex items-center justify-center cursor-nwse-resize z-30 touch-none"
-                    title="드래그하여 크기 조절"
+                    className="absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-black text-white shadow flex items-center justify-center cursor-nwse-resize z-30 touch-none active:scale-110"
+                    title="드래그하여 전체 크기 조절 (줄바꿈 유지)"
                   >
                     <Maximize2 size={12} />
                   </div>
                 </>
               )}
 
-              {/* 본문 텍스트 */}
-              <div
+              {/* 본문 텍스트에어리어 (직접 타이핑 입력 & 내용에 맞춰 자동 높이 조절) */}
+              <textarea
+                ref={(el) => {
+                  if (el) {
+                    el.style.height = 'auto';
+                    el.style.height = `${Math.max(32, el.scrollHeight)}px`;
+                  }
+                }}
+                autoFocus={isSelected}
+                value={block.text || ''}
+                placeholder={isSelected ? '텍스트를 입력하세요...' : ''}
+                onFocus={() => {
+                  setSelectedTextId(block.id);
+                  setSelectedStickerId(null);
+                  setActiveToolMode('text');
+                }}
+                onChange={(e) => {
+                  updateTextBlock(block.id, { text: e.target.value });
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${Math.max(32, e.target.scrollHeight)}px`;
+                }}
+                onInput={(e) => {
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${Math.max(32, e.target.scrollHeight)}px`;
+                }}
                 style={{
                   fontFamily: block.fontFamily || "'Gaegu', cursive",
                   fontSize: `${scaledFontSize}px`,
                   color: textColor,
-                  textAlign: block.textAlign || 'center',
-                  lineHeight: 1.35,
-                  ...customBgStyle,
+                  textAlign: block.textAlign || 'left',
+                  lineHeight: 1.5,
                 }}
-                className={`whitespace-pre-wrap break-words cursor-move ${bgClass}`}
-              >
-                {block.text || '텍스트를 입력하세요...'}
-              </div>
+                className="w-full bg-transparent border-0 focus:ring-0 p-1 resize-none overflow-hidden outline-none block"
+                rows={1}
+              />
             </div>
           );
         })}
@@ -1874,31 +1837,84 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
           {/* 타이핑 모드 상세 컨트롤 */}
           {activeToolMode === 'text' && (
-            <div className="flex items-center justify-between animate-fadeIn text-xs sm:text-sm">
-              <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center justify-between gap-1.5 animate-fadeIn text-xs sm:text-sm">
+              <div className="flex items-center space-x-1.5 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => openStoryTextEditor(null)}
-                  className="flex items-center space-x-1 bg-black text-white px-3 py-1.5 rounded-xl hover:bg-stone-800 active:scale-95 transition font-medium shadow-2xs"
+                  onClick={handleAddTextBlock}
+                  className="flex items-center space-x-1 bg-black text-white px-2.5 sm:px-3 py-1.5 rounded-xl hover:bg-stone-800 active:scale-95 transition font-medium shadow-2xs shrink-0"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>새 텍스트</span>
+                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span>새 글상자</span>
                 </button>
 
                 {selectedText && (
-                  <button
-                    type="button"
-                    onClick={() => openStoryTextEditor(selectedText)}
-                    className="flex items-center space-x-1 bg-white text-stone-800 border border-stone-200/80 px-3 py-1.5 rounded-xl hover:bg-stone-100 active:scale-95 transition font-medium shadow-2xs"
-                  >
-                    <Type className="w-4 h-4" />
-                    <span>내용 수정</span>
-                  </button>
+                  <>
+                    {/* 폰트 선택 드롭다운 */}
+                    <select
+                      value={selectedText.fontFamily || "'Gaegu', cursive"}
+                      onChange={(e) => updateTextBlock(selectedText.id, { fontFamily: e.target.value })}
+                      className="bg-white rounded-xl border border-stone-200/90 px-2 py-1 text-xs text-stone-800 font-medium cursor-pointer shadow-2xs outline-none"
+                    >
+                      {FONTS.map(f => (
+                        <option key={f.id} value={f.family}>{f.name}</option>
+                      ))}
+                    </select>
+
+                    {/* 폰트 크기 드롭다운 (기본 16px) */}
+                    <select
+                      value={selectedText.fontSize || 16}
+                      onChange={(e) => updateTextBlock(selectedText.id, { fontSize: Number(e.target.value) })}
+                      className="bg-white rounded-xl border border-stone-200/90 px-2 py-1 text-xs text-stone-800 font-medium cursor-pointer shadow-2xs outline-none"
+                    >
+                      {[12, 14, 16, 18, 20, 24, 28, 32].map(sz => (
+                        <option key={sz} value={sz}>{sz}px</option>
+                      ))}
+                    </select>
+
+                    {/* 정렬 버튼 그룹 */}
+                    <div className="flex items-center bg-white rounded-xl border border-stone-200/90 p-0.5 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => updateTextBlock(selectedText.id, { textAlign: 'left' })}
+                        className={`p-1 rounded-lg transition ${(selectedText.textAlign || 'left') === 'left' ? 'bg-black text-white' : 'text-stone-500 hover:text-black'}`}
+                        title="왼쪽 정렬"
+                      >
+                        <AlignLeft size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateTextBlock(selectedText.id, { textAlign: 'center' })}
+                        className={`p-1 rounded-lg transition ${selectedText.textAlign === 'center' ? 'bg-black text-white' : 'text-stone-500 hover:text-black'}`}
+                        title="가운데 정렬"
+                      >
+                        <AlignCenter size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateTextBlock(selectedText.id, { textAlign: 'right' })}
+                        className={`p-1 rounded-lg transition ${selectedText.textAlign === 'right' ? 'bg-black text-white' : 'text-stone-500 hover:text-black'}`}
+                        title="오른쪽 정렬"
+                      >
+                        <AlignRight size={14} />
+                      </button>
+                    </div>
+
+                    {/* 삭제 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => deleteTextBlock(selectedText.id)}
+                      className="p-1.5 text-stone-500 hover:text-red-500 rounded-lg hover:bg-stone-100 transition"
+                      title="글상자 삭제"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </>
                 )}
               </div>
 
-              <span className="text-xs text-stone-400">
-                드래그하여 자유 이동
+              <span className="text-[11px] text-stone-400 hidden sm:inline">
+                우측: 너비/줄바꿈 조절 · 모서리: 확대축소
               </span>
             </div>
           )}
@@ -1934,16 +1950,23 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
             type="button"
             onClick={() => {
               setSelectedStickerId(null);
-              setSelectedTextId(null);
-              setActiveToolMode('text');
-              openStoryTextEditor(null);
+              if (activeToolMode !== 'text') {
+                setActiveToolMode('text');
+                if (textBlocks.length === 0) {
+                  handleAddTextBlock();
+                } else if (!selectedTextId) {
+                  setSelectedTextId(textBlocks[textBlocks.length - 1].id);
+                }
+              } else {
+                handleAddTextBlock();
+              }
             }}
             className={`p-1.5 rounded-full transition-all ${
               activeToolMode === 'text'
                 ? 'text-black scale-110 font-bold'
                 : 'text-stone-400 hover:text-stone-700'
             }`}
-            title="새 텍스트 작성 (인스타그램 스토리 스타일)"
+            title="새 글상자 작성"
           >
             <Type className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'text' ? 2.6 : 2} />
           </button>
@@ -2062,222 +2085,6 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         selectedStyle={paperStyle}
         onSelectStyle={setPaperStyle}
       />
-
-      {/* 
-        ================================================================
-        [인스타그램 스토리 스타일 텍스트 입력 에디터 모달]
-        - 화이트 반투명 배경(bg-white/90 backdrop-blur-md)으로 검은색 기본 글씨가 또렷하게 보이도록 개선
-        ================================================================
-      */}
-      {isStoryTextOpen && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col justify-between bg-white/90 backdrop-blur-md p-4 sm:p-6 animate-fadeIn select-none overflow-hidden"
-          onClick={handleFinishStoryText}
-        >
-          {/* 1. 상단 바: [정렬 아이콘] [배경 강조 A] ────── [완료] */}
-          <div
-            className="flex items-center justify-between z-20 shrink-0 pt-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center space-x-2.5">
-              {/* 정렬 버튼 (좌측 / 중앙 / 우측 토글) */}
-              <button
-                type="button"
-                onClick={() => {
-                  const nextAlign =
-                    editingAlign === 'left'
-                      ? 'center'
-                      : editingAlign === 'center'
-                      ? 'right'
-                      : 'left';
-                  setEditingAlign(nextAlign);
-                }}
-                className="w-10 h-10 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200/90 flex items-center justify-center backdrop-blur-md active:scale-95 transition shadow-2xs"
-                title="텍스트 정렬 (좌측/중앙/우측)"
-              >
-                {editingAlign === 'left' && <AlignLeft size={20} />}
-                {editingAlign === 'center' && <AlignCenter size={20} />}
-                {editingAlign === 'right' && <AlignRight size={20} />}
-              </button>
-
-              {/* 텍스트 배경 하이라이트 토글 (인스타그램 'A' 강조 버튼) */}
-              <button
-                type="button"
-                onClick={() => {
-                  const nextBg =
-                    editingBgStyle === 'none'
-                      ? 'light'
-                      : editingBgStyle === 'light'
-                      ? 'dark'
-                      : editingBgStyle === 'dark'
-                      ? 'color'
-                      : 'none';
-                  setEditingBgStyle(nextBg);
-                }}
-                className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm transition active:scale-95 ${
-                  editingBgStyle === 'none'
-                    ? 'bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-200/90'
-                    : editingBgStyle === 'light'
-                    ? 'bg-white text-stone-900 border border-stone-300 shadow-sm ring-1 ring-stone-200'
-                    : editingBgStyle === 'dark'
-                    ? 'bg-black text-white shadow-sm'
-                    : 'text-white shadow-sm'
-                }`}
-                style={
-                  editingBgStyle === 'color'
-                    ? { backgroundColor: editingColor }
-                    : undefined
-                }
-                title="텍스트 배경 강조 스타일"
-              >
-                A
-              </button>
-            </div>
-
-            {/* 완료 버튼 (블랙 원형/필 버튼 - 모바일 터치 즉각 반응) */}
-            <button
-              type="button"
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                handleFinishStoryText();
-              }}
-              onTouchEnd={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                handleFinishStoryText();
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleFinishStoryText();
-              }}
-              className="px-5 py-2 bg-black hover:bg-stone-800 text-white font-black text-sm rounded-full shadow-md active:scale-95 transition cursor-pointer select-none"
-            >
-              완료
-            </button>
-          </div>
-
-          {/* 2. 중앙 영역: [좌측 수직 크기 슬라이더] + [중앙 텍스트 입력창] - 바깥 영역 터치 시 작성 완료 */}
-          <div
-            className="flex-1 flex items-center justify-center relative my-auto px-2 overflow-y-auto no-scrollbar cursor-pointer"
-            onClick={handleFinishStoryText}
-          >
-            {/* 인스타그램 스토리 수직 폰트 크기 슬라이더 (좌측) */}
-            <div
-              className="absolute left-1 sm:left-4 top-1/2 -translate-y-1/2 flex flex-col items-center z-20 select-none cursor-default"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <span className="text-[13px] text-stone-900 font-black mb-1">A</span>
-              <div className="h-44 sm:h-52 flex items-center justify-center">
-                <input
-                  type="range"
-                  min="16"
-                  max="44"
-                  step="1"
-                  value={editingSize}
-                  onChange={(e) => setEditingSize(Number(e.target.value))}
-                  className="w-36 sm:w-44 accent-black cursor-pointer -rotate-90 origin-center"
-                />
-              </div>
-              <span className="text-[9px] text-stone-400 font-bold mt-1">A</span>
-            </div>
-
-            {/* 중앙 텍스트에어리어 (자동 높이 & 실시간 스타일 반영) */}
-            <div
-              className="w-full max-w-sm sm:max-w-md px-10 flex flex-col items-center justify-center cursor-default"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <textarea
-                ref={storyTextareaRef}
-                value={editingText}
-                onChange={(e) => setEditingText(e.target.value)}
-                placeholder="텍스트를 입력하세요..."
-                rows={Math.max(1, (editingText || '').split('\n').length)}
-                style={{
-                  fontFamily: editingFont,
-                  fontSize: `${editingSize}px`,
-                  color:
-                    editingBgStyle === 'dark' || editingBgStyle === 'color'
-                      ? '#ffffff'
-                      : editingBgStyle === 'light'
-                      ? '#111111'
-                      : editingColor,
-                  textAlign: editingAlign,
-                  lineHeight: 1.35,
-                  userSelect: 'text',
-                  WebkitUserSelect: 'text',
-                  backgroundColor:
-                    editingBgStyle === 'light'
-                      ? '#ffffff'
-                      : editingBgStyle === 'dark'
-                      ? '#111111'
-                      : editingBgStyle === 'color'
-                      ? editingColor
-                      : 'transparent',
-                }}
-                className={`w-full border-0 outline-hidden resize-none p-3.5 placeholder-stone-400 overflow-hidden transition-all select-text ${
-                  editingBgStyle === 'light'
-                    ? 'rounded-2xl shadow-md border border-stone-200/90'
-                    : editingBgStyle !== 'none'
-                    ? 'rounded-2xl shadow-xl'
-                    : ''
-                }`}
-              />
-            </div>
-          </div>
-
-          {/* 3. 하단 컨트롤 바: [폰트 선택 캐러셀] + [컬러 스와치 팔레트] */}
-          <div
-            className="flex flex-col space-y-3 z-20 shrink-0 pb-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 폰트 선택 캐러셀 (인스타그램 스토리 폰트 셀렉터) */}
-            <div className="flex items-center justify-center space-x-2 overflow-x-auto no-scrollbar py-1">
-              {FONTS.map((font) => (
-                <button
-                  key={font.id}
-                  type="button"
-                  onClick={() => setEditingFont(font.family)}
-                  style={{ fontFamily: font.family }}
-                  className={`px-3.5 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
-                    editingFont === font.family
-                      ? 'bg-black text-white font-bold scale-105 shadow-sm'
-                      : 'bg-stone-100 text-stone-700 hover:bg-stone-200 border border-stone-200/80 font-medium'
-                  }`}
-                >
-                  {font.name}
-                </button>
-              ))}
-            </div>
-
-            {/* 컬러 스와치 팔레트 */}
-            <div className="flex items-center justify-center space-x-2 overflow-x-auto no-scrollbar py-1">
-              {FIXED_PRESET_COLORS.map((c) => {
-                const isSelected = editingColor.toLowerCase() === c.value.toLowerCase();
-                return (
-                  <button
-                    key={c.value}
-                    type="button"
-                    onClick={() => setEditingColor(c.value)}
-                    className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center p-[2px] box-border transition-all ${
-                      isSelected
-                        ? 'border-2 border-stone-900 scale-110 shadow-sm'
-                        : 'border-2 border-transparent hover:opacity-80'
-                    }`}
-                    title={c.name}
-                  >
-                    <span
-                      className={`w-full h-full rounded-full block ${
-                        c.value === '#ffffff' ? 'border border-stone-300' : ''
-                      }`}
-                      style={{ backgroundColor: c.value }}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 
         와이드 버전(2분할 뷰) 저장 완료 알림 토스트 팝업

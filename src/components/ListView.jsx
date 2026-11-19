@@ -62,9 +62,15 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
     (normalizedLayers.textBlocks || []).forEach((block) => {
       if (block.text && block.text.trim()) {
         hasContent = true;
-        const lineCount = (block.text.split('\n') || []).length;
-        const fontSz = typeof block.fontSize === 'number' ? block.fontSize : 22;
-        const approxHeight = Math.max(28, lineCount * fontSz * 1.3) * (block.scale || 1);
+        const fontSz = typeof block.fontSize === 'number' ? block.fontSize : 16;
+        const blockW = typeof block.width === 'number' ? block.width : CANONICAL_WIDTH;
+        const charsPerLine = Math.max(8, Math.floor(blockW / (fontSz * 0.65)));
+        const paragraphs = (block.text || '').split('\n');
+        let totalLines = 0;
+        paragraphs.forEach(p => {
+          totalLines += Math.max(1, Math.ceil((p.length || 1) / charsPerLine));
+        });
+        const approxHeight = Math.max(28, totalLines * fontSz * 1.5) * (block.scale || 1);
         const bottom = (block.y || 0) + approxHeight;
         if (bottom > maxY) maxY = bottom;
       }
@@ -406,17 +412,18 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected }) {
                     key={block.id || `tb-${idx}`}
                     style={{
                       position: 'absolute',
-                      left: typeof block.x === 'number' ? `${block.x}px` : '18px',
+                      left: typeof block.x === 'number' ? `${block.x}px` : '0px',
                       top: `${block.y || 40}px`,
-                      maxWidth: '90%',
+                      width: typeof block.width === 'number' ? `${block.width}px` : `${CANONICAL_WIDTH}px`,
+                      maxWidth: '100%',
                       zIndex: typeof block.layerOrder === 'number' ? block.layerOrder : idx + 1,
                       transform: `rotate(${block.rotation || 0}deg) scale(${block.scale || 1})`,
                       transformOrigin: 'center center',
                       fontFamily: block.fontFamily || "'Gaegu', cursive",
-                      fontSize: `${block.fontSize || 22}px`,
+                      fontSize: `${block.fontSize || 16}px`,
                       color: textColor,
-                      textAlign: block.textAlign || 'center',
-                      lineHeight: 1.35,
+                      textAlign: block.textAlign || 'left',
+                      lineHeight: 1.5,
                       ...customBgStyle,
                     }}
                     className={`whitespace-pre-wrap break-words select-none pointer-events-none p-1 ${bgClass}`}
