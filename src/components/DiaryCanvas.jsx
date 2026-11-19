@@ -789,16 +789,16 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
         [상단] 1. 뒤로가기 + Daily Planner 레이블 ─── [ ✔ ] (검은색 원형 완료 버튼)
         ================================================================
       */}
-      <div className="px-[5.5cqw] pt-[4cqw] pb-[1.5cqw] shrink-0 flex items-center justify-between">
-        <div className="flex items-center space-x-[2.5cqw]">
+      <div className="px-6 pt-5 pb-2 shrink-0 flex items-center justify-between">
+        <div className="flex items-center space-x-2.5">
           <button
             onClick={onBack}
-            className="text-black hover:opacity-70 transition p-[1cqw] -ml-[1cqw]"
+            className="text-black hover:opacity-70 transition p-1.5 -ml-1.5 rounded-full"
             title="뒤로가기"
           >
-            <ArrowLeft className="w-[5.5cqw] h-[5.5cqw]" strokeWidth={2.5} />
+            <ArrowLeft size={22} strokeWidth={2.5} />
           </button>
-          <span className="text-[3.5cqw] font-semibold text-stone-400 tracking-tight">
+          <span className="text-sm font-semibold text-stone-400 tracking-tight">
             Daily Planner
           </span>
         </div>
@@ -806,10 +806,10 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
         {/* 우측 상단: [ ✔ ] 검은색 원형 저장 완료 버튼 */}
         <button
           onClick={handleSaveDiary}
-          className="w-[10.5cqw] h-[10.5cqw] rounded-full bg-black hover:bg-stone-800 active:scale-95 text-white transition flex items-center justify-center shadow-xs"
+          className="w-11 h-11 rounded-full bg-black hover:bg-stone-800 active:scale-95 text-white transition flex items-center justify-center shadow-xs"
           title="다이어리 저장 완료"
         >
-          <Check className="w-[4.8cqw] h-[4.8cqw]" strokeWidth={3} />
+          <Check size={20} strokeWidth={3} />
         </button>
       </div>
 
@@ -821,15 +821,15 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                  ────────────────────────────────
         ================================================================
       */}
-      <div className="px-[5.5cqw] pt-[1cqw] pb-[2cqw] shrink-0">
+      <div className="px-6 pt-1 pb-3 shrink-0">
         <div className="flex items-end justify-between">
           {/* 날짜 헤더 (탭하면 날짜 변경 가능) */}
           <div className="relative cursor-pointer group" title="날짜 변경">
-            <div className="text-[4.2cqw] font-black text-black leading-tight tracking-tight">
+            <div className="text-base sm:text-lg font-black text-black leading-tight tracking-tight">
               {yearNum}
             </div>
 
-            <div className="text-[7.8cqw] font-black text-black tracking-tight leading-none mt-[0.5cqw] group-hover:opacity-75 transition-opacity">
+            <div className="text-2xl sm:text-3xl font-black text-black tracking-tight leading-none mt-1 group-hover:opacity-75 transition-opacity">
               {monthNum}.{dayNum} {dayEn}
             </div>
 
@@ -847,7 +847,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
             <button
               type="button"
               onClick={() => setIsWeatherOpen(!isWeatherOpen)}
-              className="w-[10.5cqw] h-[10.5cqw] bg-transparent border-0 p-0 active:scale-95 transition flex items-center justify-center"
+              className="w-11 h-11 bg-transparent border-0 p-0 active:scale-95 transition flex items-center justify-center"
               title="날씨 / 대표 스티커 선택"
             >
               {weather ? (
@@ -855,13 +855,13 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                   <img
                     src={weather}
                     alt="대표 아이콘"
-                    className="w-[10.5cqw] h-[10.5cqw] object-contain block select-none"
+                    className="w-10 h-10 object-contain block select-none"
                   />
                 ) : (
-                  <span className="text-[8cqw] leading-none select-none">{weather}</span>
+                  <span className="text-3xl leading-none select-none">{weather}</span>
                 )
               ) : (
-                <Plus className="w-[5.8cqw] h-[5.8cqw] text-black" strokeWidth={2.5} />
+                <Plus size={24} className="text-black" strokeWidth={2.5} />
               )}
             </button>
 
@@ -1095,13 +1095,13 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
         </div>
 
         {/* 선명한 블랙 가로 구분선 */}
-        <div className="w-full h-[0.35cqw] min-h-[1.5px] bg-black mt-[2cqw]" />
+        <div className="w-full h-[1.5px] bg-black mt-3 sm:mt-4" />
       </div>
 
       {/* 
         ================================================================
         [본문] 모든 디바이스에서 100% 동일한 비율과 레이아웃을 보장하는 다이어리 속지
-        - 모바일에서는 화면을 시원하게 채우고, 태블릿/PC에서는 책상 위 3:4.2 비율의 정갈한 노트로 유동 확대
+        - 모바일에서는 화면을 시원하게 채우고, 태블릿/PC에서는 캘린더/목록과 동일한 넉넉한 노트 공간 제공
         - 가로 너비 기준 상대 비율(%) 및 scaleRatio를 적용하여 획, 스티커, 텍스트 줄바꿈 위치가 완벽히 일치
         ================================================================
       */}
@@ -1113,7 +1113,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
             setSelectedStickerId(null);
           }
         }}
-        className={`flex-1 mx-3.5 sm:mx-6 mb-36 sm:mb-40 relative isolate overflow-hidden rounded-2xl sm:rounded-3xl shadow-xs border border-stone-200/90 ${currentPaperClass} transition-colors duration-200`}
+        className={`flex-1 mx-3.5 sm:mx-6 mb-24 sm:mb-28 relative isolate overflow-hidden rounded-2xl sm:rounded-3xl shadow-xs border border-stone-200/90 ${currentPaperClass} transition-colors duration-200`}
       >
         {/* (1-A) 생성 순서(layerOrder)별 드로잉 밴드 캔버스 레이어 */}
         {strokeBands.map((band) => (
@@ -1408,25 +1408,25 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
 
       {/* 
         ================================================================
-        [하단 도구 모음 통합 컨테이너 - 두 툴 박스 간격 cqw 비례]
+        [하단 도구 모음 통합 컨테이너]
         (모바일 키보드 자판 활성화 시 키보드 높이만큼 자동으로 위로 올라옴)
         ================================================================
       */}
       <div
-        style={{ bottom: `calc(3cqw + ${keyboardOffset}px)` }}
-        className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-40 w-[90cqw] flex flex-col space-y-[2cqw] pointer-events-none transition-[bottom] duration-150 ease-out"
+        style={{ bottom: `calc(1rem + ${keyboardOffset}px)` }}
+        className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-40 w-[92%] max-w-lg flex flex-col space-y-2 pointer-events-none transition-[bottom] duration-150 ease-out"
       >
         
-        {/* (1) 위쪽 상세 컨트롤 패널 - 라운드 4.5cqw (펜/텍스트/속지 모드일 때 표시) */}
+        {/* (1) 위쪽 상세 컨트롤 패널 (펜/텍스트/속지 모드일 때 표시) */}
         {(activeToolMode === 'pen' || activeToolMode === 'text' || activeToolMode === 'paper') && (
-        <div className="pointer-events-auto bg-[#f4f4f4]/95 backdrop-blur-md border border-stone-200/70 rounded-[4.5cqw] p-[2.5cqw] shadow-md flex flex-col justify-center overflow-visible">
+        <div className="pointer-events-auto bg-[#f4f4f4]/95 backdrop-blur-md border border-stone-200/70 rounded-2xl sm:rounded-3xl p-2 sm:p-2.5 shadow-md flex flex-col justify-center overflow-visible">
           
           {/* 펜 모드 상세 컨트롤 */}
           {activeToolMode === 'pen' && (
-            <div className="flex flex-col space-y-[2cqw] animate-fadeIn">
+            <div className="flex flex-col space-y-1.5 sm:space-y-2 animate-fadeIn">
               {/* 상단: 펜 종류 & 되돌리기 */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-[0.8cqw] bg-white/80 p-[0.5cqw] rounded-[2.2cqw] text-xs border border-stone-200/50">
+                <div className="flex items-center space-x-1 bg-white/80 p-0.5 rounded-xl text-xs border border-stone-200/50">
                   {PEN_TOOLS.map(tool => (
                     <button
                       key={tool.id}
@@ -1434,7 +1434,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                         setActivePenTool(tool.id);
                         if (tool.size) setPenSize(tool.size);
                       }}
-                      className={`px-[2.5cqw] py-[0.8cqw] rounded-[1.8cqw] font-medium text-[2.8cqw] transition ${
+                      className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium text-xs sm:text-sm transition ${
                         activePenTool === tool.id ? 'bg-black text-white shadow-xs font-bold' : 'text-stone-600 hover:text-black'
                       }`}
                     >
@@ -1443,39 +1443,39 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                   ))}
                 </div>
 
-                <div className="flex items-center space-x-[0.8cqw] text-stone-600">
+                <div className="flex items-center space-x-1 text-stone-600">
                   <button 
                     onClick={handleUndo} 
                     disabled={historyIndex < 0}
-                    className="p-[1.2cqw] rounded-lg hover:bg-white disabled:opacity-30 transition"
+                    className="p-1.5 rounded-lg hover:bg-white disabled:opacity-30 transition"
                     title="되돌리기"
                   >
-                    <RotateCcw className="w-[3.6cqw] h-[3.6cqw]" />
+                    <RotateCcw className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                   </button>
                   <button 
                     onClick={handleRedo} 
                     disabled={historyIndex >= strokesHistory.length - 1}
-                    className="p-[1.2cqw] rounded-lg hover:bg-white disabled:opacity-30 transition"
+                    className="p-1.5 rounded-lg hover:bg-white disabled:opacity-30 transition"
                     title="다시 실행"
                   >
-                    <RotateCw className="w-[3.6cqw] h-[3.6cqw]" />
+                    <RotateCw className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                   </button>
                   <button 
                     onClick={handleClearStrokes} 
-                    className="p-[1.2cqw] rounded-lg hover:bg-red-50 text-stone-400 hover:text-red-500 transition"
+                    className="p-1.5 rounded-lg hover:bg-red-50 text-stone-400 hover:text-red-500 transition"
                     title="모두 지우기"
                   >
-                    <Trash2 className="w-[3.6cqw] h-[3.6cqw]" />
+                    <Trash2 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                   </button>
                 </div>
               </div>
 
               {/* 하단: 스크롤바 없는 완벽한 한 줄 컬러 스와치 & 굵기 슬라이더 */}
               {activePenTool !== 'eraser' && (
-                <div className="flex items-center justify-between pt-[1cqw] border-t border-stone-200/50">
+                <div className="flex items-center justify-between pt-1 border-t border-stone-200/50">
                   
                   {/* 컬러 스와치 영역 */}
-                  <div className="flex items-center space-x-[0.8cqw] overflow-x-auto no-scrollbar py-[0.5cqw]">
+                  <div className="flex items-center space-x-1 sm:space-x-1.5 overflow-x-auto no-scrollbar py-0.5">
                     {/* 1. 고정 기본 10대 컬러 */}
                     {FIXED_PRESET_COLORS.map((c) => {
                       const isSelected = penColor.toLowerCase() === c.value.toLowerCase();
@@ -1483,7 +1483,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                         <button
                           key={c.value}
                           onClick={() => setPenColor(c.value)}
-                          className={`w-[4.8cqw] h-[4.8cqw] rounded-full shrink-0 flex items-center justify-center p-[0.3cqw] box-border transition-all ${
+                          className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full shrink-0 flex items-center justify-center p-0.5 box-border transition-all ${
                             isSelected
                               ? 'border-2 border-black'
                               : 'border-2 border-transparent hover:opacity-80'
@@ -1501,12 +1501,12 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                     })}
 
                     {/* 2. 구분 얇은 선 */}
-                    <div className="w-[1px] h-[3cqw] bg-stone-300 shrink-0 mx-[0.5cqw]" />
+                    <div className="w-[1px] h-3.5 bg-stone-300 shrink-0 mx-0.5" />
 
                     {/* 3. 커스텀 컬러 칩 */}
                     <button
                       onClick={() => setPenColor(customColor)}
-                      className={`w-[4.8cqw] h-[4.8cqw] rounded-full shrink-0 flex items-center justify-center p-[0.3cqw] box-border transition-all ${
+                      className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full shrink-0 flex items-center justify-center p-0.5 box-border transition-all ${
                         penColor.toLowerCase() === customColor.toLowerCase()
                           ? 'border-2 border-black'
                           : 'border-2 border-transparent hover:opacity-80'
@@ -1523,7 +1523,7 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                     <div className="relative flex items-center shrink-0">
                       <button
                         onClick={() => colorPickerInputRef.current && colorPickerInputRef.current.click()}
-                        className="w-[4.8cqw] h-[4.8cqw] rounded-full border border-stone-300 shadow-2xs hover:opacity-80 active:scale-95 transition flex items-center justify-center box-border p-[0.3cqw]"
+                        className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-stone-300 shadow-2xs hover:opacity-80 active:scale-95 transition flex items-center justify-center box-border p-0.5"
                         style={{
                           background: 'conic-gradient(from 90deg, #ff0000, #ff8000, #ffff00, #00ff00, #00ffff, #0000ff, #8000ff, #ff0080, #ff0000)'
                         }}
@@ -1544,15 +1544,15 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                   </div>
 
                   {/* 굵기 조절 */}
-                  <div className="flex items-center space-x-[1cqw] shrink-0 pl-[1cqw]">
-                    <span className="text-[2.6cqw] text-stone-500 font-medium">굵기</span>
+                  <div className="flex items-center space-x-1.5 shrink-0 pl-1">
+                    <span className="text-xs text-stone-500 font-medium">굵기</span>
                     <input
                       type="range"
                       min={activePenTool === 'highlighter' ? 8 : 1}
                       max={activePenTool === 'highlighter' ? 32 : 8}
                       value={penSize}
                       onChange={(e) => setPenSize(Number(e.target.value))}
-                      className="w-[14cqw] accent-black cursor-pointer"
+                      className="w-16 sm:w-20 accent-black cursor-pointer"
                     />
                   </div>
                 </div>
@@ -1562,14 +1562,14 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
 
           {/* 타이핑 모드 상세 컨트롤 */}
           {activeToolMode === 'text' && (
-            <div className="flex items-center justify-between animate-fadeIn text-[2.8cqw]">
-              <div className="flex items-center space-x-[2cqw]">
+            <div className="flex items-center justify-between animate-fadeIn text-xs sm:text-sm">
+              <div className="flex items-center space-x-2">
                 <button
                   type="button"
                   onClick={() => openStoryTextEditor(null)}
-                  className="flex items-center space-x-[1.2cqw] bg-black text-white px-[3cqw] py-[1.2cqw] rounded-[2.2cqw] hover:bg-stone-800 active:scale-95 transition font-medium shadow-2xs"
+                  className="flex items-center space-x-1 bg-black text-white px-3 py-1.5 rounded-xl hover:bg-stone-800 active:scale-95 transition font-medium shadow-2xs"
                 >
-                  <Plus className="w-[3.6cqw] h-[3.6cqw]" />
+                  <Plus className="w-4 h-4" />
                   <span>새 텍스트</span>
                 </button>
 
@@ -1577,15 +1577,15 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
                   <button
                     type="button"
                     onClick={() => openStoryTextEditor(selectedText)}
-                    className="flex items-center space-x-[1.2cqw] bg-white text-stone-800 border border-stone-200/80 px-[3cqw] py-[1.2cqw] rounded-[2.2cqw] hover:bg-stone-100 active:scale-95 transition font-medium shadow-2xs"
+                    className="flex items-center space-x-1 bg-white text-stone-800 border border-stone-200/80 px-3 py-1.5 rounded-xl hover:bg-stone-100 active:scale-95 transition font-medium shadow-2xs"
                   >
-                    <Type className="w-[3.6cqw] h-[3.6cqw]" />
+                    <Type className="w-4 h-4" />
                     <span>내용 수정</span>
                   </button>
                 )}
               </div>
 
-              <span className="text-[2.6cqw] text-stone-400">
+              <span className="text-xs text-stone-400">
                 드래그하여 자유 이동
               </span>
             </div>
@@ -1593,13 +1593,13 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
 
           {/* 속지 모드 상세 컨트롤 */}
           {activeToolMode === 'paper' && (
-            <div className="flex items-center justify-between animate-fadeIn text-[2.8cqw]">
-              <div className="flex items-center space-x-[1.5cqw] overflow-x-auto no-scrollbar w-full">
+            <div className="flex items-center justify-between animate-fadeIn text-xs sm:text-sm">
+              <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar w-full">
                 {PAPER_STYLES.map(style => (
                   <button
                     key={style.id}
                     onClick={() => setPaperStyle(style.id)}
-                    className={`flex-1 py-[1.2cqw] px-[2cqw] rounded-[2.2cqw] text-[2.8cqw] font-medium transition ${
+                    className={`flex-1 py-1.5 px-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
                       paperStyle === style.id
                         ? 'bg-black text-white shadow-2xs'
                         : 'bg-white/80 text-stone-700 hover:bg-white border border-stone-200/50'
@@ -1614,8 +1614,8 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
         </div>
         )}
 
-        {/* (2) 아래쪽 아이콘 독 툴박스 - 라운드 4.5cqw */}
-        <div className="pointer-events-auto bg-[#f4f4f4]/95 backdrop-blur-md border border-stone-200/80 rounded-[4.5cqw] px-[6cqw] py-[2.8cqw] shadow-md flex items-center justify-between">
+        {/* (2) 아래쪽 아이콘 독 툴박스 */}
+        <div className="pointer-events-auto bg-[#f4f4f4]/95 backdrop-blur-md border border-stone-200/80 rounded-2xl sm:rounded-3xl px-6 py-2.5 sm:py-3 shadow-md flex items-center justify-between">
           
           {/* 1. 타이핑 아이콘 (Type) */}
           <button
@@ -1626,14 +1626,14 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
               setActiveToolMode('text');
               openStoryTextEditor(null);
             }}
-            className={`p-[1.2cqw] rounded-full transition-all ${
+            className={`p-1.5 rounded-full transition-all ${
               activeToolMode === 'text'
                 ? 'text-black scale-110 font-bold'
                 : 'text-stone-400 hover:text-stone-700'
             }`}
             title="새 텍스트 작성 (인스타그램 스토리 스타일)"
           >
-            <Type className="w-[5.2cqw] h-[5.2cqw]" strokeWidth={activeToolMode === 'text' ? 2.6 : 2} />
+            <Type className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'text' ? 2.6 : 2} />
           </button>
 
           {/* 2. 손글씨/펜 아이콘 (PenTool) */}
@@ -1643,14 +1643,14 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
               setSelectedTextId(null);
               setActiveToolMode(activeToolMode === 'pen' ? 'none' : 'pen');
             }}
-            className={`p-[1.2cqw] rounded-full transition-all ${
+            className={`p-1.5 rounded-full transition-all ${
               activeToolMode === 'pen'
                 ? 'text-black scale-110'
                 : 'text-stone-400 hover:text-stone-700'
             }`}
             title="손글씨/펜"
           >
-            <PenTool className="w-[5.2cqw] h-[5.2cqw]" strokeWidth={activeToolMode === 'pen' ? 2.6 : 2} />
+            <PenTool className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'pen' ? 2.6 : 2} />
           </button>
 
           {/* 3. 스티커 아이콘 (Sparkles) */}
@@ -1660,14 +1660,14 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
               setActiveToolMode('sticker');
               setIsStickerPaletteOpen(true);
             }}
-            className={`p-[1.2cqw] rounded-full transition-all ${
+            className={`p-1.5 rounded-full transition-all ${
               activeToolMode === 'sticker' || isStickerPaletteOpen
                 ? 'text-black scale-110'
                 : 'text-stone-400 hover:text-stone-700'
             }`}
             title="스티커 꾸미기"
           >
-            <Sparkles className="w-[5.2cqw] h-[5.2cqw]" strokeWidth={activeToolMode === 'sticker' || isStickerPaletteOpen ? 2.6 : 2} />
+            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'sticker' || isStickerPaletteOpen ? 2.6 : 2} />
           </button>
 
           {/* 4. 속지 아이콘 (LayoutGrid) */}
@@ -1677,23 +1677,23 @@ export default function DiaryCanvas({ diary, onSave, onDelete, onBack }) {
               setSelectedTextId(null);
               setActiveToolMode(activeToolMode === 'paper' ? 'none' : 'paper');
             }}
-            className={`p-[1.2cqw] rounded-full transition-all ${
+            className={`p-1.5 rounded-full transition-all ${
               activeToolMode === 'paper'
                 ? 'text-black scale-110'
                 : 'text-stone-400 hover:text-stone-700'
             }`}
             title="속지 설정"
           >
-            <LayoutGrid className="w-[5.2cqw] h-[5.2cqw]" strokeWidth={activeToolMode === 'paper' ? 2.6 : 2} />
+            <LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'paper' ? 2.6 : 2} />
           </button>
 
           {/* 5. 일기 삭제 휴지통 아이콘 (Trash2) */}
           <button
             onClick={() => setIsDeleteModalOpen(true)}
-            className="p-[1.2cqw] rounded-full transition-all text-stone-400 hover:text-red-500 active:scale-95"
+            className="p-1.5 rounded-full transition-all text-stone-400 hover:text-red-500 active:scale-95"
             title="일기 삭제"
           >
-            <Trash2 className="w-[5.2cqw] h-[5.2cqw]" strokeWidth={2} />
+            <Trash2 className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={2} />
           </button>
         </div>
 

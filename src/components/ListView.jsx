@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Search, Trash2 } from 'lucide-react';
 import { PAPER_STYLES } from '../constants';
 import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas, CANONICAL_WIDTH, CANONICAL_HEIGHT } from '../utils/canvasLayers';
@@ -23,15 +23,15 @@ function DiaryCard({ diary, onSelect, onDelete }) {
   const canvasRef = useRef(null);
 
   // 날짜 안전 파싱
-  const dateParts = diary.date ? diary.date.split('-') : ['2026', '11', '17'];
-  const year = parseInt(dateParts[0], 10);
-  const month = parseInt(dateParts[1], 10) - 1;
-  const day = parseInt(dateParts[2], 10);
+  const dateParts = diary?.date ? String(diary.date).split('-') : [];
+  const year = dateParts[0] && !isNaN(parseInt(dateParts[0], 10)) ? parseInt(dateParts[0], 10) : 2026;
+  const month = dateParts[1] && !isNaN(parseInt(dateParts[1], 10)) ? parseInt(dateParts[1], 10) - 1 : 10;
+  const day = dateParts[2] && !isNaN(parseInt(dateParts[2], 10)) ? parseInt(dateParts[2], 10) : 17;
 
   const dateObj = new Date(year, month, day);
-  const dayNum = String(day).padStart(2, '0');
-  const dayEn = DAY_NAMES_EN[dateObj.getDay()];
-  const mood = diary.thumbnailMood || diary.weather || '';
+  const dayNum = String(isNaN(day) ? 17 : day).padStart(2, '0');
+  const dayEn = DAY_NAMES_EN[isNaN(dateObj.getDay()) ? 0 : dateObj.getDay()] || 'WED';
+  const mood = diary?.thumbnailMood || diary?.weather || '';
   const isMoodImage =
     typeof mood === 'string' &&
     (mood.startsWith('data:') ||
@@ -268,7 +268,7 @@ function DiaryCard({ diary, onSelect, onDelete }) {
 
                 return (
                   <div
-                    key={block.id}
+                    key={block.id || `tb-${idx}`}
                     style={{
                       position: 'absolute',
                       left: typeof block.x === 'number' ? `${block.x}px` : '18px',
@@ -311,7 +311,7 @@ function DiaryCard({ diary, onSelect, onDelete }) {
               {/* 스티커 & 꾸미기 에셋 (작성 화면과 100% 동일한 절대 위치와 크기) */}
               {normalizedLayers.stickers?.map((sticker, idx) => (
                 <div
-                  key={sticker.id}
+                  key={sticker.id || `st-${idx}`}
                   style={{
                     position: 'absolute',
                     left: `${sticker.x || 0}px`,
@@ -382,12 +382,15 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
   // 월별 그룹화 (예: '2026-12', '2026-11' 등)
   const groupedByMonth = {};
   filteredDiaries.forEach((diary) => {
-    const parts = diary.date ? diary.date.split('-') : ['2026', '11', '17'];
-    const key = `${parts[0]}-${parts[1]}`;
+    if (!diary) return;
+    const parts = diary.date ? String(diary.date).split('-') : [];
+    const safeYear = parts[0] && !isNaN(parseInt(parts[0], 10)) ? parseInt(parts[0], 10) : 2026;
+    const safeMonth = parts[1] && !isNaN(parseInt(parts[1], 10)) ? parseInt(parts[1], 10) : 11;
+    const key = `${safeYear}-${String(safeMonth).padStart(2, '0')}`;
     if (!groupedByMonth[key]) {
       groupedByMonth[key] = {
-        year: parseInt(parts[0], 10),
-        month: parseInt(parts[1], 10),
+        year: safeYear,
+        month: safeMonth,
         items: []
       };
     }
@@ -428,7 +431,7 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
         <div className="pt-1 pb-10 space-y-6">
           {monthKeys.map((key) => {
             const group = groupedByMonth[key];
-            const monthName = MONTH_NAMES_EN[group.month - 1];
+            const monthName = MONTH_NAMES_EN[Math.max(0, Math.min(11, (group.month || 1) - 1))] || 'November';
 
             return (
               <div key={key}>

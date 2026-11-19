@@ -158,8 +158,8 @@ export function StrokeBandCanvas({ band }) {
         dpr * (currentH / CANONICAL_HEIGHT)
       );
 
-      band.operations.forEach((stroke) => {
-        if (!stroke.points || stroke.points.length < 2) return;
+      (band?.operations || []).forEach((stroke) => {
+        if (!stroke?.points || stroke.points.length < 2) return;
         ctx.save();
         ctx.beginPath();
 
@@ -205,7 +205,7 @@ export function StrokeBandCanvas({ band }) {
 
     renderBand();
     const ro = new ResizeObserver(() => renderBand());
-    ro.observe(canvas);
+    ro.observe(canvas.parentElement || canvas);
     return () => ro.disconnect();
   }, [band]);
 
