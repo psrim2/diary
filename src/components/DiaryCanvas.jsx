@@ -1896,85 +1896,91 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
           {/* 타이핑 모드 상세 컨트롤 */}
           {activeToolMode === 'text' && (
-            <div className="flex flex-wrap items-center justify-between gap-1.5 animate-fadeIn text-xs sm:text-sm">
-              <div className="flex items-center space-x-1.5 flex-wrap">
+            <div className="flex items-center justify-between w-full gap-1.5 animate-fadeIn text-xs sm:text-sm">
+              {!selectedText ? (
+                /* 글상자가 선택되지 않은 기본 상태: flex-1로 가로 전체 확장되는 블랙 버튼 */
                 <button
                   type="button"
                   onClick={handleAddTextBlock}
-                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white text-stone-900 border border-stone-300 hover:bg-stone-50 active:scale-95 transition shadow-2xs flex items-center justify-center shrink-0"
+                  className="flex-1 w-full py-2 px-4 rounded-xl bg-black text-white hover:bg-stone-800 active:scale-95 transition shadow-2xs flex items-center justify-center space-x-1.5 font-medium text-xs sm:text-sm cursor-pointer"
                   title="새 글상자 추가"
                 >
                   <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>글상자 추가</span>
                 </button>
+              ) : (
+                /* 글상자가 선택된 편집 상태: 서체/크기/정렬/삭제 툴바 + 블랙 + 추가 버튼 */
+                <div className="flex items-center justify-between w-full space-x-1.5 overflow-x-auto no-scrollbar">
+                  <button
+                    type="button"
+                    onClick={handleAddTextBlock}
+                    className="w-8 h-8 rounded-xl bg-black text-white hover:bg-stone-800 active:scale-95 transition shadow-2xs flex items-center justify-center shrink-0 cursor-pointer"
+                    title="새 글상자 추가"
+                  >
+                    <Plus className="w-4 h-4 stroke-[2.5]" />
+                  </button>
 
-                {selectedText && (
-                  <>
-                    {/* 폰트 선택 드롭다운 (기본: 고딕체) */}
-                    <select
-                      value={selectedText.fontFamily || "'Pretendard', sans-serif"}
-                      onChange={(e) => updateTextBlock(selectedText.id, { fontFamily: e.target.value })}
-                      className="bg-white rounded-xl border border-stone-200/90 px-2 py-1 text-xs text-stone-800 font-medium cursor-pointer shadow-2xs outline-none"
-                    >
-                      {FONTS.map(f => (
-                        <option key={f.id} value={f.family}>{f.name}</option>
-                      ))}
-                    </select>
+                  {/* 폰트 선택 드롭다운 (기본: 고딕체) */}
+                  <select
+                    value={selectedText.fontFamily || "'Pretendard', sans-serif"}
+                    onChange={(e) => updateTextBlock(selectedText.id, { fontFamily: e.target.value })}
+                    className="bg-white rounded-xl border border-stone-200/90 px-2 py-1.5 text-xs text-stone-800 font-medium cursor-pointer shadow-2xs outline-none shrink-0"
+                  >
+                    {FONTS.map(f => (
+                      <option key={f.id} value={f.family}>{f.name}</option>
+                    ))}
+                  </select>
 
-                    {/* 폰트 크기 드롭다운 (기본: 18px) */}
-                    <select
-                      value={selectedText.fontSize || 18}
-                      onChange={(e) => updateTextBlock(selectedText.id, { fontSize: Number(e.target.value) })}
-                      className="bg-white rounded-xl border border-stone-200/90 px-2 py-1 text-xs text-stone-800 font-medium cursor-pointer shadow-2xs outline-none"
-                    >
-                      {[12, 14, 16, 18, 20, 24, 28, 32].map(sz => (
-                        <option key={sz} value={sz}>{sz}px</option>
-                      ))}
-                    </select>
+                  {/* 폰트 크기 드롭다운 (기본: 18px) */}
+                  <select
+                    value={selectedText.fontSize || 18}
+                    onChange={(e) => updateTextBlock(selectedText.id, { fontSize: Number(e.target.value) })}
+                    className="bg-white rounded-xl border border-stone-200/90 px-2 py-1.5 text-xs text-stone-800 font-medium cursor-pointer shadow-2xs outline-none shrink-0"
+                  >
+                    {[12, 14, 16, 18, 20, 24, 28, 32].map(sz => (
+                      <option key={sz} value={sz}>{sz}px</option>
+                    ))}
+                  </select>
 
-                    {/* 정렬 버튼 그룹 */}
-                    <div className="flex items-center bg-white rounded-xl border border-stone-200/90 p-0.5 shadow-2xs">
-                      <button
-                        type="button"
-                        onClick={() => updateTextBlock(selectedText.id, { textAlign: 'left' })}
-                        className={`p-1 rounded-lg transition ${(selectedText.textAlign || 'left') === 'left' ? 'bg-black text-white' : 'text-stone-500 hover:text-black'}`}
-                        title="왼쪽 정렬"
-                      >
-                        <AlignLeft size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateTextBlock(selectedText.id, { textAlign: 'center' })}
-                        className={`p-1 rounded-lg transition ${selectedText.textAlign === 'center' ? 'bg-black text-white' : 'text-stone-500 hover:text-black'}`}
-                        title="가운데 정렬"
-                      >
-                        <AlignCenter size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateTextBlock(selectedText.id, { textAlign: 'right' })}
-                        className={`p-1 rounded-lg transition ${selectedText.textAlign === 'right' ? 'bg-black text-white' : 'text-stone-500 hover:text-black'}`}
-                        title="오른쪽 정렬"
-                      >
-                        <AlignRight size={14} />
-                      </button>
-                    </div>
-
-                    {/* 삭제 버튼 */}
+                  {/* 정렬 버튼 그룹 */}
+                  <div className="flex items-center bg-white rounded-xl border border-stone-200/90 p-0.5 shadow-2xs shrink-0">
                     <button
                       type="button"
-                      onClick={() => deleteTextBlock(selectedText.id)}
-                      className="p-1.5 text-stone-500 hover:text-red-500 rounded-lg hover:bg-stone-100 transition"
-                      title="글상자 삭제"
+                      onClick={() => updateTextBlock(selectedText.id, { textAlign: 'left' })}
+                      className={`p-1.5 rounded-lg transition ${(selectedText.textAlign || 'left') === 'left' ? 'bg-black text-white' : 'text-stone-500 hover:text-black'}`}
+                      title="왼쪽 정렬"
                     >
-                      <Trash2 size={15} />
+                      <AlignLeft size={14} />
                     </button>
-                  </>
-                )}
-              </div>
+                    <button
+                      type="button"
+                      onClick={() => updateTextBlock(selectedText.id, { textAlign: 'center' })}
+                      className={`p-1.5 rounded-lg transition ${selectedText.textAlign === 'center' ? 'bg-black text-white' : 'text-stone-500 hover:text-black'}`}
+                      title="가운데 정렬"
+                    >
+                      <AlignCenter size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateTextBlock(selectedText.id, { textAlign: 'right' })}
+                      className={`p-1.5 rounded-lg transition ${selectedText.textAlign === 'right' ? 'bg-black text-white' : 'text-stone-500 hover:text-black'}`}
+                      title="오른쪽 정렬"
+                    >
+                      <AlignRight size={14} />
+                    </button>
+                  </div>
 
-              <span className="text-[11px] text-stone-400 hidden sm:inline">
-                우측: 너비/줄바꿈 조절 · 모서리: 확대축소
-              </span>
+                  {/* 삭제 버튼 */}
+                  <button
+                    type="button"
+                    onClick={() => deleteTextBlock(selectedText.id)}
+                    className="p-1.5 text-stone-500 hover:text-red-500 rounded-lg hover:bg-stone-100 transition shrink-0"
+                    title="글상자 삭제"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -2001,95 +2007,97 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         </div>
         )}
 
-        {/* (2) 아래쪽 아이콘 독 툴박스 */}
-        <div className="pointer-events-auto bg-[#f4f4f4]/95 backdrop-blur-md border border-stone-200/80 rounded-2xl sm:rounded-3xl px-6 py-2.5 sm:py-3 shadow-md flex items-center justify-between">
-          
-          {/* 1. 타이핑 아이콘 (Type) */}
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedStickerId(null);
-              if (activeToolMode !== 'text') {
-                setActiveToolMode('text');
-                if (textBlocks.length === 0) {
+        {/* (2) 아래쪽 아이콘 독 툴박스 (키보드가 활성화되었을 때는 키보드 위 공간 확보를 위해 숨김) */}
+        {keyboardOffset <= 0 && (
+          <div className="pointer-events-auto bg-[#f4f4f4]/95 backdrop-blur-md border border-stone-200/80 rounded-2xl sm:rounded-3xl px-6 py-2.5 sm:py-3 shadow-md flex items-center justify-between animate-fadeIn">
+            
+            {/* 1. 타이핑 아이콘 (Type) */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedStickerId(null);
+                if (activeToolMode !== 'text') {
+                  setActiveToolMode('text');
+                  if (textBlocks.length === 0) {
+                    handleAddTextBlock();
+                  } else if (!selectedTextId) {
+                    setSelectedTextId(textBlocks[textBlocks.length - 1].id);
+                  }
+                } else {
                   handleAddTextBlock();
-                } else if (!selectedTextId) {
-                  setSelectedTextId(textBlocks[textBlocks.length - 1].id);
                 }
-              } else {
-                handleAddTextBlock();
-              }
-            }}
-            className={`p-1.5 rounded-full transition-all ${
-              activeToolMode === 'text'
-                ? 'text-black scale-110 font-bold'
-                : 'text-stone-400 hover:text-stone-700'
-            }`}
-            title="새 글상자 작성"
-          >
-            <Type className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'text' ? 2.6 : 2} />
-          </button>
+              }}
+              className={`p-1.5 rounded-full transition-all ${
+                activeToolMode === 'text'
+                  ? 'text-black scale-110 font-bold'
+                  : 'text-stone-400 hover:text-stone-700'
+              }`}
+              title="새 글상자 작성"
+            >
+              <Type className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'text' ? 2.6 : 2} />
+            </button>
 
-          {/* 2. 손글씨/펜 아이콘 (PenTool) */}
-          <button
-            onClick={() => {
-              setSelectedStickerId(null);
-              setSelectedTextId(null);
-              setActiveToolMode(activeToolMode === 'pen' ? 'none' : 'pen');
-            }}
-            className={`p-1.5 rounded-full transition-all ${
-              activeToolMode === 'pen'
-                ? 'text-black scale-110'
-                : 'text-stone-400 hover:text-stone-700'
-            }`}
-            title="손글씨/펜"
-          >
-            <PenTool className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'pen' ? 2.6 : 2} />
-          </button>
+            {/* 2. 손글씨/펜 아이콘 (PenTool) */}
+            <button
+              onClick={() => {
+                setSelectedStickerId(null);
+                setSelectedTextId(null);
+                setActiveToolMode(activeToolMode === 'pen' ? 'none' : 'pen');
+              }}
+              className={`p-1.5 rounded-full transition-all ${
+                activeToolMode === 'pen'
+                  ? 'text-black scale-110'
+                  : 'text-stone-400 hover:text-stone-700'
+              }`}
+              title="손글씨/펜"
+            >
+              <PenTool className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'pen' ? 2.6 : 2} />
+            </button>
 
-          {/* 3. 스티커 아이콘 (Sparkles) */}
-          <button
-            onClick={() => {
-              setSelectedTextId(null);
-              setActiveToolMode('sticker');
-              setIsStickerPaletteOpen(true);
-            }}
-            className={`p-1.5 rounded-full transition-all ${
-              activeToolMode === 'sticker' || isStickerPaletteOpen
-                ? 'text-black scale-110'
-                : 'text-stone-400 hover:text-stone-700'
-            }`}
-            title="스티커 꾸미기"
-          >
-            <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'sticker' || isStickerPaletteOpen ? 2.6 : 2} />
-          </button>
+            {/* 3. 스티커 아이콘 (Sparkles) */}
+            <button
+              onClick={() => {
+                setSelectedTextId(null);
+                setActiveToolMode('sticker');
+                setIsStickerPaletteOpen(true);
+              }}
+              className={`p-1.5 rounded-full transition-all ${
+                activeToolMode === 'sticker' || isStickerPaletteOpen
+                  ? 'text-black scale-110'
+                  : 'text-stone-400 hover:text-stone-700'
+              }`}
+              title="스티커 꾸미기"
+            >
+              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'sticker' || isStickerPaletteOpen ? 2.6 : 2} />
+            </button>
 
-          {/* 4. 속지 아이콘 (LayoutGrid) */}
-          <button
-            onClick={() => {
-              setSelectedStickerId(null);
-              setSelectedTextId(null);
-              setActiveToolMode(activeToolMode === 'paper' ? 'none' : 'paper');
-            }}
-            className={`p-1.5 rounded-full transition-all ${
-              activeToolMode === 'paper'
-                ? 'text-black scale-110'
-                : 'text-stone-400 hover:text-stone-700'
-            }`}
-            title="속지 설정"
-          >
-            <LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'paper' ? 2.6 : 2} />
-          </button>
+            {/* 4. 속지 아이콘 (LayoutGrid) */}
+            <button
+              onClick={() => {
+                setSelectedStickerId(null);
+                setSelectedTextId(null);
+                setActiveToolMode(activeToolMode === 'paper' ? 'none' : 'paper');
+              }}
+              className={`p-1.5 rounded-full transition-all ${
+                activeToolMode === 'paper'
+                  ? 'text-black scale-110'
+                  : 'text-stone-400 hover:text-stone-700'
+              }`}
+              title="속지 설정"
+            >
+              <LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={activeToolMode === 'paper' ? 2.6 : 2} />
+            </button>
 
-          {/* 5. 일기 삭제 휴지통 아이콘 (Trash2) */}
-          <button
-            onClick={() => setIsDeleteModalOpen(true)}
-            className="p-1.5 rounded-full transition-all text-stone-400 hover:text-red-500 active:scale-95"
-            title="일기 삭제"
-          >
-            <Trash2 className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={2} />
-          </button>
-        </div>
+            {/* 5. 일기 삭제 휴지통 아이콘 (Trash2) */}
+            <button
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="p-1.5 rounded-full transition-all text-stone-400 hover:text-red-500 active:scale-95"
+              title="일기 삭제"
+            >
+              <Trash2 className="w-5 h-5 sm:w-6 sm:h-6" strokeWidth={2} />
+            </button>
+          </div>
+        )}
 
       </div>
 
