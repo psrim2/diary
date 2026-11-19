@@ -1238,7 +1238,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
             <ArrowLeft size={22} strokeWidth={2.5} />
           </button>
           <span className="text-sm font-semibold text-stone-400 tracking-tight">
-            {diaryName || 'RIM’S DIARY'}
+            {diaryName || 'Diary'}
           </span>
         </div>
 

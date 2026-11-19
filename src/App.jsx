@@ -114,9 +114,13 @@ function DiaryMainApp() {
   const [previousView, setPreviousView] = useState('calendar');
   const [selectedDiary, setSelectedDiary] = useState(null);
 
-  // 다이어리 이름 상태 (로컬스토리지 연동)
+  // 다이어리 이름 상태 (로컬스토리지 연동, 기본값: 'Diary')
   const [diaryName, setDiaryName] = useState(() => {
-    return localStorage.getItem('analog_diary_name') || 'RIM’S DIARY';
+    const saved = localStorage.getItem('analog_diary_name');
+    if (!saved || saved === 'RIM’S DIARY' || saved === "RIM'S DIARY") {
+      return 'Diary';
+    }
+    return saved;
   });
 
   // Firebase 인증 및 클라우드 동기화 상태 (새로고침 시에도 즉시 자동로그인 상태 유지)
@@ -342,7 +346,7 @@ function DiaryMainApp() {
       setDiaries([]);
       setSelectedDiary(null);
       setCurrentView('calendar');
-      setDiaryName('RIM’S DIARY');
+      setDiaryName('Diary');
       localStorage.removeItem('analog_diary_auth_user');
       localStorage.removeItem('analog_diaries');
       localStorage.removeItem('analog_diary_name');

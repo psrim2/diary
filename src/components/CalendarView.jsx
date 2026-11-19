@@ -374,11 +374,6 @@ export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate
           ))}
         </div>
       </div>
-
-      {/* 하단 제스처 안내 */}
-      <div className="text-center text-[11px] text-stone-300 font-medium select-none pt-1">
-        좌우로 스와이프하여 달을 넘겨보세요
-      </div>
     </div>
   );
 }
