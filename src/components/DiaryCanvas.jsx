@@ -1709,22 +1709,22 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   <div
                     onPointerDown={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
                     onTouchStart={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
-                    style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-10 h-4 flex items-center justify-center cursor-move z-30 touch-none group select-none"
+                    style={{ transform: `translateX(-50%) scale(${invScale})`, touchAction: 'none' }}
+                    className="absolute -top-2 left-1/2 w-10 h-4 flex items-center justify-center cursor-move z-30 touch-none group select-none"
                     title="드래그하여 이동"
                   >
                     <div className="w-7 h-1 rounded-full bg-black/20 group-hover:bg-black/50 transition-colors" />
                   </div>
 
-                  {/* 우측 중앙: 세로로 긴 타입의 가로 너비 조절 핸들 (줄바꿈 변경) */}
+                  {/* 우측 중앙: 세로로 긴 타입의 가로 너비 조절 핸들 (줄바꿈 변경, 정확한 세로 중앙정렬) */}
                   <div
                     onPointerDown={(e) => handleTransformStart(e, 'width', 'text', block)}
                     onTouchStart={(e) => handleTransformStart(e, 'width', 'text', block)}
-                    style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -right-2 top-1/2 -translate-y-1/2 w-4 h-10 flex items-center justify-center cursor-ew-resize z-30 touch-none group select-none"
+                    style={{ transform: `translateY(-50%) scale(${invScale})`, touchAction: 'none' }}
+                    className="absolute -right-2 top-1/2 w-4 h-8 flex items-center justify-center cursor-ew-resize z-30 touch-none group select-none"
                     title="드래그하여 가로 너비 조절 (줄바꿈 변경)"
                   >
-                    <div className="w-1.5 h-7 rounded-full bg-stone-400/80 group-hover:bg-stone-700 transition-colors shadow-2xs" />
+                    <div className="w-1.5 h-5 sm:h-6 rounded-full bg-stone-400/80 group-hover:bg-stone-700 transition-colors shadow-2xs" />
                   </div>
                 </>
               )}
