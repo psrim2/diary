@@ -363,7 +363,7 @@ export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate
                       )}
                     </div>
 
-                    {/* 일기 작성 스티커 */}
+                    {/* 일기 작성 스티커 / 내용이 있는 경우 연두색 dot 표시 */}
                     <div className="min-h-[22px] flex items-center justify-center mt-0.5">
                       {hasDiary ? (
                         isStickerImage ? (
@@ -372,10 +372,12 @@ export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate
                             alt=""
                             className="w-6 h-6 sm:w-7 sm:h-7 object-contain select-none"
                           />
-                        ) : (
+                        ) : stickerVal ? (
                           <span className="text-base sm:text-lg leading-none filter drop-shadow-2xs select-none">
-                            {stickerVal || '✓'}
+                            {stickerVal}
                           </span>
+                        ) : (
+                          <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-[#84cc16] select-none block shadow-2xs" />
                         )
                       ) : (
                         <div className="w-1 h-1" />
