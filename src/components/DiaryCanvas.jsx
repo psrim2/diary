@@ -297,6 +297,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     return maxY;
   }, [stickers, textBlocks, strokesHistory, scaleRatio]);
 
+  // 모바일/태블릿 가상 키보드 높이 감지 (툴바가 키보드 위로 올라오도록 오프셋 계산)
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
   // 속지 최소 높이 동적 계산:
   // 1) 기본적으로 화면 높이보다 380px 더 길어서, 항상 하단 플로팅 툴바 위로 넉넉하게 스크롤 가능
   // 2) 컨텐츠(손글씨, 스티커, 사진)가 아래로 내려갈수록 바닥 아래 380px 여유 공간을 두고 무한 확장되어 절대 잘리지 않음
@@ -307,9 +310,6 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     const contentNeeded = contentMaxBottomPx > 0 ? contentMaxBottomPx + extraBottom : 0;
     return Math.round(Math.max(baseMin, contentNeeded));
   }, [containerHeight, contentMaxBottomPx, keyboardOffset]);
-
-  // 모바일/태블릿 가상 키보드 높이 감지 (툴바가 키보드 위로 올라오도록 오프셋 계산)
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   // 이벤트 리스너 및 타이머 내 최신 상태 동기화용 refs
   const selectedTextIdRef = useRef(selectedTextId);
