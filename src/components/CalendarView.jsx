@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const MONTH_NAMES_EN = [
