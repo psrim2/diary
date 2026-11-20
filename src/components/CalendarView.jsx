@@ -432,15 +432,15 @@ export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate
                       )}
                     </div>
 
-                    {/* 일기 작성 스티커 / dot 슬롯 - 40px 고정 높이 슬롯으로 날짜 숫자의 상하 출렁임 원천 차단 */}
-                    <div className="w-full h-[40px] flex items-center justify-center mt-0.5 shrink-0 overflow-hidden">
+                    {/* 일기 작성 스티커 / dot 슬롯 - 36px 고정 높이 슬롯으로 날짜 숫자의 상하 출렁임 원천 차단 */}
+                    <div className="w-full h-[36px] flex items-center justify-center mt-0.5 shrink-0 overflow-hidden">
                       {hasDiary ? (
                         isStickerImage ? (
                           <img
                             src={stickerVal}
                             alt=""
-                            style={{ width: '80%', maxWidth: '40px', maxHeight: '40px', height: 'auto' }}
-                            className="w-[80%] max-w-[40px] max-h-[40px] h-auto object-contain select-none pointer-events-none"
+                            style={{ width: '80%', maxWidth: '36px', maxHeight: '36px', height: 'auto' }}
+                            className="w-[80%] max-w-[36px] max-h-[36px] h-auto object-contain select-none pointer-events-none"
                           />
                         ) : stickerVal ? (
                           <span className="text-base sm:text-lg leading-none filter drop-shadow-2xs select-none">
