@@ -897,6 +897,46 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
   // 텍스트 블록 생성 (드로잉이 있다면 드로잉이 끝나는 Y축 시점에 생성, 기본 폰트: 16px, 가로: 100%)
   const handleAddTextBlock = () => {
+    // 0) 이미 내용이 미입력된 빈 글상자가 있다면 새로 아래에 만들지 않고 기존 빈 글상자 위치(동일 위치) 유지 및 포커스
+    const selectedBlock = textBlocks.find(tb => tb.id === selectedTextId);
+    const isSelectedEmpty = selectedBlock && (!selectedBlock.text || selectedBlock.text.trim().length === 0);
+
+    // 현재 선택된 빈 글상자가 있으면 우선 재사용, 없으면 가장 마지막(최신) 빈 글상자 재사용
+    const existingEmptyBlock = isSelectedEmpty 
+      ? selectedBlock 
+      : [...textBlocks].reverse().find(tb => !tb.text || tb.text.trim().length === 0);
+
+    if (existingEmptyBlock) {
+      // 혹시 여러 개의 빈 글상자가 중복 생성되어 있었다면 하나만 남기고 정리
+      const cleanedBlocks = textBlocks.filter(
+        tb => tb.id === existingEmptyBlock.id || (tb.text && tb.text.trim().length > 0)
+      );
+      if (cleanedBlocks.length !== textBlocks.length) {
+        setTextBlocks(cleanedBlocks);
+      }
+
+      setSelectedTextId(existingEmptyBlock.id);
+      setSelectedStickerId(null);
+      setActiveToolMode('text');
+
+      // 현재 선택된 펜 색상으로 텍스트 색상 동기화
+      if (penColor && existingEmptyBlock.color !== penColor) {
+        updateTextBlock(existingEmptyBlock.id, { color: penColor });
+      }
+
+      // textarea에 포커스 부여
+      setTimeout(() => {
+        const textareaEl = textareaRefs.current?.[existingEmptyBlock.id];
+        if (textareaEl) {
+          textareaEl.focus();
+        }
+      }, 50);
+
+      setTimeout(() => ensureTextBlockVisible(existingEmptyBlock.id), 60);
+      setTimeout(() => ensureTextBlockVisible(existingEmptyBlock.id), 250);
+      return;
+    }
+
     // 1) 활성 드로잉(손글씨/펜) 중 가장 아래쪽(최대 Y축) 좌표 탐색
     const activeStrokes = strokesHistory.slice(0, historyIndex + 1);
     let maxDrawingY = 0;
@@ -909,9 +949,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       });
     });
 
-    // 2) 기존 텍스트 블록들의 바닥 Y 좌표 계산 (중복 겹침 방지)
+    // 2) 내용이 있는 기존 텍스트 블록들의 바닥 Y 좌표 계산 (중복 겹침 방지)
+    const nonEmptyBlocks = textBlocks.filter((tb) => tb.text && tb.text.trim().length > 0);
     let maxTextBottomY = 0;
-    textBlocks.forEach((tb) => {
+    nonEmptyBlocks.forEach((tb) => {
       const lineCount = Math.max(1, (tb.text || '').split('\n').length);
       const approxHeight = Math.max(28, lineCount * (tb.fontSize || 18) * 1.5) * (tb.scale || 1);
       const bottom = (tb.y || 0) + approxHeight;
@@ -932,7 +973,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       if (maxTextBottomY > 0) {
         newY = Math.round(maxTextBottomY + 12);
       } else {
-        newY = 20 + textBlocks.length * 36;
+        newY = 20;
       }
     }
 
@@ -953,13 +994,21 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       layerOrder: getNextLayerOrder(),
     };
     newlyCreatedBlockIdRef.current = newId;
-    setTextBlocks(prev => [...prev, newBlock]);
+    setTextBlocks(prev => [...prev.filter(tb => tb.text && tb.text.trim().length > 0), newBlock]);
     setSelectedTextId(newId);
     setSelectedStickerId(null);
     setActiveToolMode('text');
     if (window.scrollY > 2 || window.scrollX > 2) {
       window.scrollTo(0, 0);
     }
+
+    // 새로 생성된 글상자의 textarea에 포커스 전달
+    setTimeout(() => {
+      const textareaEl = textareaRefs.current?.[newId];
+      if (textareaEl) {
+        textareaEl.focus();
+      }
+    }, 50);
 
     // 새로 생성된 글상자가 키보드나 하단 툴바 뒤에 가려지지 않도록 안전 가시 영역으로 자동 스크롤
     setTimeout(() => ensureTextBlockVisible(newId), 60);
@@ -1363,6 +1412,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   const handleSaveDiary = () => {
     if (isSaving) return;
     setIsSaving(true);
+    const sanitizedTextBlocks = (textBlocks || []).filter(t => t && t.text && t.text.trim().length > 0);
+    setTextBlocks(sanitizedTextBlocks);
+
     const finalDiary = {
       id: diary?.id || `entry-${date}-${Date.now()}`,
       title: title || `${yearNum}.${monthNum}.${dayNum} 기록`,
@@ -1370,10 +1422,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       weather,
       thumbnailMood: weather,
       paperStyle,
-      textBlocks,
+      textBlocks: sanitizedTextBlocks,
       stickers,
       strokes: strokesHistory.slice(0, historyIndex + 1),
-      summary: textBlocks.map(t => t.text).filter(Boolean).join('\n') || ''
+      summary: sanitizedTextBlocks.map(t => t.text).filter(Boolean).join('\n') || ''
     };
 
     onSave(finalDiary);
