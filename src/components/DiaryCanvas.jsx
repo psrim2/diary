@@ -170,9 +170,15 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     initialNormalized.strokes.length ? initialNormalized.strokes.length - 1 : -1
   );
 
-  // diary prop이 변경될 때 (다른 날짜 선택 시) 상태 완벽 동기화
+  const currentDiaryKeyRef = useRef(diary ? (diary.id || diary.date) : null);
+
+  // diary prop이 변경될 때 (사용자가 다른 날짜나 다른 일기를 선택했을 때만) 상태 초기화
   useEffect(() => {
-    if (diary) {
+    if (!diary) return;
+    const newKey = diary.id || diary.date;
+    // 같은 일기 내에서 background sync나 부모 컴포넌트 리렌더링 시에는 작성 중인 내용을 덮어쓰거나 글상자를 닫지 않음
+    if (currentDiaryKeyRef.current !== newKey) {
+      currentDiaryKeyRef.current = newKey;
       const normalized = normalizeDiaryLayers(diary);
       layerOrderCounterRef.current = normalized.maxOrder;
       setTitle(diary.title || '');
@@ -187,7 +193,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       setSelectedStickerId(null);
       setActiveToolMode(getDefaultToolMode());
     }
-  }, [diary]);
+  }, [diary?.id, diary?.date]);
 
   // 컬러 피커 인풋 레퍼런스
   const colorPickerInputRef = useRef(null);
@@ -366,7 +372,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       });
     }
 
-    if (window.scrollY !== 0 || window.scrollX !== 0) {
+    if (window.scrollY > 2 || window.scrollX > 2) {
       window.scrollTo(0, 0);
     }
   }, []);
@@ -939,7 +945,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     setSelectedTextId(newId);
     setSelectedStickerId(null);
     setActiveToolMode('text');
-    if (window.scrollY !== 0 || window.scrollX !== 0) {
+    if (window.scrollY > 2 || window.scrollX > 2) {
       window.scrollTo(0, 0);
     }
 
@@ -1748,7 +1754,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           ref={canvasContainerRef}
           onClick={(e) => {
             if (wasTransformingRef.current) return;
-            if (activeToolMode !== 'pen') {
+            // 빈 속지 배경 또는 캔버스를 직접 클릭했을 때만 선택 해제 (스크롤 합성 클릭이나 글상자 내부 클릭 시 해제 방지)
+            const isDirectPaperClick = e.target === canvasContainerRef.current || e.target?.tagName === 'CANVAS';
+            if (isDirectPaperClick && activeToolMode !== 'pen') {
               setSelectedTextId(null);
               setSelectedStickerId(null);
             }
@@ -1932,27 +1940,23 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 }}
                 value={block.text || ''}
                 placeholder={isSelected ? '텍스트를 입력하세요...' : ''}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
                 onFocus={() => {
                   setSelectedTextId(block.id);
                   setSelectedStickerId(null);
                   setActiveToolMode('text');
-                  if (window.scrollY !== 0 || window.scrollX !== 0) {
+                  if (window.scrollY > 2 || window.scrollX > 2) {
                     window.scrollTo(0, 0);
                   }
-                  setTimeout(() => ensureTextBlockVisible(block.id), 50);
-                  setTimeout(() => ensureTextBlockVisible(block.id), 200);
-                  setTimeout(() => ensureTextBlockVisible(block.id), 400);
+                  setTimeout(() => ensureTextBlockVisible(block.id), 80);
+                  setTimeout(() => ensureTextBlockVisible(block.id), 250);
                 }}
                 onChange={(e) => {
                   updateTextBlock(block.id, { text: e.target.value });
                   e.target.style.height = 'auto';
                   e.target.style.height = `${Math.max(minBoxHeight, e.target.scrollHeight)}px`;
-                  ensureTextBlockVisible(block.id);
-                }}
-                onInput={(e) => {
-                  e.target.style.height = 'auto';
-                  e.target.style.height = `${Math.max(minBoxHeight, e.target.scrollHeight)}px`;
-                  ensureTextBlockVisible(block.id);
                 }}
                 style={{
                   fontFamily: block.fontFamily || "'Paperlogy', sans-serif",
