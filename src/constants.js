@@ -1,10 +1,10 @@
 // 다이어리 기본 프리셋 및 스티커 데이터
 
 export const PAPER_STYLES = [
-  { id: 'blank', name: '깔끔한 무지', class: 'paper-minimal-blank', desc: '자유로운 여백' },
-  { id: 'lined', name: '줄노트 (라인)', class: 'paper-minimal-lined', desc: '단정한 줄글 필기' },
-  { id: 'grid', name: '모눈 (그리드)', class: 'paper-minimal-grid', desc: '호보니치 플래너 감성' },
-  { id: 'dots', name: '도트 그리드', class: 'paper-minimal-dots', desc: '감성 불렛저널' },
+  { id: 'blank', name: '무지', class: 'paper-minimal-blank', desc: '자유로운 여백' },
+  { id: 'lined', name: '줄노트', class: 'paper-minimal-lined', desc: '단정한 줄글 필기' },
+  { id: 'grid', name: '모눈', class: 'paper-minimal-grid', desc: '호보니치 플래너 감성' },
+  { id: 'dots', name: '도트', class: 'paper-minimal-dots', desc: '감성 불렛저널' },
 ];
 
 export const FONTS = [
