@@ -74,6 +74,68 @@ function deduplicateDiariesByDate(diaryList) {
   );
 }
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('[ErrorBoundary caught error]:', error, errorInfo);
+  }
+
+  handleReset = () => {
+    try {
+      window.location.reload();
+    } catch (e) {}
+  };
+
+  handleHardReset = () => {
+    try {
+      localStorage.removeItem('analog_diaries');
+      localStorage.removeItem('analog_diary_entries');
+      window.location.reload();
+    } catch (e) {}
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="w-full h-[100dvh] flex flex-col items-center justify-center p-6 bg-[#fafafa] text-stone-800 text-center font-sans">
+          <div className="max-w-md w-full bg-white p-6 rounded-2xl border border-stone-200 shadow-lg space-y-4">
+            <h2 className="text-xl font-bold text-stone-900">다이어리를 불러오는 중 문제가 발생했습니다</h2>
+            <p className="text-sm text-stone-600 leading-relaxed">
+              최근 저장된 기록 또는 스티커 데이터 처리 중 일시적인 오류가 발생했습니다.<br />
+              아래 버튼을 눌러 다시 시도하거나 임시 캐시를 정리하여 정상 복구할 수 있습니다.
+            </p>
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                type="button"
+                onClick={this.handleReset}
+                className="w-full py-2.5 px-4 bg-stone-900 hover:bg-stone-800 text-white font-medium rounded-xl text-sm transition"
+              >
+                다시 시도 (새로고침)
+              </button>
+              <button
+                type="button"
+                onClick={this.handleHardReset}
+                className="w-full py-2.5 px-4 bg-stone-100 hover:bg-stone-200 text-stone-700 font-medium rounded-xl text-sm transition"
+              >
+                임시 캐시 정리 후 앱 복구
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname);
 
@@ -88,18 +150,40 @@ export default function App() {
     return <AdminPage />;
   }
 
-  return <DiaryMainApp />;
+  return (
+    <ErrorBoundary>
+      <DiaryMainApp />
+    </ErrorBoundary>
+  );
 }
 
 function DiaryMainApp() {
-  // 로컬스토리지에서 일기 불러오기 (기본값: 아무 데이터도 없는 빈 배열 [] & 날짜별 중복 자동 정리)
+  // 로컬스토리지에서 일기 불러오기 (기본값: 아무 데이터도 없는 빈 배열 [] & 날짜별 중복 자동 정리 & 방어적 파싱)
   const [diaries, setDiaries] = useState(() => {
-    const saved = localStorage.getItem('analog_diaries');
+    let saved = null;
+    try {
+      saved = localStorage.getItem('analog_diaries') || localStorage.getItem('analog_diary_entries');
+    } catch (e) {
+      console.warn('Failed to access localStorage:', e);
+    }
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const validDiaries = parsed.filter(d => !LEGACY_SAMPLE_IDS.has(String(d?.id)));
+          const validDiaries = parsed
+            .filter((d) => d && typeof d === 'object' && !LEGACY_SAMPLE_IDS.has(String(d?.id)))
+            .map((d) => ({
+              ...d,
+              textBlocks: Array.isArray(d.textBlocks)
+                ? d.textBlocks
+                : (d.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
+              stickers: Array.isArray(d.stickers)
+                ? d.stickers
+                : (d.stickers && typeof d.stickers === 'object' ? Object.values(d.stickers) : []),
+              strokes: Array.isArray(d.strokes)
+                ? d.strokes
+                : (d.strokes && typeof d.strokes === 'object' ? Object.values(d.strokes) : []),
+            }));
           return deduplicateDiariesByDate(validDiaries);
         }
       } catch (e) {
@@ -149,9 +233,37 @@ function DiaryMainApp() {
     diariesRef.current = diaries;
   }, [diaries]);
 
-  // 로컬스토리지 동기화 (오프라인 캐시 역할 겸용)
+  // 로컬스토리지 동기화 (오프라인 캐시 역할 겸용 & QuotaExceededError 완벽 방어)
   useEffect(() => {
-    localStorage.setItem('analog_diaries', JSON.stringify(diaries));
+    if (!diaries) return;
+    try {
+      localStorage.setItem('analog_diaries', JSON.stringify(diaries));
+    } catch (err) {
+      console.warn('[Storage] Quota exceeded or error saving full diaries to localStorage:', err);
+      try {
+        const lightweight = diaries.map((diary) => {
+          if (!diary) return diary;
+          const sanitizedStickers = (Array.isArray(diary.stickers) ? diary.stickers : []).map((st) => {
+            if (
+              st?.imageUrl &&
+              typeof st.imageUrl === 'string' &&
+              st.imageUrl.startsWith('data:') &&
+              st.imageUrl.length > 100000
+            ) {
+              return { ...st, imageUrl: '' };
+            }
+            return st;
+          });
+          return {
+            ...diary,
+            stickers: sanitizedStickers,
+          };
+        });
+        localStorage.setItem('analog_diaries', JSON.stringify(lightweight));
+      } catch (e2) {
+        console.error('[Storage] Lightweight backup also failed:', e2);
+      }
+    }
   }, [diaries]);
 
   // 1. Firebase 인증 상태 감지 및 자동 로그인 유지 / 최초 실행 시 계정 연동 확인 팝업 표시
@@ -164,14 +276,21 @@ function DiaryMainApp() {
           email: currentUser.email || '',
           photoURL: currentUser.photoURL || '',
         };
-        localStorage.setItem('analog_diary_auth_user', JSON.stringify(userSnapshot));
-        localStorage.setItem('analog_diary_account_prompt_seen', 'true');
+        try {
+          localStorage.setItem('analog_diary_auth_user', JSON.stringify(userSnapshot));
+          localStorage.setItem('analog_diary_account_prompt_seen', 'true');
+        } catch (e) {}
         setUser(currentUser);
         setIsAccountPromptOpen(false);
       } else {
-        localStorage.removeItem('analog_diary_auth_user');
+        try {
+          localStorage.removeItem('analog_diary_auth_user');
+        } catch (e) {}
         setUser(null);
-        const hasSeenPrompt = localStorage.getItem('analog_diary_account_prompt_seen');
+        let hasSeenPrompt = null;
+        try {
+          hasSeenPrompt = localStorage.getItem('analog_diary_account_prompt_seen');
+        } catch (e) {}
         if (!hasSeenPrompt) {
           setIsAccountPromptOpen(true);
         }
@@ -189,8 +308,10 @@ function DiaryMainApp() {
             email: redirectUser.email || '',
             photoURL: redirectUser.photoURL || '',
           };
-          localStorage.setItem('analog_diary_auth_user', JSON.stringify(userSnapshot));
-          localStorage.setItem('analog_diary_account_prompt_seen', 'true');
+          try {
+            localStorage.setItem('analog_diary_auth_user', JSON.stringify(userSnapshot));
+            localStorage.setItem('analog_diary_account_prompt_seen', 'true');
+          } catch (e) {}
           setUser(redirectUser);
           setIsAccountPromptOpen(false);
         }
@@ -215,19 +336,36 @@ function DiaryMainApp() {
       try {
         // 비로그인(게스트) 상태에서 새로 작성된 로컬 일기가 있는 경우에만 클라우드로 1회 업로드 병합
         // (이미 로그인된 계정은 Firestore가 Single Source of Truth이므로 다른 기기의 옛 캐시로 인한 부활 원천 차단)
-        const hasUnsyncedGuest = localStorage.getItem('analog_diary_has_unsynced_guest_data') === 'true';
+        let hasUnsyncedGuest = false;
+        try {
+          hasUnsyncedGuest = localStorage.getItem('analog_diary_has_unsynced_guest_data') === 'true';
+        } catch (e) {}
         if (hasUnsyncedGuest) {
           await syncLocalDiariesToCloud(user.uid, diariesRef.current);
-          localStorage.removeItem('analog_diary_has_unsynced_guest_data');
+          try {
+            localStorage.removeItem('analog_diary_has_unsynced_guest_data');
+          } catch (e) {}
         }
 
         if (isCancelled) return;
 
-        // 클라우드 일기 실시간 구독 (날짜별 중복 자동 정리)
+        // 클라우드 일기 실시간 구독 (날짜별 중복 자동 정리 & 방어적 파싱)
         unsubscribeDiaries = subscribeToUserDiaries(
           user.uid,
           async (cloudDiaries) => {
-            const deduped = deduplicateDiariesByDate(cloudDiaries);
+            const sanitizedCloud = (cloudDiaries || []).map((d) => ({
+              ...d,
+              textBlocks: Array.isArray(d?.textBlocks)
+                ? d.textBlocks
+                : (d?.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
+              stickers: Array.isArray(d?.stickers)
+                ? d.stickers
+                : (d?.stickers && typeof d.stickers === 'object' ? Object.values(d.stickers) : []),
+              strokes: Array.isArray(d?.strokes)
+                ? d.strokes
+                : (d?.strokes && typeof d.strokes === 'object' ? Object.values(d.strokes) : []),
+            }));
+            const deduped = deduplicateDiariesByDate(sanitizedCloud);
             setDiaries(deduped);
             setIsSyncing(false);
 
@@ -251,7 +389,9 @@ function DiaryMainApp() {
         unsubscribeSettings = subscribeToUserSettings(user.uid, (settings) => {
           if (settings?.diaryName) {
             setDiaryName(settings.diaryName);
-            localStorage.setItem('analog_diary_name', settings.diaryName);
+            try {
+              localStorage.setItem('analog_diary_name', settings.diaryName);
+            } catch (e) {}
           }
         });
       } catch (err) {
@@ -275,7 +415,9 @@ function DiaryMainApp() {
     try {
       const loggedInUser = await loginWithGoogle();
       if (loggedInUser) {
-        localStorage.setItem('analog_diary_account_prompt_seen', 'true');
+        try {
+          localStorage.setItem('analog_diary_account_prompt_seen', 'true');
+        } catch (e) {}
         setIsAccountPromptOpen(false);
         setUser(loggedInUser);
       }
@@ -321,7 +463,9 @@ function DiaryMainApp() {
 
   // 앱 최초 실행 시 계정 연동 없이 시작하기 핸들러
   const handleSkipAccountPrompt = () => {
-    localStorage.setItem('analog_diary_account_prompt_seen', 'true');
+    try {
+      localStorage.setItem('analog_diary_account_prompt_seen', 'true');
+    } catch (e) {}
     setIsAccountPromptOpen(false);
   };
 
@@ -347,16 +491,21 @@ function DiaryMainApp() {
       setSelectedDiary(null);
       setCurrentView('calendar');
       setDiaryName('Diary');
-      localStorage.removeItem('analog_diary_auth_user');
-      localStorage.removeItem('analog_diaries');
-      localStorage.removeItem('analog_diary_name');
+      try {
+        localStorage.removeItem('analog_diary_auth_user');
+        localStorage.removeItem('analog_diaries');
+        localStorage.removeItem('analog_diary_entries');
+        localStorage.removeItem('analog_diary_name');
+      } catch (e) {}
     }
   };
 
   // 다이어리 이름 변경 핸들러 (로컬 + 클라우드 동시 반영)
   const handleUpdateDiaryName = async (newName) => {
     setDiaryName(newName);
-    localStorage.setItem('analog_diary_name', newName);
+    try {
+      localStorage.setItem('analog_diary_name', newName);
+    } catch (e) {}
     if (user) {
       try {
         await saveDiaryNameToCloud(user.uid, newName);
@@ -401,7 +550,7 @@ function DiaryMainApp() {
     setDiaries(prev => {
       const updated = prev.filter(d => d.id !== id);
       try {
-        localStorage.setItem('analog_diary_entries', JSON.stringify(updated));
+        localStorage.setItem('analog_diaries', JSON.stringify(updated));
       } catch (e) {}
       return updated;
     });
@@ -449,7 +598,9 @@ function DiaryMainApp() {
 
     // 비로그인 상태에서 작성된 경우 게스트 동기화 플래그 설정
     if (!user) {
-      localStorage.setItem('analog_diary_has_unsynced_guest_data', 'true');
+      try {
+        localStorage.setItem('analog_diary_has_unsynced_guest_data', 'true');
+      } catch (e) {}
     }
 
     setDiaries((prev) => {
@@ -459,7 +610,7 @@ function DiaryMainApp() {
       );
       const updated = deduplicateDiariesByDate([finalDiaryToSave, ...filtered]);
       try {
-        localStorage.setItem('analog_diary_entries', JSON.stringify(updated));
+        localStorage.setItem('analog_diaries', JSON.stringify(updated));
       } catch (e) {}
       return updated;
     });

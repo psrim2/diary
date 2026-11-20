@@ -272,17 +272,21 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   // 컨텐츠(필기 스트로크, 스티커, 텍스트)의 가장 아래쪽 Y 좌표 계산 (실제 렌더링 픽셀)
   const contentMaxBottomPx = useMemo(() => {
     let maxY = 0;
-    stickers.forEach((s) => {
+    (stickers || []).forEach((s) => {
+      if (!s) return;
       const approxH = (s.height || (s.imageUrl ? 240 : 60)) * (s.scale || 1);
       const bottom = ((s.y || 0) + approxH) * scaleRatio;
       if (bottom > maxY) maxY = bottom;
     });
-    textBlocks.forEach((t) => {
+    (textBlocks || []).forEach((t) => {
+      if (!t) return;
       const bottom = ((t.y || 0) + 90 * (t.scale || 1)) * scaleRatio;
       if (bottom > maxY) maxY = bottom;
     });
-    strokesHistory.forEach((stroke) => {
+    (strokesHistory || []).forEach((stroke) => {
+      if (!stroke) return;
       (stroke.points || []).forEach((pt) => {
+        if (!pt) return;
         const bottom = pt.y * scaleRatio;
         if (bottom > maxY) maxY = bottom;
       });
@@ -1324,12 +1328,16 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 {weather ? (
                   isImageAsset(weather) ? (
                     <img
-                      src={weather}
+                      src={typeof weather === 'string' ? weather : weather?.imageUrl || ''}
                       alt="대표 아이콘"
                       className="w-10 h-10 object-contain block select-none"
                     />
                   ) : (
-                    <span className="text-3xl leading-none select-none">{weather}</span>
+                    <span className="text-3xl leading-none select-none">
+                      {typeof weather === 'string' || typeof weather === 'number'
+                        ? String(weather)
+                        : (weather?.icon || weather?.label || '')}
+                    </span>
                   )
                 ) : (
                   <Plus size={24} className="text-black" strokeWidth={2.5} />
@@ -1826,7 +1834,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         })}
 
         {/* (3) 스티커 / 꾸미기 에셋 레이어 (만들어진 순서 layerOrder 기준 zIndex 적용) */}
-        {stickers.map((sticker, idx) => {
+        {(stickers || []).filter(Boolean).map((sticker, idx) => {
           const isSelected = selectedStickerId === sticker.id;
           const stickerScale = sticker.scale || 1;
           const stickerRotation = sticker.rotation || 0;
@@ -1952,7 +1960,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   style={{ fontSize: `${Math.round(36 * scaleRatio)}px` }}
                   className="filter drop-shadow-xs block leading-none select-none"
                 >
-                  {sticker.content}
+                  {typeof sticker.content === 'string' || typeof sticker.content === 'number'
+                    ? String(sticker.content)
+                    : (sticker.icon || sticker.label || '')}
                 </span>
               )}
             </div>

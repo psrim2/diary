@@ -40,7 +40,13 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
   const dateObj = new Date(year, month, day);
   const dayNum = String(isNaN(day) ? 17 : day).padStart(2, '0');
   const dayEn = DAY_NAMES_EN[isNaN(dateObj.getDay()) ? 0 : dateObj.getDay()] || 'WED';
-  const mood = diary?.thumbnailMood || diary?.weather || '';
+  const rawMood = diary?.thumbnailMood || diary?.weather || '';
+  let mood = '';
+  if (typeof rawMood === 'string' || typeof rawMood === 'number') {
+    mood = String(rawMood);
+  } else if (rawMood && typeof rawMood === 'object') {
+    mood = rawMood.icon || rawMood.imageUrl || rawMood.content || rawMood.label || '';
+  }
   const isMoodImage =
     typeof mood === 'string' &&
     (mood.startsWith('data:') ||
@@ -467,7 +473,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
                 )}
 
               {/* 스티커 & 꾸미기 에셋 (작성 화면과 100% 동일한 절대 위치와 크기) */}
-              {normalizedLayers.stickers?.map((sticker, idx) => (
+              {(normalizedLayers.stickers || []).filter(Boolean).map((sticker, idx) => (
                 <div
                   key={sticker.id || `st-${idx}`}
                   style={{
@@ -510,7 +516,9 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
                     </div>
                   ) : (
                     <span className="text-3xl sm:text-4xl filter drop-shadow-xs block leading-none">
-                      {sticker.content}
+                      {typeof sticker.content === 'string' || typeof sticker.content === 'number'
+                        ? String(sticker.content)
+                        : (sticker.icon || sticker.label || '')}
                     </span>
                   )}
                 </div>

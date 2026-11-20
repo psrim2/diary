@@ -6,16 +6,27 @@ export const CANONICAL_HEIGHT = 520;
 
 // 기존 데이터에 layerOrder가 없는 경우 순차적인 생성 순서 부여 & 레거시 좌표 정규화
 export function normalizeDiaryLayers(diary) {
+  if (!diary || typeof diary !== 'object') {
+    return { strokes: [], textBlocks: [], stickers: [], maxOrder: 0 };
+  }
+
+  const toSafeArray = (items) => {
+    if (!items) return [];
+    if (Array.isArray(items)) return items.filter(item => item && typeof item === 'object');
+    if (typeof items === 'object') return Object.values(items).filter(item => item && typeof item === 'object');
+    return [];
+  };
+
   let order = 1;
-  let strokes = (diary?.strokes || []).map((s) => ({
+  let strokes = toSafeArray(diary.strokes).map((s) => ({
     ...s,
     layerOrder: typeof s.layerOrder === 'number' ? s.layerOrder : order++,
   }));
-  let textBlocks = (diary?.textBlocks || []).map((t) => ({
+  let textBlocks = toSafeArray(diary.textBlocks).map((t) => ({
     ...t,
     layerOrder: typeof t.layerOrder === 'number' ? t.layerOrder : order++,
   }));
-  let stickers = (diary?.stickers || []).map((st) => ({
+  let stickers = toSafeArray(diary.stickers).map((st) => ({
     ...st,
     layerOrder: typeof st.layerOrder === 'number' ? st.layerOrder : order++,
   }));
@@ -30,7 +41,7 @@ export function normalizeDiaryLayers(diary) {
     const scaleFactor = 330 / maxX;
     strokes = strokes.map((s) => ({
       ...s,
-      size: Math.max(1, Number((s.size * scaleFactor).toFixed(1))),
+      size: Math.max(1, Number(((s.size || 2) * scaleFactor).toFixed(1))),
       points: s.points?.map((p) => ({
         x: Math.round(p.x * scaleFactor),
         y: Math.round(p.y * scaleFactor),
@@ -38,8 +49,8 @@ export function normalizeDiaryLayers(diary) {
     }));
     stickers = stickers.map((st) => ({
       ...st,
-      x: Math.round(st.x * scaleFactor),
-      y: Math.round(st.y * scaleFactor),
+      x: Math.round((st.x || 0) * scaleFactor),
+      y: Math.round((st.y || 0) * scaleFactor),
       scale: Math.max(0.4, Number(((st.scale || 1) * scaleFactor).toFixed(2))),
     }));
     textBlocks = textBlocks.map((tb) => ({

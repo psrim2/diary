@@ -297,18 +297,40 @@ export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate
                 const hasDiary = !!cell.diary;
                 const today = isToday(cell.day);
                 const isWeekend = colIdx === 0 || colIdx === 6;
-                const sticker =
+
+                const firstSticker = Array.isArray(cell.diary?.stickers)
+                  ? cell.diary.stickers.find(Boolean)
+                  : (cell.diary?.stickers && typeof cell.diary.stickers === 'object'
+                    ? Object.values(cell.diary.stickers).find(Boolean)
+                    : null);
+
+                const rawSticker =
                   cell.diary?.thumbnailMood ||
                   cell.diary?.weather ||
-                  cell.diary?.stickers?.[0]?.imageUrl ||
-                  cell.diary?.stickers?.[0]?.content;
+                  firstSticker?.imageUrl ||
+                  firstSticker?.content ||
+                  firstSticker?.icon ||
+                  firstSticker?.label;
+
+                let stickerVal = '';
+                if (typeof rawSticker === 'string' || typeof rawSticker === 'number') {
+                  stickerVal = String(rawSticker);
+                } else if (rawSticker && typeof rawSticker === 'object') {
+                  stickerVal =
+                    rawSticker.imageUrl ||
+                    rawSticker.icon ||
+                    rawSticker.content ||
+                    rawSticker.label ||
+                    '';
+                }
+
                 const isStickerImage =
-                  typeof sticker === 'string' &&
-                  (sticker.startsWith('data:') ||
-                    sticker.startsWith('http://') ||
-                    sticker.startsWith('https://') ||
-                    sticker.startsWith('/') ||
-                    sticker.startsWith('blob:'));
+                  typeof stickerVal === 'string' &&
+                  (stickerVal.startsWith('data:') ||
+                    stickerVal.startsWith('http://') ||
+                    stickerVal.startsWith('https://') ||
+                    stickerVal.startsWith('/') ||
+                    stickerVal.startsWith('blob:'));
 
                 return (
                   <div
@@ -354,13 +376,13 @@ export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate
                       {hasDiary ? (
                         isStickerImage ? (
                           <img
-                            src={sticker}
+                            src={stickerVal}
                             alt=""
                             className="w-6 h-6 sm:w-7 sm:h-7 object-contain select-none"
                           />
                         ) : (
                           <span className="text-base sm:text-lg leading-none filter drop-shadow-2xs select-none">
-                            {sticker || '✓'}
+                            {stickerVal || '✓'}
                           </span>
                         )
                       ) : (
