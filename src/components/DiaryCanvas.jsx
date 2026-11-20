@@ -322,19 +322,22 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   useEffect(() => { keyboardOffsetRef.current = keyboardOffset; }, [keyboardOffset]);
 
   // 선택/편집 중인 글상자가 가상 키보드나 하단 툴바에 가려지지 않도록 안전 가시 영역으로 자동 스크롤
+  // 모든 동적 값은 ref를 통해 참조하므로 함수 참조가 영구적으로 불변(stable) 유지됨
   const ensureTextBlockVisible = useCallback((blockId, options = {}) => {
     const scrollEl = scrollContainerRef.current;
     if (!scrollEl) return;
 
-    const currentBlocks = textBlocksRef.current || textBlocks;
-    const block = currentBlocks.find(b => b.id === blockId);
+    const currentBlocks = Array.isArray(textBlocksRef.current) 
+      ? textBlocksRef.current 
+      : (Array.isArray(textBlocks) ? textBlocks : []);
+    const block = currentBlocks.find(b => b && b.id === blockId);
     if (!block) return;
 
-    const sRatio = scaleRatioRef.current || scaleRatio || 1;
-    const kbOffset = keyboardOffsetRef.current || keyboardOffset || 0;
+    const sRatio = scaleRatioRef.current || 1;
+    const kbOffset = keyboardOffsetRef.current || 0;
 
     const topPx = Math.round((block.y || 0) * sRatio);
-    const textareaEl = textareaRefs.current[blockId];
+    const textareaEl = textareaRefs.current ? textareaRefs.current[blockId] : null;
     const blockHeight = textareaEl ? textareaEl.offsetHeight : Math.max(32, Math.round(36 * sRatio));
     const bottomPx = topPx + blockHeight;
 
@@ -366,7 +369,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     if (window.scrollY !== 0 || window.scrollX !== 0) {
       window.scrollTo(0, 0);
     }
-  }, [textBlocks, scaleRatio, keyboardOffset]);
+  }, []);
 
   useEffect(() => {
     const vv = window.visualViewport;
@@ -453,7 +456,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       window.removeEventListener('focusin', handleFocusIn);
       window.removeEventListener('focusout', handleFocusOut);
     };
-  }, [ensureTextBlockVisible]);
+  }, []);
 
   // 드래그 및 크기조절/회전 상태
   const [draggingItem, setDraggingItem] = useState(null);

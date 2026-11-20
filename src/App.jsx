@@ -112,6 +112,11 @@ class ErrorBoundary extends React.Component {
               최근 저장된 기록 또는 스티커 데이터 처리 중 일시적인 오류가 발생했습니다.<br />
               아래 버튼을 눌러 다시 시도하거나 임시 캐시를 정리하여 정상 복구할 수 있습니다.
             </p>
+            {this.state.error && (
+              <p className="text-xs text-red-500 font-mono bg-red-50 p-2 rounded-lg text-left overflow-auto max-h-24 break-all">
+                {String(this.state.error?.message || this.state.error)}
+              </p>
+            )}
             <div className="flex flex-col gap-2 pt-2">
               <button
                 type="button"
