@@ -63,7 +63,7 @@ export default function Header({
               onBlur={handleFinishEditing}
               onKeyDown={handleKeyDown}
               maxLength={24}
-              className="text-2xl sm:text-3xl font-black text-black tracking-tight leading-none bg-transparent border-0 border-b-2 border-black focus:outline-hidden focus:ring-0 p-0 w-full"
+              className="text-2xl sm:text-3xl font-black text-[#000000] tracking-tight leading-none bg-transparent border-0 border-b-2 border-black focus:outline-hidden focus:ring-0 p-0 w-full"
             />
           ) : (
             <div
@@ -71,7 +71,7 @@ export default function Header({
               className="group inline-flex items-center space-x-2 cursor-pointer"
               title="클릭하여 다이어리 이름 변경"
             >
-              <h1 className="text-2xl sm:text-3xl font-black text-black tracking-tight leading-none select-none group-hover:opacity-75 transition-opacity">
+              <h1 className="text-2xl sm:text-3xl font-black text-[#000000] tracking-tight leading-none select-none">
                 {diaryName}
               </h1>
               <span className="opacity-0 group-hover:opacity-60 transition-opacity text-stone-400">
