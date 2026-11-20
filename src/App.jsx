@@ -98,6 +98,7 @@ class ErrorBoundary extends React.Component {
     try {
       localStorage.removeItem('analog_diaries');
       localStorage.removeItem('analog_diary_entries');
+      localStorage.removeItem('analog_diary_auth_user');
       window.location.reload();
     } catch (e) {}
   };
@@ -329,90 +330,107 @@ function DiaryMainApp() {
   }, []);
 
   // 2. 로그인된 사용자의 Firestore 실시간 동기화 (일기 목록 + 다이어리 이름)
+  // 계정이 전환되거나 홈 바로가기로 다른 계정에 진입 시 이전 캐시를 안전하게 초기화
+  const currentUidRef = useRef(user?.uid);
   useEffect(() => {
-    if (!user) return;
+    if (user?.uid && currentUidRef.current && currentUidRef.current !== user.uid) {
+      setDiaries([]);
+      try {
+        localStorage.removeItem('analog_diaries');
+        localStorage.removeItem('analog_diary_entries');
+      } catch (e) {}
+    }
+    currentUidRef.current = user?.uid;
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid) return;
 
     let unsubscribeDiaries = () => {};
     let unsubscribeSettings = () => {};
     let isCancelled = false;
+    let syncSafetyTimer = null;
 
-    const initCloudSync = async () => {
-      setIsSyncing(true);
+    setIsSyncing(true);
+
+    // 네트워크 지연이나 PWA 백그라운드 복귀 시 동기화 스피너가 무한 회전하는 것을 방지하는 안전 타이머 (최대 5초)
+    syncSafetyTimer = setTimeout(() => {
+      setIsSyncing(false);
+    }, 5000);
+
+    // 클라우드 일기 실시간 구독 즉시 개시 (게스트 데이터 업로드 완료 대기 없이 즉시 병렬 시작)
+    unsubscribeDiaries = subscribeToUserDiaries(
+      user.uid,
+      async (cloudDiaries) => {
+        if (syncSafetyTimer) clearTimeout(syncSafetyTimer);
+        const sanitizedCloud = (cloudDiaries || []).map((d) => ({
+          ...d,
+          textBlocks: Array.isArray(d?.textBlocks)
+            ? d.textBlocks
+            : (d?.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
+          stickers: Array.isArray(d?.stickers)
+            ? d.stickers
+            : (d?.stickers && typeof d.stickers === 'object' ? Object.values(d.stickers) : []),
+          strokes: Array.isArray(d?.strokes)
+            ? d.strokes
+            : (d?.strokes && typeof d.strokes === 'object' ? Object.values(d.strokes) : []),
+        }));
+        const deduped = deduplicateDiariesByDate(sanitizedCloud);
+        setDiaries(deduped);
+        setIsSyncing(false);
+
+        // Firestore에 동일 날짜로 생성된 불필요한 중복 문서가 남아있다면 원격에서도 자동 정리
+        if (cloudDiaries.length > deduped.length) {
+          const keepIds = new Set(deduped.map((d) => d.id));
+          const duplicateDocs = cloudDiaries.filter((d) => !keepIds.has(d.id));
+          for (const dup of duplicateDocs) {
+            if (dup?.id) {
+              deleteDiaryFromCloud(user.uid, dup.id).catch(() => {});
+            }
+          }
+        }
+      },
+      () => {
+        if (syncSafetyTimer) clearTimeout(syncSafetyTimer);
+        setIsSyncing(false);
+      }
+    );
+
+    // 클라우드 다이어리 이름 설정 실시간 구독
+    unsubscribeSettings = subscribeToUserSettings(user.uid, (settings) => {
+      if (settings?.diaryName) {
+        setDiaryName(settings.diaryName);
+        try {
+          localStorage.setItem('analog_diary_name', settings.diaryName);
+        } catch (e) {}
+      }
+    });
+
+    // 비로그인(게스트) 상태에서 새로 작성된 로컬 일기가 있는 경우 백그라운드에서 병합 업로드
+    (async () => {
       try {
-        // 비로그인(게스트) 상태에서 새로 작성된 로컬 일기가 있는 경우에만 클라우드로 1회 업로드 병합
-        // (이미 로그인된 계정은 Firestore가 Single Source of Truth이므로 다른 기기의 옛 캐시로 인한 부활 원천 차단)
         let hasUnsyncedGuest = false;
         try {
           hasUnsyncedGuest = localStorage.getItem('analog_diary_has_unsynced_guest_data') === 'true';
         } catch (e) {}
-        if (hasUnsyncedGuest) {
+        if (hasUnsyncedGuest && !isCancelled) {
           await syncLocalDiariesToCloud(user.uid, diariesRef.current);
           try {
             localStorage.removeItem('analog_diary_has_unsynced_guest_data');
           } catch (e) {}
         }
-
-        if (isCancelled) return;
-
-        // 클라우드 일기 실시간 구독 (날짜별 중복 자동 정리 & 방어적 파싱)
-        unsubscribeDiaries = subscribeToUserDiaries(
-          user.uid,
-          async (cloudDiaries) => {
-            const sanitizedCloud = (cloudDiaries || []).map((d) => ({
-              ...d,
-              textBlocks: Array.isArray(d?.textBlocks)
-                ? d.textBlocks
-                : (d?.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
-              stickers: Array.isArray(d?.stickers)
-                ? d.stickers
-                : (d?.stickers && typeof d.stickers === 'object' ? Object.values(d.stickers) : []),
-              strokes: Array.isArray(d?.strokes)
-                ? d.strokes
-                : (d?.strokes && typeof d.strokes === 'object' ? Object.values(d.strokes) : []),
-            }));
-            const deduped = deduplicateDiariesByDate(sanitizedCloud);
-            setDiaries(deduped);
-            setIsSyncing(false);
-
-            // Firestore에 동일 날짜로 생성된 불필요한 중복 문서가 남아있다면 원격에서도 자동 정리
-            if (cloudDiaries.length > deduped.length) {
-              const keepIds = new Set(deduped.map((d) => d.id));
-              const duplicateDocs = cloudDiaries.filter((d) => !keepIds.has(d.id));
-              for (const dup of duplicateDocs) {
-                if (dup?.id) {
-                  deleteDiaryFromCloud(user.uid, dup.id).catch(() => {});
-                }
-              }
-            }
-          },
-          () => {
-            setIsSyncing(false);
-          }
-        );
-
-        // 클라우드 다이어리 이름 설정 실시간 구독
-        unsubscribeSettings = subscribeToUserSettings(user.uid, (settings) => {
-          if (settings?.diaryName) {
-            setDiaryName(settings.diaryName);
-            try {
-              localStorage.setItem('analog_diary_name', settings.diaryName);
-            } catch (e) {}
-          }
-        });
       } catch (err) {
-        console.error('[Cloud Sync] 초기화 오류:', err);
-        setIsSyncing(false);
+        console.warn('[Cloud Sync] 게스트 데이터 동기화 경고:', err);
       }
-    };
-
-    initCloudSync();
+    })();
 
     return () => {
       isCancelled = true;
+      if (syncSafetyTimer) clearTimeout(syncSafetyTimer);
       unsubscribeDiaries();
       unsubscribeSettings();
     };
-  }, [user]);
+  }, [user?.uid]);
 
   // 구글 로그인 핸들러
   const handleGoogleLogin = async () => {

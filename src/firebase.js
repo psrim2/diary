@@ -171,19 +171,29 @@ export function subscribeToUserDiaries(uid, onUpdate, onError) {
   if (!isFirebaseConfigured || !db || !uid) return () => {};
 
   const diariesRef = collection(db, 'users', uid, 'diaries');
-  return onSnapshot(
-    diariesRef,
-    async (snapshot) => {
-      // 멀티 디바이스 간 삭제된 항목 부활 방지: deleted_ids 목록 조회
-      let deletedIds = new Set();
-      try {
-        const deletedSnap = await getDocs(collection(db, 'users', uid, 'deleted_ids'));
-        deletedIds = new Set(deletedSnap.docs.map((d) => d.id));
-      } catch (err) {}
+  let cachedDeletedIds = new Set();
 
+  // 삭제된 묘비(tombstones) 백그라운드 실시간 캐싱 (메인 구독 블로킹 방지)
+  let unsubscribeDeleted = () => {};
+  try {
+    const deletedRef = collection(db, 'users', uid, 'deleted_ids');
+    unsubscribeDeleted = onSnapshot(
+      deletedRef,
+      (deletedSnap) => {
+        cachedDeletedIds = new Set(deletedSnap.docs.map((d) => d.id));
+      },
+      (err) => {
+        console.warn('[Firestore] deleted_ids 구독 경고:', err);
+      }
+    );
+  } catch (err) {}
+
+  const unsubscribeDiaries = onSnapshot(
+    diariesRef,
+    (snapshot) => {
       const cloudDiaries = [];
       snapshot.docs.forEach((docSnap) => {
-        if (LEGACY_SAMPLE_IDS.has(docSnap.id) || deletedIds.has(docSnap.id)) {
+        if (LEGACY_SAMPLE_IDS.has(docSnap.id) || cachedDeletedIds.has(docSnap.id)) {
           // 삭제된 묘비(tombstone)에 등록된 일기는 Firestore에서 영구 삭제
           deleteDoc(doc(db, 'users', uid, 'diaries', docSnap.id)).catch(() => {});
           return;
@@ -202,6 +212,11 @@ export function subscribeToUserDiaries(uid, onUpdate, onError) {
       if (onError) onError(error);
     }
   );
+
+  return () => {
+    unsubscribeDiaries();
+    unsubscribeDeleted();
+  };
 }
 
 /**
@@ -258,35 +273,46 @@ export async function syncLocalDiariesToCloud(uid, localDiaries = []) {
     return;
   }
 
-  const diariesRef = collection(db, 'users', uid, 'diaries');
-  const existingSnap = await getDocs(diariesRef);
-  const existingIds = new Set(existingSnap.docs.map((d) => d.id));
+  // 네트워크 지연으로 인한 동기화 무한 대기 방지 (최대 4초 타임아웃)
+  const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 4000));
 
-  // 삭제된 묘비(tombstones) 목록 조회 (다른 기기에서 이미 삭제한 일기는 절대 재업로드하지 않음)
-  let deletedIds = new Set();
-  try {
-    const deletedSnap = await getDocs(collection(db, 'users', uid, 'deleted_ids'));
-    deletedIds = new Set(deletedSnap.docs.map((d) => d.id));
-  } catch (err) {}
+  const syncTask = async () => {
+    try {
+      const diariesRef = collection(db, 'users', uid, 'diaries');
+      const existingSnap = await getDocs(diariesRef);
+      const existingIds = new Set(existingSnap.docs.map((d) => d.id));
 
-  const batch = writeBatch(db);
-  let hasNewItems = false;
+      // 삭제된 묘비(tombstones) 목록 조회 (다른 기기에서 이미 삭제한 일기는 절대 재업로드하지 않음)
+      let deletedIds = new Set();
+      try {
+        const deletedSnap = await getDocs(collection(db, 'users', uid, 'deleted_ids'));
+        deletedIds = new Set(deletedSnap.docs.map((d) => d.id));
+      } catch (err) {}
 
-  localDiaries.forEach((diary) => {
-    const idStr = String(diary?.id || '');
-    if (idStr && !LEGACY_SAMPLE_IDS.has(idStr) && !existingIds.has(idStr) && !deletedIds.has(idStr)) {
-      const docRef = doc(db, 'users', uid, 'diaries', idStr);
-      batch.set(docRef, {
-        ...diary,
-        updatedAt: serverTimestamp(),
+      const batch = writeBatch(db);
+      let hasNewItems = false;
+
+      localDiaries.forEach((diary) => {
+        const idStr = String(diary?.id || '');
+        if (idStr && !LEGACY_SAMPLE_IDS.has(idStr) && !existingIds.has(idStr) && !deletedIds.has(idStr)) {
+          const docRef = doc(db, 'users', uid, 'diaries', idStr);
+          batch.set(docRef, {
+            ...diary,
+            updatedAt: serverTimestamp(),
+          });
+          hasNewItems = true;
+        }
       });
-      hasNewItems = true;
-    }
-  });
 
-  if (hasNewItems) {
-    await batch.commit();
-  }
+      if (hasNewItems) {
+        await batch.commit();
+      }
+    } catch (err) {
+      console.warn('[Sync] 게스트 일기 업로드 중 오류:', err);
+    }
+  };
+
+  await Promise.race([syncTask(), timeoutPromise]);
 }
 
 /**

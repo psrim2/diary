@@ -289,7 +289,19 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     });
     (textBlocks || []).forEach((t) => {
       if (!t) return;
-      const bottom = ((t.y || 0) + 90 * (t.scale || 1)) * scaleRatio;
+      const text = t.text || '';
+      // 줄바꿈 및 글자수에 따른 동적 높이 계산 (줄바꿈이 길거나 텍스트 박스가 많을 때 잘림 없이 하단 스크롤 확보)
+      const lineCount = text.split('\n').reduce((acc, line) => {
+        const estWrapped = Math.max(1, Math.ceil((line.length * 12) / (t.width || CANONICAL_WIDTH)));
+        return acc + estWrapped;
+      }, 0);
+      const approxLineH = Math.max(26, Math.round((t.fontSize || 18) * 1.5));
+      const approxHeight = Math.max(50, lineCount * approxLineH + 24) * (t.scale || 1);
+      const measuredHeight = textareaRefs.current?.[t.id]?.offsetHeight
+        ? (textareaRefs.current[t.id].offsetHeight / (scaleRatio || 1))
+        : 0;
+      const blockH = Math.max(approxHeight, measuredHeight);
+      const bottom = ((t.y || 0) + blockH) * scaleRatio;
       if (bottom > maxY) maxY = bottom;
     });
     (strokesHistory || []).forEach((stroke) => {
@@ -1795,6 +1807,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           }}
           style={{
             minHeight: `${paperHeightPx}px`,
+            touchAction: activeToolMode === 'pen' ? 'none' : 'pan-y',
             WebkitTouchCallout: 'none',
             userSelect: 'none',
             WebkitUserSelect: 'none',
@@ -1894,7 +1907,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 zIndex: blockZIndex,
                 transform: `rotate(${blockRotation}deg) scale(${blockScale})`,
                 transformOrigin: 'center center',
-                touchAction: 'none',
+                touchAction: 'pan-y',
                 backgroundColor: 'transparent',
                 border: isSelected ? '1px solid rgba(0, 0, 0, 0.1)' : '1px solid transparent',
               }}
@@ -1941,8 +1954,6 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 value={block.text || ''}
                 placeholder={isSelected ? '텍스트를 입력하세요...' : ''}
                 onClick={(e) => e.stopPropagation()}
-                onPointerDown={(e) => e.stopPropagation()}
-                onTouchStart={(e) => e.stopPropagation()}
                 onFocus={() => {
                   setSelectedTextId(block.id);
                   setSelectedStickerId(null);
@@ -1966,8 +1977,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   textAlign: block.textAlign || 'left',
                   lineHeight: 1.5,
                   minHeight: `${minBoxHeight}px`,
+                  touchAction: 'pan-y',
                 }}
-                className="w-full bg-transparent border-0 focus:ring-0 p-1 resize-none overflow-hidden outline-none block"
+                className="w-full bg-transparent border-0 focus:ring-0 p-1 resize-none overflow-hidden outline-none block touch-pan-y"
                 rows={1}
               />
             </div>
