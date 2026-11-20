@@ -364,13 +364,14 @@ export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate
                     </div>
 
                     {/* 일기 작성 스티커 / 내용이 있는 경우 연두색 dot 표시 */}
-                    <div className="min-h-[22px] flex items-center justify-center mt-0.5">
+                    <div className="w-full min-h-[22px] flex items-center justify-center mt-0.5">
                       {hasDiary ? (
                         isStickerImage ? (
                           <img
                             src={stickerVal}
                             alt=""
-                            className="w-6 h-6 sm:w-7 sm:h-7 object-contain select-none"
+                            style={{ width: '80%', maxWidth: '40px', maxHeight: '40px', height: 'auto' }}
+                            className="w-[80%] max-w-[40px] max-h-[40px] h-auto object-contain select-none pointer-events-none"
                           />
                         ) : stickerVal ? (
                           <span className="text-base sm:text-lg leading-none filter drop-shadow-2xs select-none">
