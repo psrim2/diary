@@ -300,14 +300,73 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   // 속지 최소 높이 동적 계산:
   // 1) 기본적으로 화면 높이보다 380px 더 길어서, 항상 하단 플로팅 툴바 위로 넉넉하게 스크롤 가능
   // 2) 컨텐츠(손글씨, 스티커, 사진)가 아래로 내려갈수록 바닥 아래 380px 여유 공간을 두고 무한 확장되어 절대 잘리지 않음
+  // 3) 가상 키보드 활성화 시 글상자가 키보드 위로 편안하게 스크롤될 수 있도록 하단 여백 추가 확보
   const paperHeightPx = useMemo(() => {
-    const baseMin = (containerHeight > 0 ? containerHeight : 700) + 380;
-    const contentNeeded = contentMaxBottomPx > 0 ? contentMaxBottomPx + 380 : 0;
+    const extraBottom = keyboardOffset > 0 ? 460 : 380;
+    const baseMin = (containerHeight > 0 ? containerHeight : 700) + extraBottom;
+    const contentNeeded = contentMaxBottomPx > 0 ? contentMaxBottomPx + extraBottom : 0;
     return Math.round(Math.max(baseMin, contentNeeded));
-  }, [containerHeight, contentMaxBottomPx]);
+  }, [containerHeight, contentMaxBottomPx, keyboardOffset]);
 
   // 모바일/태블릿 가상 키보드 높이 감지 (툴바가 키보드 위로 올라오도록 오프셋 계산)
   const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  // 이벤트 리스너 및 타이머 내 최신 상태 동기화용 refs
+  const selectedTextIdRef = useRef(selectedTextId);
+  useEffect(() => { selectedTextIdRef.current = selectedTextId; }, [selectedTextId]);
+  const textBlocksRef = useRef(textBlocks);
+  useEffect(() => { textBlocksRef.current = textBlocks; }, [textBlocks]);
+  const scaleRatioRef = useRef(scaleRatio);
+  useEffect(() => { scaleRatioRef.current = scaleRatio; }, [scaleRatio]);
+  const keyboardOffsetRef = useRef(keyboardOffset);
+  useEffect(() => { keyboardOffsetRef.current = keyboardOffset; }, [keyboardOffset]);
+
+  // 선택/편집 중인 글상자가 가상 키보드나 하단 툴바에 가려지지 않도록 안전 가시 영역으로 자동 스크롤
+  const ensureTextBlockVisible = useCallback((blockId, options = {}) => {
+    const scrollEl = scrollContainerRef.current;
+    if (!scrollEl) return;
+
+    const currentBlocks = textBlocksRef.current || textBlocks;
+    const block = currentBlocks.find(b => b.id === blockId);
+    if (!block) return;
+
+    const sRatio = scaleRatioRef.current || scaleRatio || 1;
+    const kbOffset = keyboardOffsetRef.current || keyboardOffset || 0;
+
+    const topPx = Math.round((block.y || 0) * sRatio);
+    const textareaEl = textareaRefs.current[blockId];
+    const blockHeight = textareaEl ? textareaEl.offsetHeight : Math.max(32, Math.round(36 * sRatio));
+    const bottomPx = topPx + blockHeight;
+
+    const currentScrollTop = scrollEl.scrollTop;
+    const containerH = scrollEl.clientHeight;
+
+    // 하단 툴바(약 60~68px) 및 키보드 감안 안전 영역 하단 한계 (여유 마진 포함)
+    const safeBottomMargin = (kbOffset > 0 ? 80 : 70);
+    const safeVisibleHeight = Math.max(120, containerH - safeBottomMargin);
+
+    // 1) 텍스트 블록의 하단이 안전 가시 영역보다 아래로 내려간 경우 (툴바/키보드와 겹치거나 가려짐)
+    if (bottomPx > currentScrollTop + safeVisibleHeight) {
+      // 텍스트 블록 상단이 안전 가시 영역의 약 30% 지점에 여유 있게 위치하도록 부드럽게 스크롤
+      const targetScroll = Math.max(0, Math.round(topPx - (safeVisibleHeight * 0.3)));
+      scrollEl.scrollTo({
+        top: targetScroll,
+        behavior: options.instant ? 'auto' : 'smooth'
+      });
+    }
+    // 2) 텍스트 블록 상단이 상단 헤더 뒤로 숨겨진 경우
+    else if (topPx < currentScrollTop + 15) {
+      const targetScroll = Math.max(0, Math.round(topPx - 20));
+      scrollEl.scrollTo({
+        top: targetScroll,
+        behavior: options.instant ? 'auto' : 'smooth'
+      });
+    }
+
+    if (window.scrollY !== 0 || window.scrollX !== 0) {
+      window.scrollTo(0, 0);
+    }
+  }, [textBlocks, scaleRatio, keyboardOffset]);
 
   useEffect(() => {
     const vv = window.visualViewport;
@@ -340,6 +399,12 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       const calculatedOffset = isKeyboardActive ? Math.round(rawDiff) : 0;
 
       setKeyboardOffset(calculatedOffset);
+
+      if (isKeyboardActive && selectedTextIdRef.current) {
+        const tid = selectedTextIdRef.current;
+        setTimeout(() => ensureTextBlockVisible(tid), 60);
+        setTimeout(() => ensureTextBlockVisible(tid), 200);
+      }
     };
 
     updateKeyboardPosition();
@@ -359,6 +424,13 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         setTimeout(updateKeyboardPosition, 150);
         setTimeout(updateKeyboardPosition, 300);
         setTimeout(updateKeyboardPosition, 500);
+
+        if (selectedTextIdRef.current) {
+          const tid = selectedTextIdRef.current;
+          setTimeout(() => ensureTextBlockVisible(tid), 80);
+          setTimeout(() => ensureTextBlockVisible(tid), 250);
+          setTimeout(() => ensureTextBlockVisible(tid), 450);
+        }
       }
     };
 
@@ -381,7 +453,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       window.removeEventListener('focusin', handleFocusIn);
       window.removeEventListener('focusout', handleFocusOut);
     };
-  }, []);
+  }, [ensureTextBlockVisible]);
 
   // 드래그 및 크기조절/회전 상태
   const [draggingItem, setDraggingItem] = useState(null);
@@ -868,29 +940,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       window.scrollTo(0, 0);
     }
 
-    // 새로 생성된 글상자가 키보드나 하단 툴바 뒤에 가려지지 않도록 속지 내부만 부드럽게 스크롤
-    const scrollToNewBlock = () => {
-      if (window.scrollY !== 0 || window.scrollX !== 0) {
-        window.scrollTo(0, 0);
-      }
-      if (scrollContainerRef.current) {
-        const targetPx = newY * scaleRatio;
-        const currentScroll = scrollContainerRef.current.scrollTop;
-        const containerH = scrollContainerRef.current.clientHeight || (window.innerHeight - 250);
-        // 하단 플로팅 툴바(약 60px) 및 여유 마진 감안한 안전 가시 영역
-        const safeVisibleHeight = Math.max(120, containerH - 70);
-
-        if (targetPx < currentScroll + 20 || targetPx > currentScroll + safeVisibleHeight - 20) {
-          scrollContainerRef.current.scrollTo({
-            top: Math.max(0, Math.round(targetPx - (safeVisibleHeight * 0.3))),
-            behavior: 'smooth'
-          });
-        }
-      }
-    };
-
-    setTimeout(scrollToNewBlock, 50);
-    setTimeout(scrollToNewBlock, 250);
+    // 새로 생성된 글상자가 키보드나 하단 툴바 뒤에 가려지지 않도록 안전 가시 영역으로 자동 스크롤
+    setTimeout(() => ensureTextBlockVisible(newId), 60);
+    setTimeout(() => ensureTextBlockVisible(newId), 250);
   };
 
   const updateTextBlock = (id, fields) => {
@@ -954,6 +1006,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       id,
       startX: clientX,
       startY: clientY,
+      startScrollTop: scrollContainerRef.current?.scrollTop || 0,
       origX: resolvedOrigX,
       origY: resolvedOrigY,
     });
@@ -1099,8 +1152,10 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         if (e.cancelable) e.preventDefault();
         const paperRect = canvasContainerRef.current?.getBoundingClientRect();
         const uniformScale = paperRect && paperRect.width > 0 ? paperRect.width / CANONICAL_WIDTH : 1;
+        const currentScroll = scrollContainerRef.current?.scrollTop || 0;
+        const scrollDeltaY = (currentScroll - (draggingItem.startScrollTop || 0)) / uniformScale;
         const deltaX = (clientX - draggingItem.startX) / uniformScale;
-        const deltaY = (clientY - draggingItem.startY) / uniformScale;
+        const deltaY = ((clientY - draggingItem.startY) / uniformScale) + scrollDeltaY;
         const maxCanonicalY = paperRect && paperRect.height > 0 && uniformScale > 0 ? paperRect.height / uniformScale : CANONICAL_HEIGHT;
 
         const newX = Math.max(0, Math.min(CANONICAL_WIDTH - 20, draggingItem.origX + deltaX));
@@ -1108,6 +1163,21 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
         if (draggingItem.type === 'text') {
           updateTextBlock(draggingItem.id, { x: newX, y: newY });
+
+          // 모바일/태블릿 화면 하단(키보드/툴바) 근처로 드래그 시 속지 부드러운 자동 스크롤
+          if (scrollContainerRef.current) {
+            const containerRect = scrollContainerRef.current.getBoundingClientRect();
+            const bottomThreshold = containerRect.bottom - (keyboardOffsetRef.current > 0 ? 85 : 65);
+            const topThreshold = containerRect.top + 40;
+
+            if (clientY > bottomThreshold && clientY < containerRect.bottom + 60) {
+              const scrollStep = Math.min(20, Math.max(4, (clientY - bottomThreshold) * 0.35));
+              scrollContainerRef.current.scrollTop += scrollStep;
+            } else if (clientY < topThreshold && clientY > containerRect.top - 40) {
+              const scrollStep = Math.min(20, Math.max(4, (topThreshold - clientY) * 0.35));
+              scrollContainerRef.current.scrollTop -= scrollStep;
+            }
+          }
         } else if (draggingItem.type === 'sticker') {
           updateSticker(draggingItem.id, { x: newX, y: newY });
         }
@@ -1115,6 +1185,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     };
 
     const handleGlobalUp = () => {
+      const finishedDrag = draggingItem;
       if (draggingItem || transformingItem) {
         wasTransformingRef.current = true;
         setTimeout(() => {
@@ -1123,6 +1194,13 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       }
       setDraggingItem(null);
       setTransformingItem(null);
+
+      // 드래그가 끝났을 때 글상자가 하단 키보드/툴바에 가려지지 않도록 안전 가시 영역으로 자동 보정
+      if (finishedDrag && finishedDrag.type === 'text') {
+        const finishedId = finishedDrag.id;
+        setTimeout(() => ensureTextBlockVisible(finishedId), 50);
+        setTimeout(() => ensureTextBlockVisible(finishedId), 200);
+      }
     };
 
     window.addEventListener('pointermove', handleGlobalMove);
@@ -1809,20 +1887,20 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 backgroundColor: 'transparent',
                 border: isSelected ? '1px solid rgba(0, 0, 0, 0.1)' : '1px solid transparent',
               }}
-              className="absolute select-text transition-all p-1.5 rounded-lg"
+              className={`absolute select-text ${isSelected && draggingItem?.id === block.id ? '' : 'transition-[border,box-shadow]'} p-1.5 rounded-lg`}
             >
               {/* 선택 시 상단 미니멀 이동 바 및 우측 세로 핸들 (배경/원형버튼 제거, 미니멀 디자인) */}
               {isSelected && (
                 <>
-                  {/* 상단 중앙: 슬림한 미니 이동 드래그 바 */}
+                  {/* 상단 중앙: 슬림한 미니 이동 드래그 바 (모바일 터치 편의성을 위해 터치 영역은 넉넉하게 확보) */}
                   <div
                     onPointerDown={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
                     onTouchStart={(e) => handleItemDragStart(e, 'text', block.id, block.x, block.y)}
                     style={{ transform: `translateX(-50%) scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -top-2 left-1/2 w-10 h-4 flex items-center justify-center cursor-move z-30 touch-none group select-none"
+                    className="absolute -top-3 left-1/2 w-12 h-6 flex items-center justify-center cursor-move z-30 touch-none group select-none"
                     title="드래그하여 이동"
                   >
-                    <div className="w-7 h-1 rounded-full bg-black/20 group-hover:bg-black/50 transition-colors" />
+                    <div className="w-8 h-1.5 rounded-full bg-black/25 group-hover:bg-black/60 transition-colors" />
                   </div>
 
                   {/* 우측 중앙: 세로로 긴 타입의 가로 너비 조절 핸들 (줄바꿈 변경, 정확한 세로 중앙정렬) */}
@@ -1858,15 +1936,20 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   if (window.scrollY !== 0 || window.scrollX !== 0) {
                     window.scrollTo(0, 0);
                   }
+                  setTimeout(() => ensureTextBlockVisible(block.id), 50);
+                  setTimeout(() => ensureTextBlockVisible(block.id), 200);
+                  setTimeout(() => ensureTextBlockVisible(block.id), 400);
                 }}
                 onChange={(e) => {
                   updateTextBlock(block.id, { text: e.target.value });
                   e.target.style.height = 'auto';
                   e.target.style.height = `${Math.max(minBoxHeight, e.target.scrollHeight)}px`;
+                  ensureTextBlockVisible(block.id);
                 }}
                 onInput={(e) => {
                   e.target.style.height = 'auto';
                   e.target.style.height = `${Math.max(minBoxHeight, e.target.scrollHeight)}px`;
+                  ensureTextBlockVisible(block.id);
                 }}
                 style={{
                   fontFamily: block.fontFamily || "'Paperlogy', sans-serif",
@@ -2021,8 +2104,11 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         })}
         </div>
 
-        {/* 하단 플로팅 툴바에 가려지지 않도록 보장하는 안전 여백 스페이서 */}
-        <div className="w-full h-44 sm:h-52 shrink-0 pointer-events-none" />
+        {/* 하단 플로팅 툴바 및 가상 키보드에 가려지지 않도록 보장하는 안전 여백 스페이서 */}
+        <div 
+          style={{ height: keyboardOffset > 0 ? '360px' : undefined }}
+          className="w-full h-44 sm:h-52 shrink-0 pointer-events-none transition-[height] duration-200" 
+        />
       </div>
     </div>
 
