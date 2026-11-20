@@ -197,6 +197,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   const canvasRef = useRef(null);
   const canvasContainerRef = useRef(null);
   const isDrawingRef = useRef(false);
+  const activePointerIdRef = useRef(null);
+  const activePointerTypeRef = useRef(null);
+  const lastPenTimeRef = useRef(0);
   const currentStrokeRef = useRef(null);
   const wasTransformingRef = useRef(false);
   const twoFingerTransformRef = useRef(null);
@@ -456,6 +459,8 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         isTwoFingerScroll = true;
         touchStartY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
         isDrawingRef.current = false;
+        activePointerIdRef.current = null;
+        activePointerTypeRef.current = null;
         currentStrokeRef.current = null;
         clearOverlayCanvas();
       } else {
@@ -550,13 +555,47 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     };
   };
 
-  // 드로잉 이벤트 (아이패드 애플펜슬 필기 시 cancelable 이벤트 즉시 차단하여 사파리 롱프레스 툴팁 방지)
+  // 드로잉 이벤트 (아이패드 애플펜슬 필기 및 모바일/스마트폰 손가락 손글씨 입력 완벽 지원)
   const handlePointerDown = (e) => {
     if (activeToolMode !== 'pen') return;
 
-    // 팜 리젝션(Palm Rejection): 면적이 넓은 손바닥 접촉 터치 노이즈 무시
-    if (e.pointerType === 'touch' && ((e.width && e.width > 24) || (e.height && e.height > 24))) {
+    // 이미 특정 포인터로 스트로크를 그리는 중인 경우 다른 멀티터치 간섭 차단
+    if (isDrawingRef.current && activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
       return;
+    }
+
+    const isPen = e.pointerType === 'pen';
+    const isTouch = e.pointerType === 'touch';
+
+    if (isPen) {
+      lastPenTimeRef.current = Date.now();
+    }
+
+    // 스마트 팜 리젝션 (Palm Rejection):
+    if (isTouch) {
+      // 1) 애플펜슬로 필기 중인 도중에 화면에 닿는 손바닥 터치는 100% 무시
+      if (isDrawingRef.current && activePointerTypeRef.current === 'pen') {
+        return;
+      }
+
+      // 2) 최근(1.2초 이내) 애플펜슬을 사용한 상태(아이패드 등)에서 발생하는 손바닥 접촉 차단
+      if (Date.now() - lastPenTimeRef.current < 1200) {
+        return;
+      }
+
+      // 3) 손바닥(Palm) 면적 기반 필터링:
+      // 스마트폰이나 태블릿에서 일반 손가락 끝(Fingertip) 필기 터치는 접촉 폭이 약 25~45px 범위입니다.
+      // 반면 화면에 닿은 손바닥/손날 면적은 70px 이상으로 매우 넓습니다.
+      const contactW = e.width || 0;
+      const contactH = e.height || 0;
+      const isPalmContact =
+        (contactW > 65 && contactH > 65) ||
+        contactW > 85 ||
+        contactH > 85;
+
+      if (isPalmContact) {
+        return;
+      }
     }
 
     if (e.cancelable) {
@@ -570,6 +609,9 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         e.target.setPointerCapture(e.pointerId);
       } catch (err) {}
     }
+
+    activePointerIdRef.current = e.pointerId;
+    activePointerTypeRef.current = e.pointerType;
 
     const { x, y } = getCoordinates(e);
 
@@ -613,6 +655,12 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
   const handlePointerMove = (e) => {
     if (!isDrawingRef.current || activeToolMode !== 'pen') return;
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
+
+    if (e.pointerType === 'pen') {
+      lastPenTimeRef.current = Date.now();
+    }
+
     if (e.cancelable) {
       e.preventDefault();
     }
@@ -665,7 +713,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       const dist = Math.hypot(rawX - lastPt.x, rawY - lastPt.y);
       if (dist < 1.2) continue;
 
-      // 2. 가중 지수 이동 평균(EMA)으로 애플펜슬 고주파 떨림을 매끄럽게 흡수
+      // 2. 가중 지수 이동 평균(EMA)으로 고주파 떨림을 매끄럽게 흡수
       const smoothedX = lastPt.x * 0.2 + rawX * 0.8;
       const smoothedY = lastPt.y * 0.2 + rawY * 0.8;
 
@@ -696,11 +744,14 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   };
 
   const handlePointerUp = (e) => {
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
     if (!isDrawingRef.current || activeToolMode !== 'pen') return;
     if (e.cancelable) {
       e.preventDefault();
     }
     isDrawingRef.current = false;
+    activePointerIdRef.current = null;
+    activePointerTypeRef.current = null;
 
     if (e.target.releasePointerCapture && e.pointerId) {
       try {
