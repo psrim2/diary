@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -307,14 +307,14 @@ export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate
               </div>
             </button>
 
-            {/* 2026 November 10px 옆 44px 볼드 원 안에 Today 텍스트 넣기 (클릭 시 오늘 날짜 달력으로 이동) */}
+            {/* 참고 이미지의 [오늘] 버튼과 동일하게 구현: press 상태 없이 한 번 누르고 끝 */}
             <button
               type="button"
               onClick={handleGoToToday}
-              className="w-[44px] h-[44px] rounded-full border-[2.5px] border-black flex items-center justify-center font-bold text-xs text-black active:scale-95 hover:bg-black hover:text-white transition-all shadow-2xs cursor-pointer select-none shrink-0"
-              title="오늘 날짜 달력으로 이동"
+              className="px-3.5 py-1.5 rounded-full bg-white border border-stone-200/80 shadow-xs flex items-center justify-center font-bold text-xs sm:text-sm text-stone-900 active:scale-95 hover:bg-stone-50 transition-all cursor-pointer select-none shrink-0"
+              title="오늘 날짜로 이동"
             >
-              Today
+              오늘
             </button>
           </div>
         </div>
@@ -463,172 +463,145 @@ export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate
 
       {/* 
         ================================================================
-        [1년 단위 연력 모달 (Yearly Calendar Modal)]
-        - 2026 November 클릭 시 오픈
-        - 12개월(1월~12월) 연간 달력 표출
-        - 일기에 기록이 있는 날짜는 연두색 dot(#84cc16)으로 한눈에 표시
-        - 월 또는 일자 클릭 시 해당 달력으로 즉시 이동
+        [1년 단위 연간 달력 (Yearly Calendar)]
+        - 1년이 한 페이지에 쏙 들어오도록 3열 x 4행(12개월) 풀 핏 디자인
+        - 첨부 이미지 완벽 구현:
+          * 상단: ← (뒤로가기), 2026 (중앙 연도), 오늘 (우측 버튼)
+          * 각 월: 두 자리 숫자(01, 02..), 하단 가로 라인, S(오렌지) ~ S(오렌지)
+          * 일기 있는 날: 볼드 원형 링(O)으로 표시
+          * 오늘: 블랙 채움 원형
+          * 월/일자 클릭 시 해당 달력으로 즉시 이동
         ================================================================
       */}
       {isYearViewOpen && (
         <div 
-          className="fixed inset-0 z-50 flex flex-col bg-[#fafafa] text-black animate-fadeIn"
+          className="fixed inset-0 z-50 flex flex-col justify-between bg-[#fafafa] text-black px-4 sm:px-7 py-3 sm:py-5 select-none overflow-hidden h-[100dvh] animate-fadeIn"
           onTouchStart={(e) => e.stopPropagation()}
           onTouchMove={(e) => e.stopPropagation()}
           onTouchEnd={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          {/* 상단 헤더 바 */}
-          <div className="w-full px-5 sm:px-8 pt-[calc(1rem+env(safe-area-inset-top,0px))] pb-3 flex items-center justify-between border-b border-black/10 bg-[#fafafa] shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setYearViewYear(prev => prev - 1)}
-                  className="p-1.5 rounded-full hover:bg-black/5 text-black transition active:scale-95 cursor-pointer"
-                  title="이전 해"
-                >
-                  <ChevronLeft size={22} strokeWidth={2.5} />
-                </button>
-                <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-                  {yearViewYear}
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setYearViewYear(prev => prev + 1)}
-                  className="p-1.5 rounded-full hover:bg-black/5 text-black transition active:scale-95 cursor-pointer"
-                  title="다음 해"
-                >
-                  <ChevronRight size={22} strokeWidth={2.5} />
-                </button>
-              </div>
-              <span className="text-xs sm:text-sm font-semibold text-stone-500 bg-stone-100 px-2.5 py-1 rounded-full">
-                연간 달력
-              </span>
+          {/* 상단 헤더: ← (뒤로가기), 2026 (중앙 연도), 오늘 (우측 오늘 버튼) */}
+          <div className="w-full max-w-md sm:max-w-lg mx-auto flex items-center justify-between pt-[calc(0.5rem+env(safe-area-inset-top,0px))] pb-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsYearViewOpen(false)}
+              className="p-2 -ml-2 rounded-full hover:bg-black/5 text-black transition active:scale-95 cursor-pointer"
+              title="달력으로 돌아가기"
+            >
+              <ArrowLeft size={24} strokeWidth={2.5} />
+            </button>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setYearViewYear(prev => prev - 1)}
+                className="p-1 rounded-full hover:bg-black/5 text-stone-400 hover:text-black transition cursor-pointer"
+                title="이전 해"
+              >
+                <ChevronLeft size={20} strokeWidth={2.5} />
+              </button>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-black tracking-tight select-none">
+                {yearViewYear}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setYearViewYear(prev => prev + 1)}
+                className="p-1 rounded-full hover:bg-black/5 text-stone-400 hover:text-black transition cursor-pointer"
+                title="다음 해"
+              >
+                <ChevronRight size={20} strokeWidth={2.5} />
+              </button>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const now = new Date();
-                  setYearViewYear(now.getFullYear());
-                  setCurrentDate(new Date(now.getFullYear(), now.getMonth(), 1));
-                  setIsYearViewOpen(false);
-                }}
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 border-black flex items-center justify-center font-bold text-xs text-black hover:bg-black hover:text-white transition active:scale-95 cursor-pointer"
-                title="오늘로 이동"
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsYearViewOpen(false)}
-                className="p-2 rounded-full hover:bg-black/5 text-black transition active:scale-95 cursor-pointer ml-1"
-                title="닫기"
-              >
-                <X size={22} strokeWidth={2.5} />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date();
+                setYearViewYear(now.getFullYear());
+                setCurrentDate(new Date(now.getFullYear(), now.getMonth(), 1));
+                setIsYearViewOpen(false);
+              }}
+              className="px-3.5 py-1.5 rounded-full bg-white border border-stone-200/80 shadow-xs flex items-center justify-center font-bold text-xs sm:text-sm text-stone-900 active:scale-95 hover:bg-stone-50 transition-all cursor-pointer select-none shrink-0"
+              title="오늘 날짜로 이동"
+            >
+              오늘
+            </button>
           </div>
 
-          {/* 12개월 그리드 본문 스크롤 영역 */}
-          <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-5 no-scrollbar touch-pan-y">
-            <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 pb-12">
-              {yearMonths.map((m) => (
+          {/* 12개월 3열 x 4행 그리드: 한 페이지에 100% 핏 */}
+          <div className="flex-1 w-full max-w-md sm:max-w-lg mx-auto grid grid-cols-3 gap-x-4 sm:gap-x-6 gap-y-2 sm:gap-y-3.5 my-auto overflow-hidden">
+            {yearMonths.map((m) => (
+              <div 
+                key={m.monthIdx}
+                className="flex flex-col justify-start"
+              >
+                {/* 월 번호 (01, 02, ...) + 아래 가로 라인 */}
                 <div 
-                  key={m.monthIdx}
-                  className="bg-white rounded-2xl p-3.5 sm:p-4 border border-stone-200/80 shadow-2xs hover:border-black/30 transition flex flex-col justify-between"
+                  onClick={() => {
+                    setCurrentDate(new Date(yearViewYear, m.monthIdx, 1));
+                    setIsYearViewOpen(false);
+                  }}
+                  className="cursor-pointer group select-none"
+                  title={`${m.monthIdx + 1}월 달력으로 이동`}
                 >
-                  {/* 월 타이틀 (클릭 시 해당 월 달력으로 이동) */}
-                  <div 
-                    onClick={() => {
-                      setCurrentDate(new Date(yearViewYear, m.monthIdx, 1));
-                      setIsYearViewOpen(false);
-                    }}
-                    className="flex items-center justify-between pb-2 mb-2 border-b border-stone-100 cursor-pointer group"
-                    title={`${m.monthIdx + 1}월 달력으로 이동`}
-                  >
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-base sm:text-lg font-black text-black group-hover:underline">
-                        {m.monthNameKo}
-                      </span>
-                      <span className="text-xs font-semibold text-stone-400 group-hover:text-black">
-                        {m.monthNameEn}
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-stone-400 group-hover:text-black">
-                      이동 &rarr;
-                    </span>
+                  <div className="text-sm sm:text-base font-black text-black group-hover:opacity-75 transition-opacity">
+                    {String(m.monthIdx + 1).padStart(2, '0')}
                   </div>
-
-                  {/* 요일 헤더 */}
-                  <div className="grid grid-cols-7 gap-1 text-[11px] font-bold text-center pb-1 mb-1">
-                    {daysOfWeek.map((d, dIdx) => (
-                      <span 
-                        key={dIdx}
-                        className={dIdx === 0 || dIdx === 6 ? 'text-[#ff6b00]' : 'text-stone-500'}
-                      >
-                        {d}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* 일자 그리드 */}
-                  <div className="grid grid-cols-7 gap-1 text-center">
-                    {m.cells.map((c, cIdx) => {
-                      if (!c) {
-                        return <div key={`empty-${cIdx}`} className="h-7 sm:h-8" />;
-                      }
-
-                      const isCellToday = 
-                        yearViewYear === todayRef.getFullYear() &&
-                        m.monthIdx === todayRef.getMonth() &&
-                        c.day === todayRef.getDate();
-                      const colDayOfWeek = cIdx % 7;
-                      const isCellWeekend = colDayOfWeek === 0 || colDayOfWeek === 6;
-                      const hasDiary = !!c.diary;
-
-                      return (
-                        <div
-                          key={c.dateStr}
-                          onClick={() => {
-                            if (hasDiary) {
-                              onSelectDiary(c.diary);
-                            } else {
-                              setCurrentDate(new Date(yearViewYear, m.monthIdx, 1));
-                              if (onNewDiaryForDate) {
-                                onNewDiaryForDate(c.dateStr);
-                              }
-                            }
-                            setIsYearViewOpen(false);
-                          }}
-                          className="h-7 sm:h-8 flex flex-col items-center justify-center rounded-lg hover:bg-stone-100 cursor-pointer transition relative group/day select-none"
-                          title={hasDiary ? `${c.dateStr} 일기 보기` : `${c.dateStr} 일기 작성`}
-                        >
-                          {isCellToday ? (
-                            <span className="w-5 h-5 rounded-full bg-black text-white flex items-center justify-center font-bold text-[11px] leading-none shadow-xs">
-                              {c.day}
-                            </span>
-                          ) : (
-                            <span className={`text-xs font-bold leading-none ${isCellWeekend ? 'text-[#ff6b00]' : 'text-stone-800'}`}>
-                              {c.day}
-                            </span>
-                          )}
-
-                          {/* 일기 작성일 표시 (연두색 dot) */}
-                          <div className="h-1.5 flex items-center justify-center">
-                            {hasDiary ? (
-                              <span className="w-1.5 h-1.5 rounded-full bg-[#84cc16] shadow-2xs block" />
-                            ) : null}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <div className="w-full h-[1.5px] bg-black mt-0.5 mb-1" />
                 </div>
-              ))}
-            </div>
+
+                {/* 7열 날짜 그리드 (S M T W T F S 순서, 요일 라벨 없이 날짜 직결) */}
+                <div className="grid grid-cols-7 gap-x-0.5 gap-y-0.5 text-center select-none">
+                  {m.cells.map((c, cIdx) => {
+                    if (!c) {
+                      return <div key={`empty-${cIdx}`} className="h-4 sm:h-5" />;
+                    }
+
+                    const isCellToday = 
+                      yearViewYear === todayRef.getFullYear() &&
+                      m.monthIdx === todayRef.getMonth() &&
+                      c.day === todayRef.getDate();
+                    const colDayOfWeek = cIdx % 7;
+                    const isCellWeekend = colDayOfWeek === 0 || colDayOfWeek === 6;
+                    const hasDiary = !!c.diary;
+
+                    return (
+                      <div
+                        key={c.dateStr}
+                        onClick={() => {
+                          if (hasDiary) {
+                            onSelectDiary(c.diary);
+                          } else {
+                            setCurrentDate(new Date(yearViewYear, m.monthIdx, 1));
+                            if (onNewDiaryForDate) {
+                              onNewDiaryForDate(c.dateStr);
+                            }
+                          }
+                          setIsYearViewOpen(false);
+                        }}
+                        className="h-4 sm:h-5 flex items-center justify-center cursor-pointer transition-transform active:scale-90 relative"
+                        title={hasDiary ? `${c.dateStr} 일기 보기` : `${c.dateStr} 선택`}
+                      >
+                        {isCellToday ? (
+                          <span className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-black text-white flex items-center justify-center font-bold text-[9px] sm:text-[10px] leading-none shadow-xs">
+                            {c.day}
+                          </span>
+                        ) : hasDiary ? (
+                          <span className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full border-[1.8px] border-black flex items-center justify-center font-black text-[9px] sm:text-[10px] leading-none text-black">
+                            {c.day}
+                          </span>
+                        ) : (
+                          <span className={`text-[9px] sm:text-[10px] font-bold leading-none ${isCellWeekend ? 'text-[#ff6b00]' : 'text-black'}`}>
+                            {c.day}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

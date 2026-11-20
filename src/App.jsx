@@ -651,11 +651,6 @@ function DiaryMainApp() {
     }
 
     setSelectedDiary(finalDiaryToSave);
-
-    // 모바일 1분할 화면에서는 저장 후 캘린더/목록으로 복귀
-    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
-      setCurrentView(previousView || 'calendar');
-    }
   };
 
   // 2분할 뷰(태블릿 가로/PC)에서 우측에 보여줄 활성 다이어리 계산

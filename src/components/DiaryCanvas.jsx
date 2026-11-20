@@ -1408,9 +1408,24 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     }, 2400);
   };
 
-  // 저장 (모바일: 이전화면 이동, 와이드: 화면 유지 + 토스트 팝업)
+  // 저장할 내용(텍스트, 손글씨 드로잉, 스티커, 날씨/대표기분 등)이 존재하는지 판단
+  const hasContent = useMemo(() => {
+    const hasText = (textBlocks || []).some(
+      (t) => t && t.text && t.text.trim().length > 0
+    );
+    const activeStrokes = strokesHistory.slice(0, historyIndex + 1);
+    const hasStrokes = activeStrokes.some(
+      (s) => s && s.tool !== 'eraser' && Array.isArray(s.points) && s.points.length > 0
+    );
+    const hasStickers = (stickers || []).length > 0;
+    const hasWeather = Boolean(weather);
+    const hasCustomTitle = Boolean(title && title.trim());
+    return hasText || hasStrokes || hasStickers || hasWeather || hasCustomTitle;
+  }, [textBlocks, strokesHistory, historyIndex, stickers, weather, title]);
+
+  // 저장 (저장 기능 유지 + 토스트 팝업 알림, 화면 복귀 없이 작성 유지)
   const handleSaveDiary = () => {
-    if (isSaving) return;
+    if (isSaving || !hasContent) return;
     setIsSaving(true);
     const sanitizedTextBlocks = (textBlocks || []).filter(t => t && t.text && t.text.trim().length > 0);
     setTextBlocks(sanitizedTextBlocks);
@@ -1431,10 +1446,8 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     onSave(finalDiary);
     setTimeout(() => setIsSaving(false), 500);
 
-    // 와이드 버전(>=1024px)에서는 페이지 전환이 없으므로 토스트 알림 표시
-    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
-      showToast('저장되었습니다.');
-    }
+    // 모바일/와이드 모든 화면에서 저장 토스트 알림 표시
+    showToast('저장되었습니다.');
   };
 
   const currentPaperClass = PAPER_STYLES.find(p => p.id === paperStyle)?.class || 'paper-minimal-lined';
@@ -1468,11 +1481,17 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           </span>
         </div>
 
-        {/* 모바일 화면 전용: [ ✔ ] 검은색 원형 저장 완료 버튼 */}
+        {/* 모바일 화면 전용: [ ✔ ] 검은색 원형 저장 완료 버튼 (저장할 내용 없을 시 Dim 처리) */}
         <button
+          type="button"
+          disabled={!hasContent || isSaving}
           onClick={handleSaveDiary}
-          className="w-11 h-11 rounded-full bg-black hover:bg-stone-800 active:scale-95 text-white transition flex items-center justify-center shadow-xs"
-          title="다이어리 저장 완료"
+          className={`w-11 h-11 rounded-full bg-black text-white transition flex items-center justify-center shadow-xs ${
+            !hasContent
+              ? 'opacity-25 cursor-not-allowed pointer-events-none'
+              : 'hover:bg-stone-800 active:scale-95 cursor-pointer'
+          }`}
+          title={hasContent ? "다이어리 저장" : "저장할 내용이 없습니다"}
         >
           <Check size={20} strokeWidth={3} />
         </button>
@@ -1774,12 +1793,17 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
             )}
           </div>
 
-          {/* 와이드 버전(lg: >=1024px) 전용 [ ✔ ] 저장 완료 버튼: 날씨/스티커 버튼 바로 옆에 위치 */}
+          {/* 와이드 버전(lg: >=1024px) 전용 [ ✔ ] 저장 완료 버튼: 날씨/스티커 버튼 바로 옆에 위치 (저장할 내용 없을 시 Dim 처리) */}
           <button
             type="button"
+            disabled={!hasContent || isSaving}
             onClick={handleSaveDiary}
-            className="hidden lg:flex w-10 h-10 rounded-full bg-black hover:bg-stone-800 active:scale-95 text-white transition items-center justify-center shadow-xs shrink-0"
-            title="다이어리 저장 완료"
+            className={`hidden lg:flex w-10 h-10 rounded-full bg-black text-white transition items-center justify-center shadow-xs shrink-0 ${
+              !hasContent
+                ? 'opacity-25 cursor-not-allowed pointer-events-none'
+                : 'hover:bg-stone-800 active:scale-95 cursor-pointer'
+            }`}
+            title={hasContent ? "다이어리 저장" : "저장할 내용이 없습니다"}
           >
             <Check size={18} strokeWidth={3} />
           </button>
