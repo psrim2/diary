@@ -531,9 +531,19 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
   );
 }
 
-export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewDiary, selectedDiaryId, selectedDate }) {
+export default function ListView({ 
+  diaries, 
+  onSelectDiary, 
+  onDeleteDiary, 
+  onNewDiary, 
+  selectedDiaryId, 
+  selectedDate,
+  calendarViewingDate,
+  isActive
+}) {
   const [searchTerm, setSearchTerm] = useState('');
   const [openSwipeCardId, setOpenSwipeCardId] = useState(null);
+  const listContainerRef = useRef(null);
   const isUserTouchingRef = useRef(false);
   const touchStartYRef = useRef(0);
 
@@ -568,8 +578,60 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
 
   const monthKeys = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
 
+  // 목록 탭 이동 시, 보고 있던 달력 월의 리스트가 상단에 보이도록 스크롤 이동
+  useEffect(() => {
+    if (!isActive) return;
+
+    const targetDate = calendarViewingDate || new Date();
+    const targetYear = targetDate.getFullYear();
+    const targetMonth = targetDate.getMonth() + 1;
+    const targetKey = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
+
+    const timer = setTimeout(() => {
+      const container = listContainerRef.current;
+      if (!container) return;
+
+      const targetEl = document.getElementById(`month-group-${targetKey}`);
+      if (targetEl) {
+        // sticky 검색창 높이(약 65px)를 고려하여 해당 월 헤더 상단으로 스크롤
+        const targetTop = Math.max(0, targetEl.offsetTop - 65);
+        container.scrollTo({ top: targetTop, behavior: 'smooth' });
+      } else {
+        // 해당 월의 일기가 없을 경우, 가장 가까운 과거 월(또는 최상단)로 이동
+        const availableKeys = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
+        if (availableKeys.length > 0) {
+          const closestKey = availableKeys.find(k => k <= targetKey) || availableKeys[availableKeys.length - 1];
+          const closestEl = document.getElementById(`month-group-${closestKey}`);
+          if (closestEl) {
+            const targetTop = Math.max(0, closestEl.offsetTop - 65);
+            container.scrollTo({ top: targetTop, behavior: 'smooth' });
+          }
+        }
+      }
+    }, 80);
+
+    return () => clearTimeout(timer);
+  }, [isActive, calendarViewingDate]);
+
+  // 검색 옆 [오늘] 버튼 클릭 시 오늘 월 위치로 스크롤 이동
+  const handleGoToTodayMonth = () => {
+    const container = listContainerRef.current;
+    if (!container) return;
+
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const todayEl = document.getElementById(`month-group-${todayKey}`);
+    if (todayEl) {
+      const targetTop = Math.max(0, todayEl.offsetTop - 65);
+      container.scrollTo({ top: targetTop, behavior: 'smooth' });
+    } else {
+      container.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   return (
     <div 
+      ref={listContainerRef}
       onTouchStart={(e) => {
         isUserTouchingRef.current = true;
         if (e.touches && e.touches[0]) {
@@ -618,31 +680,45 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
         overscrollBehaviorY: filteredDiaries.length === 0 ? 'none' : 'contain',
         touchAction: filteredDiaries.length === 0 ? 'none' : 'pan-y',
       }}
-      className={`flex flex-col h-full bg-[#fafafa] px-6 pb-28 no-scrollbar ${
+      className={`flex flex-col h-full bg-[#fafafa] px-6 pb-28 no-scrollbar relative ${
         filteredDiaries.length === 0 ? 'overflow-y-hidden overscroll-none' : 'overflow-y-auto overscroll-contain'
       }`}
     >
       
-      {/* 1. 상단 둥근 알약형 검색창 */}
-      <div className="relative my-2.5 shrink-0">
-        <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-stone-400" size={17} />
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="기억하고 싶은 순간, 단어, 날짜 검색..."
-          className="w-full pl-11 pr-11 py-2.5 bg-white border border-stone-200/90 rounded-full text-xs sm:text-sm text-stone-800 placeholder-stone-400/80 focus:outline-hidden focus:ring-1 focus:ring-black shadow-2xs transition"
-        />
-        {searchTerm && (
+      {/* 1. 상단 둥근 알약형 검색창 + 44px 원형 오늘 버튼 (컨텐츠 스크롤 시 목록 탭 라인에 고정: sticky top-0) */}
+      <div className="sticky top-0 z-20 bg-[#fafafa] pt-2 pb-2.5 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-stone-400" size={17} />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="기억하고 싶은 순간, 단어, 날짜 검색..."
+              className="w-full pl-11 pr-11 py-2.5 bg-white border border-stone-200/90 rounded-full text-xs sm:text-sm text-stone-800 placeholder-stone-400/80 focus:outline-hidden focus:ring-1 focus:ring-black shadow-2xs transition"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-stone-200/80 text-stone-600 hover:bg-stone-300 active:scale-95 transition flex items-center justify-center cursor-pointer"
+                title="검색어 지우기"
+              >
+                <X size={13} strokeWidth={2.5} />
+              </button>
+            )}
+          </div>
+
+          {/* 44px 원형 오늘 버튼 */}
           <button
             type="button"
-            onClick={() => setSearchTerm('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-stone-200/80 text-stone-600 hover:bg-stone-300 active:scale-95 transition flex items-center justify-center cursor-pointer"
-            title="검색어 지우기"
+            onClick={handleGoToTodayMonth}
+            className="w-[44px] h-[44px] rounded-full bg-white border border-stone-300 shadow-xs flex items-center justify-center font-bold text-xs sm:text-sm text-stone-900 active:scale-95 hover:bg-stone-50 transition-all cursor-pointer select-none shrink-0"
+            title="오늘 날짜 목록으로 이동"
           >
-            <X size={13} strokeWidth={2.5} />
+            오늘
           </button>
-        )}
+        </div>
       </div>
 
       {/* 2. 월별 그룹 일기 카드 피드 (검색결과 없거나 일기 없을 때: 낙엽 이미지 및 테두리 박스 없이 미니멀 플랫 디자인) */}
@@ -671,7 +747,7 @@ export default function ListView({ diaries, onSelectDiary, onDeleteDiary, onNewD
             const monthName = MONTH_NAMES_EN[Math.max(0, Math.min(11, (group.month || 1) - 1))] || 'November';
 
             return (
-              <div key={key}>
+              <div key={key} id={`month-group-${key}`}>
                 {/* 월 헤더: 해당 월의 실제 번호와 연도 표기 (카드 날짜/날씨와 수직 정렬을 맞추기 위해 px-4 sm:px-5 적용) */}
                 <div className="pt-2 pb-3 shrink-0 px-4 sm:px-5">
                   <div className="flex items-end justify-between">

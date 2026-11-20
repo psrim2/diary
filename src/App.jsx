@@ -204,6 +204,9 @@ function DiaryMainApp() {
   const [previousView, setPreviousView] = useState('calendar');
   const [selectedDiary, setSelectedDiary] = useState(null);
 
+  // 현재 달력에서 조회 중인 월/날짜 (목록 탭 전환 시 해당 월로 스크롤 동기화)
+  const [calendarViewingDate, setCalendarViewingDate] = useState(() => new Date());
+
   // 다이어리 이름 상태 (로컬스토리지 연동, 기본값: 'Diary')
   const [diaryName, setDiaryName] = useState(() => {
     const saved = localStorage.getItem('analog_diary_name');
@@ -717,6 +720,8 @@ function DiaryMainApp() {
                   onSelectDiary={handleSelectDiary}
                   onNewDiaryForDate={handleNewDiary}
                   selectedDate={activeEditorDiary?.date}
+                  onMonthChange={setCalendarViewingDate}
+                  initialDate={calendarViewingDate}
                 />
               )}
 
@@ -728,6 +733,8 @@ function DiaryMainApp() {
                   onNewDiary={() => handleNewDiary(getTodayDateStr())}
                   selectedDiaryId={activeEditorDiary?.id}
                   selectedDate={activeEditorDiary?.date}
+                  calendarViewingDate={calendarViewingDate}
+                  isActive={currentView === 'list'}
                 />
               )}
             </div>
