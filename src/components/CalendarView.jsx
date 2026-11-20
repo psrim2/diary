@@ -298,19 +298,11 @@ export default function CalendarView({ diaries, onSelectDiary, onNewDiaryForDate
                 const today = isToday(cell.day);
                 const isWeekend = colIdx === 0 || colIdx === 6;
 
-                const firstSticker = Array.isArray(cell.diary?.stickers)
-                  ? cell.diary.stickers.find(Boolean)
-                  : (cell.diary?.stickers && typeof cell.diary.stickers === 'object'
-                    ? Object.values(cell.diary.stickers).find(Boolean)
-                    : null);
-
+                // 날짜 옆 대표 스티커/날씨로 지정한 값만 달력 아이콘으로 표출 (본문 속지 스티커와 분리)
                 const rawSticker =
                   cell.diary?.thumbnailMood ||
                   cell.diary?.weather ||
-                  firstSticker?.imageUrl ||
-                  firstSticker?.content ||
-                  firstSticker?.icon ||
-                  firstSticker?.label;
+                  '';
 
                 let stickerVal = '';
                 if (typeof rawSticker === 'string' || typeof rawSticker === 'number') {
