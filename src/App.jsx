@@ -233,6 +233,7 @@ function DiaryMainApp() {
   // 목록 뷰 스크롤 위치 복원 상태 (상세 확인 후 목록 복귀 시 기존 스크롤 유지)
   const [savedListScrollTop, setSavedListScrollTop] = useState(0);
   const [isReturningFromEditor, setIsReturningFromEditor] = useState(false);
+  const [listScrollTrigger, setListScrollTrigger] = useState(null);
 
   // 다이어리 이름 상태 (로컬스토리지 연동, 기본값: 'Diary')
   const [diaryName, setDiaryName] = useState(() => {
@@ -644,6 +645,7 @@ function DiaryMainApp() {
       setCurrentView('list');
       setPreviousView('list');
       setIsReturningFromEditor(false);
+      setListScrollTrigger({ type: 'month', year, monthIdx, timestamp: Date.now() });
     } else {
       setCurrentView('calendar');
       setPreviousView('calendar');
@@ -654,8 +656,14 @@ function DiaryMainApp() {
   const handleGoToToday = () => {
     const now = new Date();
     setCalendarViewingDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    setIsYearViewOpen(false);
     if (currentView === 'editor') {
       setCurrentView('calendar');
+    } else if (currentView === 'list' || yearViewSource === 'list') {
+      setCurrentView('list');
+      setPreviousView('list');
+      setIsReturningFromEditor(false);
+      setListScrollTrigger({ type: 'today', timestamp: Date.now() });
     }
   };
 
@@ -825,6 +833,7 @@ function DiaryMainApp() {
                   selectedDiaryId={activeEditorDiary?.id}
                   selectedDate={activeEditorDiary?.date}
                   calendarViewingDate={calendarViewingDate}
+                  listScrollTrigger={listScrollTrigger}
                   isActive={currentView === 'list'}
                   savedScrollTop={savedListScrollTop}
                   isReturningFromEditor={isReturningFromEditor}

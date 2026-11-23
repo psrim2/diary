@@ -550,6 +550,7 @@ export default function ListView({
   selectedDiaryId, 
   selectedDate,
   calendarViewingDate,
+  listScrollTrigger,
   isActive,
   savedScrollTop = 0,
   isReturningFromEditor = false,
@@ -633,23 +634,100 @@ export default function ListView({
     };
   }, [isActive, isReturningFromEditor, savedScrollTop, onRestoreScrollComplete]);
 
-  // 2) 달력 -> 목록 탭 전환 시 또는 연력에서 월 선택 시에만 해당 월 위치로 1회 스크롤
-  // (에디터 복귀 시에는 절대 실행되지 않음!)
+  // 특정 월로 부드럽게 스크롤 이동 헬퍼
+  const scrollToMonthKey = (targetKey, targetYear, targetMonth) => {
+    const c = listContainerRef.current;
+    if (!c) return;
+
+    const targetEl = document.getElementById(`month-group-${targetKey}`);
+    if (targetEl) {
+      c.scrollTo({ top: Math.max(0, targetEl.offsetTop - 10), behavior: 'smooth' });
+    } else {
+      // 클릭한 달의 일기가 없는 경우: 클릭한 달과 가장 가까운 달 중 일기가 있는 달의 목록으로 이동
+      const availableKeys = Object.keys(groupedByMonth);
+      if (availableKeys.length > 0) {
+        let closestKey = availableKeys[0];
+        let minDiff = Infinity;
+        const targetTotal = targetYear * 12 + targetMonth;
+        availableKeys.forEach((k) => {
+          const [ky, km] = k.split('-').map(Number);
+          const diff = Math.abs((ky * 12 + km) - targetTotal);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closestKey = k;
+          }
+        });
+        const closestEl = document.getElementById(`month-group-${closestKey}`);
+        if (closestEl) {
+          c.scrollTo({ top: Math.max(0, closestEl.offsetTop - 10), behavior: 'smooth' });
+        }
+      }
+    }
+  };
+
+  // 오늘 날짜로 부드럽게 스크롤 이동 (오늘 일기가 있으면 해당 카드로, 없으면 이번 달 그룹으로)
+  const scrollToToday = () => {
+    const c = listContainerRef.current;
+    if (!c) return;
+
+    const now = new Date();
+    const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    // 1) 오늘 날짜의 일기 카드가 있는 경우 해당 카드로 직접 스크롤 (헤더 고려 오프셋)
+    const todayCardEl = document.getElementById(`diary-card-${todayDateStr}`);
+    if (todayCardEl) {
+      c.scrollTo({ top: Math.max(0, todayCardEl.offsetTop - 65), behavior: 'smooth' });
+      return;
+    }
+
+    // 2) 오늘 일기가 없으면 이번 달 헤더로 스크롤
+    const todayMonthEl = document.getElementById(`month-group-${todayMonthKey}`);
+    if (todayMonthEl) {
+      c.scrollTo({ top: Math.max(0, todayMonthEl.offsetTop - 10), behavior: 'smooth' });
+      return;
+    }
+
+    // 3) 이번 달 작성된 일기도 없는 경우 가장 가까운 달로 스크롤
+    scrollToMonthKey(todayMonthKey, now.getFullYear(), now.getMonth() + 1);
+  };
+
+  // 2) 연력에서 월 선택 시 또는 오늘 버튼 클릭 시 명시적 스크롤 트리거 처리
   const lastScrolledTargetRef = useRef(null);
 
+  useEffect(() => {
+    if (!isActive || !listScrollTrigger) return;
+
+    // 명시적인 사용자 스크롤 요청이므로 복원 플래그 해제 및 즉각 스크롤
+    isRestoringScrollRef.current = false;
+    lastScrolledTargetRef.current = null;
+
+    const timer = setTimeout(() => {
+      if (listScrollTrigger.type === 'today') {
+        scrollToToday();
+      } else if (listScrollTrigger.type === 'month') {
+        const { year, monthIdx } = listScrollTrigger;
+        const targetMonth = monthIdx + 1;
+        const targetKey = `${year}-${String(targetMonth).padStart(2, '0')}`;
+        lastScrolledTargetRef.current = targetKey;
+        scrollToMonthKey(targetKey, year, targetMonth);
+      }
+    }, 60);
+
+    return () => clearTimeout(timer);
+  }, [isActive, listScrollTrigger]);
+
+  // 3) 달력 -> 목록 탭 전환 시 보고 있던 달의 위치로 1회 스크롤
   useEffect(() => {
     if (!isActive) {
       lastScrolledTargetRef.current = null;
       return;
     }
 
-    // 에디터에서 복귀하는 중이거나 복귀 완료 직후 세션에서는 월 자동 스크롤 절대 금지
+    // 에디터에서 복귀하는 중이거나 복귀 완료 직후 세션에서는 탭 전환 월 자동 스크롤 금지
     if (isReturningFromEditor || isRestoringScrollRef.current) {
-      lastScrolledTargetRef.current = 'DONT_SCROLL';
       return;
     }
-
-    if (lastScrolledTargetRef.current === 'DONT_SCROLL') return;
 
     const targetDate = calendarViewingDate || new Date();
     const targetYear = targetDate.getFullYear();
@@ -662,33 +740,7 @@ export default function ListView({
 
     const timer = setTimeout(() => {
       if (isReturningFromEditor || isRestoringScrollRef.current) return;
-      const c = listContainerRef.current;
-      if (!c) return;
-
-      const targetEl = document.getElementById(`month-group-${targetKey}`);
-      if (targetEl) {
-        c.scrollTo({ top: targetEl.offsetTop, behavior: 'smooth' });
-      } else {
-        // 클릭한 달의 일기가 없는 경우: 클릭한 달과 가장 가까운 달 중 일기가 있는 달의 목록으로 이동
-        const availableKeys = Object.keys(groupedByMonth);
-        if (availableKeys.length > 0) {
-          let closestKey = availableKeys[0];
-          let minDiff = Infinity;
-          const targetTotal = targetYear * 12 + targetMonth;
-          availableKeys.forEach((k) => {
-            const [ky, km] = k.split('-').map(Number);
-            const diff = Math.abs((ky * 12 + km) - targetTotal);
-            if (diff < minDiff) {
-              minDiff = diff;
-              closestKey = k;
-            }
-          });
-          const closestEl = document.getElementById(`month-group-${closestKey}`);
-          if (closestEl) {
-            c.scrollTo({ top: closestEl.offsetTop, behavior: 'smooth' });
-          }
-        }
-      }
+      scrollToMonthKey(targetKey, targetYear, targetMonth);
     }, 80);
 
     return () => clearTimeout(timer);
@@ -702,20 +754,9 @@ export default function ListView({
     onSelectDiary(diary);
   };
 
-  // 검색 옆 [오늘] 버튼 클릭 시 오늘 월 위치로 스크롤 이동
+  // 검색 옆 [오늘] 버튼 클릭 시 오늘 위치로 스크롤 이동
   const handleGoToTodayMonth = () => {
-    const container = listContainerRef.current;
-    if (!container) return;
-
-    const now = new Date();
-    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const todayEl = document.getElementById(`month-group-${todayKey}`);
-    if (todayEl) {
-      const targetTop = Math.max(0, todayEl.offsetTop - 65);
-      container.scrollTo({ top: targetTop, behavior: 'smooth' });
-    } else {
-      container.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    scrollToToday();
   };
 
   return (
@@ -852,16 +893,17 @@ export default function ListView({
                 {/* 해당 월의 카드 목록 */}
                 <div className="space-y-4 pt-3">
                   {group.items.map((diary) => (
-                    <DiaryCard
-                      key={diary.id}
-                      diary={diary}
-                      isSelected={selectedDiaryId === diary.id || (selectedDate && selectedDate === diary.date)}
-                      onSelect={handleSelectCard}
-                      onDelete={onDeleteDiary}
-                      isSwipeOpen={openSwipeCardId === diary.id}
-                      onSwipeOpen={() => setOpenSwipeCardId(diary.id)}
-                      onSwipeClose={() => setOpenSwipeCardId(null)}
-                    />
+                    <div key={diary.id} id={`diary-card-${diary.date}`}>
+                      <DiaryCard
+                        diary={diary}
+                        isSelected={selectedDiaryId === diary.id || (selectedDate && selectedDate === diary.date)}
+                        onSelect={handleSelectCard}
+                        onDelete={onDeleteDiary}
+                        isSwipeOpen={openSwipeCardId === diary.id}
+                        onSwipeOpen={() => setOpenSwipeCardId(diary.id)}
+                        onSwipeClose={() => setOpenSwipeCardId(null)}
+                      />
+                    </div>
                   ))}
                 </div>
               </div>
