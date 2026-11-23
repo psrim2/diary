@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Trash2, X } from 'lucide-react';
+import { Search, Trash2, X, Plus } from 'lucide-react';
 import { PAPER_STYLES } from '../constants';
 import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas, CANONICAL_WIDTH, CANONICAL_HEIGHT, resolveStickerImage, isEmojiSticker, upgradePresetSvgUrl } from '../utils/canvasLayers';
+import DatePickerModal from './DatePickerModal';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -91,12 +92,15 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
       }
     });
 
-    // 2) 스티커/사진 바닥 계산
-    // (카드 뷰에서는 캐릭터/GIF 스티커가 w-14/56px로 렌더링되므로 최대 높이를 56px로 엄격히 제한하여 불필요한 빈 여백 방지)
+    // 2) 스티커/사진 바닥 계산 (실제 렌더링 가능한 유효 스티커만 포함하여 미표출 스티커로 인한 여백 방지)
     (normalizedLayers.stickers || []).forEach((sticker) => {
+      const resolvedImg = resolveStickerImage(sticker);
+      const isTape = sticker.type === 'tape' || sticker.category === 'tape';
+      const isEmoji = isEmojiSticker(sticker);
+      if (!resolvedImg && !isTape && !isEmoji) return;
+
       hasContent = true;
       const isPhoto = sticker.isPhoto || sticker.type === 'photo';
-      const isTape = sticker.type === 'tape' || sticker.category === 'tape';
       const defaultH = isPhoto ? 140 : isTape ? 24 : 56;
       const baseH = isPhoto
         ? Math.min(180, typeof sticker.height === 'number' && sticker.height > 0 ? sticker.height : defaultH)
@@ -159,10 +163,11 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
         }
       }
 
-      const isSubstantial = unErasedPoints >= 3 && (pathLen > 8 || (strokeMaxY - minY) > 5);
+      const isSubstantial = unErasedPoints >= 3 && (pathLen > 10 || (strokeMaxY - minY) > 6);
       return {
         stroke,
         unErasedPoints,
+        pathLen,
         minY,
         strokeMaxY,
         isSubstantial,
@@ -178,31 +183,34 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
       }
     });
 
-    // 미세 접촉점(1~2점 단일 탭 / 팜 터치 점)은 유의미한 본문 바닥선(+45px) 이내에 있을 때만 정상 필기(마침표 등)로 인정
+    // 팜 터치 및 고립된 아웃라이어 스트로크 필터링:
+    // 본문 컨텐츠(coreMaxY)와 50px 이상 동떨어져 있으면서 점 개수가 적거나 길이가 짧은 획은 팜 터치 노이즈로 간주
     analyzedStrokes.forEach((s) => {
-      if (!s.isSubstantial) {
-        if (coreMaxY > 0) {
-          if (s.strokeMaxY <= coreMaxY + 45) {
-            hasContent = true;
-            if (s.strokeMaxY > maxY) maxY = s.strokeMaxY;
-          }
-        } else {
+      if (coreMaxY > 0) {
+        if (s.minY > coreMaxY + 50 && (s.unErasedPoints <= 8 || s.pathLen < 25)) {
+          return;
+        }
+        if (s.strokeMaxY <= coreMaxY + 45 || s.isSubstantial) {
           hasContent = true;
           if (s.strokeMaxY > maxY) maxY = s.strokeMaxY;
         }
+      } else {
+        hasContent = true;
+        if (s.strokeMaxY > maxY) maxY = s.strokeMaxY;
       }
     });
 
     if (coreMaxY > maxY) maxY = coreMaxY;
 
     if (!hasContent || maxY <= 0) {
-      // 작성된 컨텐츠가 거의 없는 경우: 최소 높이 120px로 아담하게 표시
-      return 120;
+      // 작성된 컨텐츠가 거의 없는 경우: 최소 높이 128px (줄노트 4줄 규격)로 아담하게 표시
+      return 128;
     }
 
-    // 작성된 내용 바로 아래 깔끔한 여백(+20px)을 두어 내용만 딱 나오도록 맞춤 (최소 120px)
-    return Math.max(120, Math.round(maxY + 20));
-  }, [normalizedLayers]);
+    // 작성된 내용 바로 아래 깔끔하게 줄노트 간격(32px)에 맞추어 딱 떨어지게 마감
+    const targetH = Math.max(128, Math.ceil((maxY + 16) / 32) * 32);
+    return targetH;
+  }, [normalizedLayers, diary?.date]);
 
   const cardPaperRef = useRef(null);
   const [previewScale, setPreviewScale] = useState(0.85);
@@ -560,6 +568,7 @@ export default function ListView({
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [openSwipeCardId, setOpenSwipeCardId] = useState(null);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const listContainerRef = useRef(null);
   const isUserTouchingRef = useRef(false);
   const touchStartYRef = useRef(0);
@@ -703,8 +712,21 @@ export default function ListView({
     lastScrolledTargetRef.current = null;
 
     const timer = setTimeout(() => {
+      const c = listContainerRef.current;
+      if (!c) return;
+
       if (listScrollTrigger.type === 'today') {
         scrollToToday();
+      } else if (listScrollTrigger.type === 'diary') {
+        const { dateStr, year, monthIdx } = listScrollTrigger;
+        const targetCardEl = document.getElementById(`diary-card-${dateStr}`);
+        if (targetCardEl) {
+          c.scrollTo({ top: Math.max(0, targetCardEl.offsetTop - 65), behavior: 'smooth' });
+        } else {
+          const targetMonth = monthIdx + 1;
+          const targetKey = `${year}-${String(targetMonth).padStart(2, '0')}`;
+          scrollToMonthKey(targetKey, year, targetMonth);
+        }
       } else if (listScrollTrigger.type === 'month') {
         const { year, monthIdx } = listScrollTrigger;
         const targetMonth = monthIdx + 1;
@@ -915,6 +937,26 @@ export default function ListView({
           </div>
         </div>
       )}
+
+      {/* 3. 우측 하단 플로팅 새 일기 작성 버튼 (+) 및 날짜 선택 모달 */}
+      <button
+        type="button"
+        onClick={() => setIsDatePickerOpen(true)}
+        className="fixed right-6 bottom-8 z-40 w-14 h-14 rounded-full bg-black text-white shadow-2xl flex items-center justify-center hover:bg-stone-800 active:scale-95 transition-all cursor-pointer select-none"
+        title="새 일기 작성 (날짜 선택)"
+      >
+        <Plus size={28} strokeWidth={2.6} />
+      </button>
+
+      <DatePickerModal
+        isOpen={isDatePickerOpen}
+        onClose={() => setIsDatePickerOpen(false)}
+        onSelectDate={(targetDate) => {
+          onNewDiary(targetDate);
+        }}
+        existingDates={diaries.map((d) => d.date)}
+        title="새 일기 작성할 날짜 선택"
+      />
     </div>
   );
 }

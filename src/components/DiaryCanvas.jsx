@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { 
   ArrowLeft, 
   Check, 
+  Pencil,
   Type, 
   PenTool, 
   Sparkles, 
@@ -33,6 +34,7 @@ import {
 } from '../utils/canvasLayers';
 import StickerPalette from './StickerPalette';
 import PaperSelectModal from './PaperSelectModal';
+import DatePickerModal from './DatePickerModal';
 
 function isImageAsset(val) {
   if (typeof val !== 'string') return false;
@@ -107,7 +109,31 @@ export function getDefaultToolMode() {
   return isMobilePhone ? 'text' : 'pen';
 }
 
-export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack }) {
+export default function DiaryCanvas({ 
+  diary, 
+  diaryName, 
+  onSave, 
+  onDelete, 
+  onBack, 
+  diaries = [], 
+  initialViewMode = false, 
+  onNavigateDiary 
+}) {
+  const [isViewMode, setIsViewMode] = useState(initialViewMode);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+
+  useEffect(() => {
+    setIsViewMode(initialViewMode);
+  }, [diary?.id, diary?.date, initialViewMode]);
+
+  // 이미 다른 일기가 작성된 날짜 목록 (현재 열려있는 일기의 기존 날짜는 유지 가능하도록 제외)
+  const existingDatesForPicker = useMemo(() => {
+    return (diaries || [])
+      .filter((d) => d.id !== diary?.id && d.date !== diary?.date)
+      .map((d) => d.date)
+      .filter(Boolean);
+  }, [diaries, diary?.id, diary?.date]);
+
   const initialNormalized = React.useMemo(() => normalizeDiaryLayers(diary), [diary]);
   const layerOrderCounterRef = useRef(initialNormalized.maxOrder);
 
@@ -718,7 +744,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
   // 드로잉 이벤트 (아이패드 애플펜슬 필기 및 모바일/스마트폰 손가락 손글씨 입력 완벽 지원)
   const handlePointerDown = (e) => {
-    if (activeToolMode !== 'pen') return;
+    if (isViewMode || activeToolMode !== 'pen') return;
 
     // 이미 특정 포인터로 스트로크를 그리는 중인 경우 다른 멀티터치 간섭 차단
     if (isDrawingRef.current && activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
@@ -1476,6 +1502,86 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     }, 2400);
   };
 
+  // 뷰 모드에서 좌우 스와이프로 이전/이후 일기 탐색
+  const handleSwipeNavigation = (direction) => {
+    if (!onNavigateDiary) return;
+    const sorted = [...(diaries || [])].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const currentIdx = sorted.findIndex(
+      (d) => d.id === diary?.id || d.date === date
+    );
+    if (currentIdx === -1) return;
+    const targetIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
+    if (targetIdx < 0) {
+      showToast('가장 첫 번째 일기입니다.');
+      return;
+    }
+    if (targetIdx >= sorted.length) {
+      showToast('가장 최근 일기입니다.');
+      return;
+    }
+    onNavigateDiary(direction);
+  };
+
+  const viewSwipeTouchStartRef = useRef(null);
+  const viewSwipeMouseDownRef = useRef(null);
+
+  const handleViewTouchStart = (e) => {
+    if (!isViewMode || !e.touches || e.touches.length !== 1) return;
+    viewSwipeTouchStartRef.current = {
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+      time: Date.now()
+    };
+  };
+
+  const handleViewTouchEnd = (e) => {
+    if (!isViewMode || !viewSwipeTouchStartRef.current || !e.changedTouches || e.changedTouches.length !== 1) {
+      viewSwipeTouchStartRef.current = null;
+      return;
+    }
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - viewSwipeTouchStartRef.current.x;
+    const dy = touch.clientY - viewSwipeTouchStartRef.current.y;
+    const dt = Date.now() - viewSwipeTouchStartRef.current.time;
+    viewSwipeTouchStartRef.current = null;
+
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3 && dt < 800) {
+      if (dx < 0) {
+        handleSwipeNavigation('next');
+      } else {
+        handleSwipeNavigation('prev');
+      }
+    }
+  };
+
+  const handleViewMouseDown = (e) => {
+    if (!isViewMode || e.button !== 0) return;
+    viewSwipeMouseDownRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      time: Date.now()
+    };
+  };
+
+  const handleViewMouseUp = (e) => {
+    if (!isViewMode || !viewSwipeMouseDownRef.current) {
+      viewSwipeMouseDownRef.current = null;
+      return;
+    }
+    const dx = e.clientX - viewSwipeMouseDownRef.current.x;
+    const dy = e.clientY - viewSwipeMouseDownRef.current.y;
+    const dt = Date.now() - viewSwipeMouseDownRef.current.time;
+    viewSwipeMouseDownRef.current = null;
+
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3 && dt < 800) {
+      if (dx < 0) {
+        handleSwipeNavigation('next');
+      } else {
+        handleSwipeNavigation('prev');
+      }
+    }
+  };
+
   // 저장할 내용(텍스트, 손글씨 드로잉, 스티커, 날씨/대표기분 등)이 존재하는지 판단
   const hasContent = useMemo(() => {
     const hasText = (textBlocks || []).some(
@@ -1491,7 +1597,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     return hasText || hasStrokes || hasStickers || hasWeather || hasCustomTitle;
   }, [textBlocks, strokesHistory, historyIndex, stickers, weather, title]);
 
-  // 저장 (저장 기능 유지 + 토스트 팝업 알림, 화면 복귀 없이 작성 유지)
+  // 저장 (저장 완료 후 뷰 모드로 전환 및 편집 아이콘 노출)
   const handleSaveDiary = () => {
     if (isSaving || !hasContent) return;
     setIsSaving(true);
@@ -1513,6 +1619,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     };
 
     onSave(finalDiary);
+    setIsViewMode(true);
     setTimeout(() => setIsSaving(false), 500);
 
     // 모바일/와이드 모든 화면에서 저장 토스트 알림 표시
@@ -1550,20 +1657,31 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           </span>
         </div>
 
-        {/* 모바일 화면 전용: [ ✔ ] 검은색 원형 저장 완료 버튼 (저장할 내용 없을 시 Dim 처리) */}
-        <button
-          type="button"
-          disabled={!hasContent || isSaving}
-          onClick={handleSaveDiary}
-          className={`w-11 h-11 rounded-full bg-black text-white transition flex items-center justify-center shadow-xs ${
-            !hasContent
-              ? 'opacity-25 cursor-not-allowed pointer-events-none'
-              : 'hover:bg-stone-800 active:scale-95 cursor-pointer'
-          }`}
-          title={hasContent ? "다이어리 저장" : "저장할 내용이 없습니다"}
-        >
-          <Check size={20} strokeWidth={3} />
-        </button>
+        {/* 모바일 화면 전용 상단 우측 버튼: 뷰 모드일 때는 [ 연필(편집) ], 편집 모드일 때는 [ ✔(저장 완료) ] */}
+        {isViewMode ? (
+          <button
+            type="button"
+            onClick={() => setIsViewMode(false)}
+            className="w-11 h-11 rounded-full bg-stone-900 text-white transition flex items-center justify-center shadow-xs hover:bg-stone-800 active:scale-95 cursor-pointer"
+            title="일기 편집하기"
+          >
+            <Pencil size={19} strokeWidth={2.4} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={!hasContent || isSaving}
+            onClick={handleSaveDiary}
+            className={`w-11 h-11 rounded-full bg-black text-white transition flex items-center justify-center shadow-xs ${
+              !hasContent
+                ? 'opacity-25 cursor-not-allowed pointer-events-none'
+                : 'hover:bg-stone-800 active:scale-95 cursor-pointer'
+            }`}
+            title={hasContent ? "다이어리 저장" : "저장할 내용이 없습니다"}
+          >
+            <Check size={20} strokeWidth={3} />
+          </button>
+        )}
       </div>
 
       {/* 
@@ -1591,19 +1709,19 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
           {/* 2) 날짜 행 + 우측 플러스/스티커/체크 버튼 (년도를 제외한 날짜와 세로 중앙 정렬) */}
           <div className="flex items-center justify-between mt-1">
-            {/* 날짜 텍스트 (탭하면 날짜 변경) */}
-            <div className="relative cursor-pointer group" title="날짜 변경">
-              <div className="text-2xl sm:text-3xl font-black text-black tracking-tight leading-none group-hover:opacity-75 transition-opacity">
+            {/* 날짜 텍스트 (탭하면 날짜 변경 - 이미 작성된 날짜는 선택 불가) */}
+            <div 
+              className={`relative ${!isViewMode ? 'cursor-pointer group' : 'cursor-default'}`} 
+              title={!isViewMode ? "날짜 변경" : undefined}
+              onClick={() => {
+                if (!isViewMode) {
+                  setIsDatePickerOpen(true);
+                }
+              }}
+            >
+              <div className={`text-2xl sm:text-3xl font-black text-black tracking-tight leading-none ${!isViewMode ? 'group-hover:opacity-75' : ''} transition-opacity`}>
                 {monthNum}.{dayNum} {dayEn}
               </div>
-
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                title="날짜 변경"
-              />
             </div>
 
             {/* 우측 대표 날씨/스티커 아이콘 버튼 + 와이드 전용 체크 버튼 (날짜와 정확한 세로 중앙 정렬) */}
@@ -1611,9 +1729,12 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
               <div className="relative flex items-center">
                 <button
                   type="button"
-                  onClick={() => setIsWeatherOpen(!isWeatherOpen)}
-                  className="w-10 h-10 bg-transparent border-0 p-0 active:scale-95 transition flex items-center justify-center overflow-visible"
-                  title="날씨 / 대표 스티커 선택"
+                  disabled={isViewMode}
+                  onClick={() => {
+                    if (!isViewMode) setIsWeatherOpen(!isWeatherOpen);
+                  }}
+                  className={`w-10 h-10 bg-transparent border-0 p-0 ${!isViewMode ? 'active:scale-95 cursor-pointer' : 'cursor-default'} transition flex items-center justify-center overflow-visible`}
+                  title={!isViewMode ? "날씨 / 대표 스티커 선택" : undefined}
                 >
                 {weather ? (
                   isImageAsset(weather) ? (
@@ -1869,20 +1990,31 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
             )}
           </div>
 
-          {/* 와이드 버전(lg: >=1024px) 전용 [ ✔ ] 저장 완료 버튼: 날씨/스티커 버튼 바로 옆에 위치 (저장할 내용 없을 시 Dim 처리) */}
-          <button
-            type="button"
-            disabled={!hasContent || isSaving}
-            onClick={handleSaveDiary}
-            className={`hidden lg:flex w-10 h-10 rounded-full bg-black text-white transition items-center justify-center shadow-xs shrink-0 ${
-              !hasContent
-                ? 'opacity-25 cursor-not-allowed pointer-events-none'
-                : 'hover:bg-stone-800 active:scale-95 cursor-pointer'
-            }`}
-            title={hasContent ? "다이어리 저장" : "저장할 내용이 없습니다"}
-          >
-            <Check size={18} strokeWidth={3} />
-          </button>
+          {/* 와이드 버전(lg: >=1024px) 전용 [ 연필(편집) / ✔(저장 완료) ] 버튼 */}
+          {isViewMode ? (
+            <button
+              type="button"
+              onClick={() => setIsViewMode(false)}
+              className="hidden lg:flex w-10 h-10 rounded-full bg-stone-900 text-white transition items-center justify-center shadow-xs shrink-0 hover:bg-stone-800 active:scale-95 cursor-pointer"
+              title="일기 편집하기"
+            >
+              <Pencil size={18} strokeWidth={2.4} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!hasContent || isSaving}
+              onClick={handleSaveDiary}
+              className={`hidden lg:flex w-10 h-10 rounded-full bg-black text-white transition items-center justify-center shadow-xs shrink-0 ${
+                !hasContent
+                  ? 'opacity-25 cursor-not-allowed pointer-events-none'
+                  : 'hover:bg-stone-800 active:scale-95 cursor-pointer'
+              }`}
+              title={hasContent ? "다이어리 저장" : "저장할 내용이 없습니다"}
+            >
+              <Check size={18} strokeWidth={3} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -1894,10 +2026,15 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         ================================================================
         [본문 스크롤 영역] 세로로 긴 이미지나 컨텐츠가 있을 때 자유롭게 세로 스크롤 가능
         - 라운드 박스를 감싸는 스트로크(border)를 제거하여 깨끗한 아날로그 종이 질감 연출
+        - 뷰 모드일 때는 좌우 터치/마우스 스와이프로 이전/이후 일기로 전환
         ================================================================
       */}
       <div 
         ref={scrollContainerRef}
+        onTouchStart={isViewMode ? handleViewTouchStart : undefined}
+        onTouchEnd={isViewMode ? handleViewTouchEnd : undefined}
+        onMouseDown={isViewMode ? handleViewMouseDown : undefined}
+        onMouseUp={isViewMode ? handleViewMouseUp : undefined}
         onContextMenu={(e) => {
           if (activeToolMode === 'pen') {
             e.preventDefault();
@@ -1917,7 +2054,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         <div 
           ref={canvasContainerRef}
           onClick={(e) => {
-            if (wasTransformingRef.current) return;
+            if (isViewMode || wasTransformingRef.current) return;
             // 빈 속지 배경 또는 캔버스를 직접 클릭했을 때
             const isDirectPaperClick = e.target === canvasContainerRef.current || e.target?.tagName === 'CANVAS';
             if (isDirectPaperClick && activeToolMode !== 'pen') {
@@ -1931,6 +2068,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
             }
           }}
           onTouchStart={(e) => {
+            if (isViewMode) return;
             if (e.touches && e.touches.length >= 2 && selectedTextId && activeToolMode === 'text') {
               const block = textBlocks.find(b => b.id === selectedTextId);
               if (block) {
@@ -1964,7 +2102,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           }}
           style={{
             minHeight: `${paperHeightPx}px`,
-            touchAction: activeToolMode === 'pen' ? 'none' : 'pan-y',
+            touchAction: !isViewMode && activeToolMode === 'pen' ? 'none' : 'pan-y',
             WebkitTouchCallout: 'none',
             userSelect: 'none',
             WebkitUserSelect: 'none',
@@ -1989,14 +2127,15 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
             return false;
           }}
           style={{
-            zIndex: activeToolMode === 'pen' ? 9999 : 0,
+            zIndex: !isViewMode && activeToolMode === 'pen' ? 9999 : 0,
             touchAction: 'none',
             WebkitTouchCallout: 'none',
             WebkitUserSelect: 'none',
             userSelect: 'none',
+            pointerEvents: !isViewMode && activeToolMode === 'pen' ? 'auto' : 'none',
           }}
           className={`absolute inset-0 w-full h-full block ${
-            activeToolMode === 'pen' ? 'cursor-crosshair touch-none' : 'pointer-events-none'
+            !isViewMode && activeToolMode === 'pen' ? 'cursor-crosshair touch-none' : 'pointer-events-none'
           }`}
         />
 
@@ -2022,12 +2161,14 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
               key={block.id}
               data-object-box="true"
               onClick={(e) => {
+                if (isViewMode) return;
                 e.stopPropagation();
                 setSelectedTextId(block.id);
                 setSelectedStickerId(null);
                 setActiveToolMode('text');
               }}
               onTouchStart={(e) => {
+                if (isViewMode) return;
                 if (e.touches && e.touches.length >= 2) {
                   if (e.cancelable) e.preventDefault();
                   e.stopPropagation();
@@ -2064,14 +2205,15 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 zIndex: blockZIndex,
                 transform: `rotate(${blockRotation}deg) scale(${blockScale})`,
                 transformOrigin: 'center center',
-                touchAction: 'pan-y',
+                touchAction: isViewMode ? 'auto' : 'pan-y',
                 backgroundColor: 'transparent',
-                border: isSelected ? '1px solid rgba(0, 0, 0, 0.1)' : '1px solid transparent',
+                border: isSelected && !isViewMode ? '1px solid rgba(0, 0, 0, 0.1)' : '1px solid transparent',
+                pointerEvents: isViewMode ? 'none' : 'auto',
               }}
-              className={`absolute select-text ${isSelected && draggingItem?.id === block.id ? '' : 'transition-[border,box-shadow]'} p-1.5 rounded-lg`}
+              className={`absolute select-text ${isSelected && !isViewMode && draggingItem?.id === block.id ? '' : 'transition-[border,box-shadow]'} p-1.5 rounded-lg`}
             >
               {/* 선택 시 상단 미니멀 이동 바 및 우측 세로 핸들 (배경/원형버튼 제거, 미니멀 디자인) */}
-              {isSelected && (
+              {isSelected && !isViewMode && (
                 <>
                   {/* 상단 중앙: 슬림한 미니 이동 드래그 바 (모바일 터치 편의성을 위해 터치 영역은 넉넉하게 확보) */}
                   <div
@@ -2109,9 +2251,11 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   }
                 }}
                 value={block.text || ''}
-                placeholder={isSelected ? '텍스트를 입력하세요...' : ''}
+                readOnly={isViewMode}
+                placeholder={isSelected && !isViewMode ? '텍스트를 입력하세요...' : ''}
                 onClick={(e) => e.stopPropagation()}
                 onFocus={() => {
+                  if (isViewMode) return;
                   setSelectedTextId(block.id);
                   setSelectedStickerId(null);
                   setActiveToolMode('text');
@@ -2122,6 +2266,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   setTimeout(() => ensureTextBlockVisible(block.id), 250);
                 }}
                 onChange={(e) => {
+                  if (isViewMode) return;
                   updateTextBlock(block.id, { text: e.target.value });
                   e.target.style.height = 'auto';
                   e.target.style.height = `${Math.max(minBoxHeight, e.target.scrollHeight)}px`;
@@ -2161,9 +2306,16 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
             <div
               key={sticker.id}
               data-object-box="true"
-              onPointerDown={(e) => handleItemDragStart(e, 'sticker', sticker.id, sticker.x, sticker.y)}
-              onTouchStart={(e) => handleItemDragStart(e, 'sticker', sticker.id, sticker.x, sticker.y)}
+              onPointerDown={(e) => {
+                if (isViewMode) return;
+                handleItemDragStart(e, 'sticker', sticker.id, sticker.x, sticker.y);
+              }}
+              onTouchStart={(e) => {
+                if (isViewMode) return;
+                handleItemDragStart(e, 'sticker', sticker.id, sticker.x, sticker.y);
+              }}
               onClick={(e) => {
+                if (isViewMode) return;
                 e.stopPropagation();
                 setSelectedStickerId(sticker.id);
                 setSelectedTextId(null);
@@ -2176,15 +2328,18 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 transform: `rotate(${stickerRotation}deg) scale(${stickerScale})`,
                 transformOrigin: 'center center',
                 touchAction: 'none',
+                pointerEvents: isViewMode ? 'none' : 'auto',
               }}
-              className={`absolute cursor-move select-none touch-none p-1 ${
-                isSelected
+              className={`absolute select-none touch-none p-1 ${
+                !isViewMode ? 'cursor-move' : ''
+              } ${
+                isSelected && !isViewMode
                   ? 'ring-1.5 ring-dashed ring-stone-800 rounded-lg bg-white/20'
                   : ''
               }`}
             >
               {/* 선택된 스티커 모서리 직접 조작 핸들 (삭제 / 회전 / 크기조절) */}
-              {isSelected && (
+              {isSelected && !isViewMode && (
                 <>
                   {/* 좌측 상단: 삭제 버튼 */}
                   <button
@@ -2301,16 +2456,17 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
       {/* 
         ================================================================
-        [하단 도구 모음 통합 컨테이너]
+        [하단 도구 모음 통합 컨테이너] (뷰 모드일 때는 숨김, 편집 모드에서만 노출)
         (Visual Viewport 기준으로 키보드 활성화 시 키보드 바로 위에 완벽 고정)
         ================================================================
       */}
-      <div
-        style={{
-          bottom: keyboardOffset > 0 ? '0.75rem' : 'max(1rem, env(safe-area-inset-bottom, 1rem))'
-        }}
-        className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-40 w-[92%] max-w-lg flex flex-col space-y-2 pointer-events-none transition-[bottom] duration-150 ease-out"
-      >
+      {!isViewMode && (
+        <div
+          style={{
+            bottom: keyboardOffset > 0 ? '0.75rem' : 'max(1rem, env(safe-area-inset-bottom, 1rem))'
+          }}
+          className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-40 w-[92%] max-w-lg flex flex-col space-y-2 pointer-events-none transition-[bottom] duration-150 ease-out"
+        >
         
         {/* (1) 위쪽 상세 컨트롤 패널 (펜/텍스트/속지 모드일 때 표시) */}
         {(activeToolMode === 'pen' || activeToolMode === 'text' || activeToolMode === 'paper') && (
@@ -2669,6 +2825,19 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
         )}
 
       </div>
+      )}
+
+      {/* 날짜 변경 모달 (이미 작성된 날짜는 선택 불가) */}
+      <DatePickerModal
+        isOpen={isDatePickerOpen}
+        onClose={() => setIsDatePickerOpen(false)}
+        currentDate={date}
+        onSelectDate={(newDate) => {
+          setDate(newDate);
+        }}
+        existingDates={existingDatesForPicker}
+        title="일기 날짜 변경"
+      />
 
       {/* 일기 삭제 확인 팝업 모달 */}
       {isDeleteModalOpen && (

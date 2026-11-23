@@ -234,6 +234,7 @@ function DiaryMainApp() {
   const [savedListScrollTop, setSavedListScrollTop] = useState(0);
   const [isReturningFromEditor, setIsReturningFromEditor] = useState(false);
   const [listScrollTrigger, setListScrollTrigger] = useState(null);
+  const [isViewMode, setIsViewMode] = useState(false);
 
   // 다이어리 이름 상태 (로컬스토리지 연동, 기본값: 'Diary')
   const [diaryName, setDiaryName] = useState(() => {
@@ -596,6 +597,7 @@ function DiaryMainApp() {
     const existing = diaries.find(d => d.date === targetDate);
     if (existing) {
       setSelectedDiary(existing);
+      setIsViewMode(true);
     } else {
       setSelectedDiary({
         id: `entry-${targetDate}-${Date.now()}`,
@@ -608,11 +610,12 @@ function DiaryMainApp() {
         stickers: [],
         strokes: []
       });
+      setIsViewMode(false);
     }
     setCurrentView('editor');
   };
 
-  // 특정 일기 선택 (목록에서 진입한 경우 스크롤 복원 플래그 설정)
+  // 특정 일기 선택 (작성된 일기 진입 시 view 모드로 열림)
   const handleSelectDiary = (diary) => {
     const prev = currentView === 'editor' ? (previousView || 'calendar') : currentView;
     setPreviousView(prev);
@@ -620,7 +623,31 @@ function DiaryMainApp() {
       setIsReturningFromEditor(true);
     }
     setSelectedDiary(diary);
+    setIsViewMode(true);
     setCurrentView('editor');
+  };
+
+  // 뷰 모드에서 좌우 스와이프로 이전/이후 일기 이동
+  const handleNavigateDiary = (direction) => {
+    if (!diaries || diaries.length <= 1) return;
+    const sorted = [...diaries].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const currentIdx = sorted.findIndex(
+      (d) => d.id === selectedDiary?.id || d.date === selectedDiary?.date
+    );
+    if (currentIdx === -1) return;
+
+    const targetIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
+    if (targetIdx >= 0 && targetIdx < sorted.length) {
+      const nextDiary = sorted[targetIdx];
+      setSelectedDiary(nextDiary);
+      setIsViewMode(true);
+      if (nextDiary.date) {
+        const [y, m] = nextDiary.date.split('-').map(Number);
+        if (y && m) {
+          setCalendarViewingDate(new Date(y, m - 1, 1));
+        }
+      }
+    }
   };
 
   // 연력(Yearly Calendar) 모달 열기 출처 ('calendar' 또는 'list')
@@ -829,7 +856,7 @@ function DiaryMainApp() {
                   diaries={diaries}
                   onSelectDiary={handleSelectDiary}
                   onDeleteDiary={handleDeleteDiary}
-                  onNewDiary={() => handleNewDiary(getTodayDateStr())}
+                  onNewDiary={(targetDate) => handleNewDiary(targetDate || getTodayDateStr())}
                   selectedDiaryId={activeEditorDiary?.id}
                   selectedDate={activeEditorDiary?.date}
                   calendarViewingDate={calendarViewingDate}
@@ -856,6 +883,9 @@ function DiaryMainApp() {
             key={activeEditorDiary?.id || activeEditorDiary?.date}
             diary={activeEditorDiary}
             diaryName={diaryName}
+            diaries={diaries}
+            initialViewMode={isViewMode}
+            onNavigateDiary={handleNavigateDiary}
             onSave={handleSaveDiary}
             onDelete={async (id) => {
               if (id) {
@@ -863,8 +893,22 @@ function DiaryMainApp() {
               }
             }}
             onBack={() => {
-              if (previousView === 'list') {
-                setIsReturningFromEditor(true);
+              const lastDiaryDate = activeEditorDiary?.date || selectedDiary?.date;
+              if (lastDiaryDate) {
+                const [y, m] = lastDiaryDate.split('-').map(Number);
+                if (y && m) {
+                  setCalendarViewingDate(new Date(y, m - 1, 1));
+                  if (previousView === 'list') {
+                    setIsReturningFromEditor(false);
+                    setListScrollTrigger({ 
+                      type: 'diary', 
+                      dateStr: lastDiaryDate, 
+                      year: y, 
+                      monthIdx: m - 1, 
+                      timestamp: Date.now() 
+                    });
+                  }
+                }
               }
               setCurrentView(previousView || 'calendar');
               setSelectedDiary(null);
