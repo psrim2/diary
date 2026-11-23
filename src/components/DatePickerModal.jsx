@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { triggerHaptic } from '../utils/haptics';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -133,7 +134,10 @@ export default function DatePickerModal({
           <div className="flex items-center space-x-1.5">
             <button
               type="button"
-              onClick={handlePrevMonth}
+              onClick={() => {
+                triggerHaptic('light');
+                handlePrevMonth();
+              }}
               className="p-1 rounded-full text-stone-500 hover:text-black hover:bg-stone-100 active:scale-95 transition cursor-pointer"
               title="이전 달"
             >
@@ -147,7 +151,10 @@ export default function DatePickerModal({
             </div>
             <button
               type="button"
-              onClick={handleNextMonth}
+              onClick={() => {
+                triggerHaptic('light');
+                handleNextMonth();
+              }}
               className="p-1 rounded-full text-stone-500 hover:text-black hover:bg-stone-100 active:scale-95 transition cursor-pointer"
               title="다음 달"
             >
@@ -157,7 +164,10 @@ export default function DatePickerModal({
 
           <button
             type="button"
-            onClick={handleGoToToday}
+            onClick={() => {
+              triggerHaptic('light');
+              handleGoToToday();
+            }}
             className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-700 active:scale-95 transition cursor-pointer"
           >
             오늘
@@ -207,6 +217,7 @@ export default function DatePickerModal({
                 key={cell.dateStr}
                 type="button"
                 onClick={() => {
+                  triggerHaptic('medium');
                   onSelectDate(cell.dateStr);
                   onClose();
                 }}

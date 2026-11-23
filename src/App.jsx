@@ -235,6 +235,7 @@ function DiaryMainApp() {
   const [isReturningFromEditor, setIsReturningFromEditor] = useState(false);
   const [listScrollTrigger, setListScrollTrigger] = useState(null);
   const [isViewMode, setIsViewMode] = useState(false);
+  const [pageTurnDirection, setPageTurnDirection] = useState(null);
 
   // 다이어리 이름 상태 (로컬스토리지 연동, 기본값: 'Diary')
   const [diaryName, setDiaryName] = useState(() => {
@@ -593,6 +594,7 @@ function DiaryMainApp() {
 
   // 새 일기 작성 시작 (기본값: 실제 오늘 날짜)
   const handleNewDiary = (targetDate = getTodayDateStr()) => {
+    setPageTurnDirection(null);
     setPreviousView(currentView === 'editor' ? (previousView || 'calendar') : currentView);
     const existing = diaries.find(d => d.date === targetDate);
     if (existing) {
@@ -617,6 +619,7 @@ function DiaryMainApp() {
 
   // 특정 일기 선택 (작성된 일기 진입 시 view 모드로 열림)
   const handleSelectDiary = (diary) => {
+    setPageTurnDirection(null);
     const prev = currentView === 'editor' ? (previousView || 'calendar') : currentView;
     setPreviousView(prev);
     if (prev === 'list') {
@@ -639,6 +642,7 @@ function DiaryMainApp() {
     const targetIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
     if (targetIdx >= 0 && targetIdx < sorted.length) {
       const nextDiary = sorted[targetIdx];
+      setPageTurnDirection(direction);
       setSelectedDiary(nextDiary);
       setIsViewMode(true);
       if (nextDiary.date) {
@@ -885,6 +889,7 @@ function DiaryMainApp() {
             diaryName={diaryName}
             diaries={diaries}
             initialViewMode={isViewMode}
+            pageTurnDirection={pageTurnDirection}
             onNavigateDiary={handleNavigateDiary}
             onSave={handleSaveDiary}
             onDelete={async (id) => {

@@ -3,6 +3,7 @@ import { Search, Trash2, X, Plus } from 'lucide-react';
 import { PAPER_STYLES } from '../constants';
 import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas, CANONICAL_WIDTH, CANONICAL_HEIGHT, resolveStickerImage, isEmojiSticker, upgradePresetSvgUrl } from '../utils/canvasLayers';
 import DatePickerModal from './DatePickerModal';
+import { triggerHaptic } from '../utils/haptics';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -941,7 +942,10 @@ export default function ListView({
       {/* 3. 우측 하단 플로팅 새 일기 작성 버튼 (+) 및 날짜 선택 모달 */}
       <button
         type="button"
-        onClick={() => setIsDatePickerOpen(true)}
+        onClick={() => {
+          triggerHaptic('light');
+          setIsDatePickerOpen(true);
+        }}
         className="fixed right-6 bottom-8 z-40 w-14 h-14 rounded-full bg-black text-white shadow-2xl flex items-center justify-center hover:bg-stone-800 active:scale-95 transition-all cursor-pointer select-none"
         title="새 일기 작성 (날짜 선택)"
       >

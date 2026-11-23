@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Edit2 } from 'lucide-react';
+import { triggerHaptic } from '../utils/haptics';
 
 export default function Header({ 
   currentView, 
@@ -134,7 +135,10 @@ export default function Header({
         {/* 상단 [오늘] 바로가기 버튼 (44px 원형, 기존 + 버튼 대체) */}
         <button
           type="button"
-          onClick={onGoToToday}
+          onClick={() => {
+            triggerHaptic('light');
+            onGoToToday();
+          }}
           className="w-11 h-11 rounded-full bg-white border border-stone-300 shadow-xs flex items-center justify-center font-bold text-xs sm:text-sm text-stone-900 active:scale-95 hover:bg-stone-50 transition-all cursor-pointer select-none shrink-0"
           title="오늘 날짜로 이동"
         >
@@ -145,7 +149,10 @@ export default function Header({
       {/* 2. 탭: 달력  목록 (텍스트 밑줄 스타일) */}
       <div className="flex items-center space-x-4 mt-3">
         <button
-          onClick={() => setCurrentView('calendar')}
+          onClick={() => {
+            triggerHaptic('light');
+            setCurrentView('calendar');
+          }}
           className={`text-base pb-1 transition-all select-none ${
             currentView === 'calendar'
               ? 'font-black text-black border-b-2 border-black'
@@ -156,7 +163,10 @@ export default function Header({
         </button>
 
         <button
-          onClick={() => setCurrentView('list')}
+          onClick={() => {
+            triggerHaptic('light');
+            setCurrentView('list');
+          }}
           className={`text-base pb-1 transition-all select-none ${
             currentView === 'list'
               ? 'font-black text-black border-b-2 border-black'

@@ -35,6 +35,7 @@ import {
 import StickerPalette from './StickerPalette';
 import PaperSelectModal from './PaperSelectModal';
 import DatePickerModal from './DatePickerModal';
+import { triggerHaptic } from '../utils/haptics';
 
 function isImageAsset(val) {
   if (typeof val !== 'string') return false;
@@ -109,6 +110,168 @@ export function getDefaultToolMode() {
   return isMobilePhone ? 'text' : 'pen';
 }
 
+/**
+ * 뷰 모드 좌우 스와이프 시 실시간으로 함께 이동하는 정적 다이어리 페이지 컴포넌트
+ */
+function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
+  const normalized = useMemo(() => normalizeDiaryLayers(diary), [diary]);
+  const strokeBands = useMemo(() => buildStrokeBands(normalized.strokes), [normalized.strokes]);
+
+  const dateObj = new Date((diary?.date || '') + 'T00:00:00');
+  const validDate = isNaN(dateObj) ? new Date() : dateObj;
+  const yearNum = validDate.getFullYear();
+  const monthNum = String(validDate.getMonth() + 1).padStart(2, '0');
+  const dayNum = String(validDate.getDate()).padStart(2, '0');
+  const dayEn = DAY_NAMES_EN[validDate.getDay()] || 'MON';
+  const weather = diary?.weather || diary?.thumbnailMood || '';
+  const paperClass = PAPER_STYLES.find(p => p.id === diary?.paperStyle)?.class || 'paper-minimal-lined';
+
+  return (
+    <div className="w-full h-full flex flex-col bg-[#fafafa] select-none pointer-events-none">
+      {/* 날짜 헤더 */}
+      <div className="w-full px-6 pt-1 lg:pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-3 shrink-0">
+        <div className="text-base sm:text-lg font-black text-black leading-tight tracking-tight">
+          {yearNum}
+        </div>
+        <div className="flex items-center justify-between mt-1">
+          <div className="text-2xl sm:text-3xl font-black text-black tracking-tight leading-none">
+            {monthNum}.{dayNum} {dayEn}
+          </div>
+          <div className="w-10 h-10 flex items-center justify-center">
+            {weather ? (
+              isImageAsset(weather) ? (
+                <img
+                  src={upgradePresetSvgUrl(typeof weather === 'string' ? weather : weather?.imageUrl || '')}
+                  alt=""
+                  className="w-10 h-10 object-contain block p-0.5 select-none"
+                />
+              ) : (
+                <span className="text-3xl leading-none select-none">
+                  {typeof weather === 'string' ? weather : weather?.icon || ''}
+                </span>
+              )
+            ) : null}
+          </div>
+        </div>
+        <div className="w-full h-[1.5px] bg-black mt-3 sm:mt-4" />
+      </div>
+
+      {/* 속지 컨텐츠 */}
+      <div className="flex-1 w-full overflow-hidden px-3.5 sm:px-6 relative">
+        <div 
+          style={{ minHeight: `${paperHeightPx}px` }}
+          className={`w-full relative isolate ${paperClass}`}
+        >
+          {/* 드로잉 스트로크 */}
+          {strokeBands.map((band) => (
+            <StrokeBandCanvas key={band.id} band={band} />
+          ))}
+
+          {/* 텍스트 블록 */}
+          {(normalized.textBlocks || []).map((block, idx) => {
+            const blockScale = block.scale || 1;
+            const blockRotation = block.rotation || 0;
+            const blockZIndex = typeof block.layerOrder === 'number' ? block.layerOrder : idx + 1;
+            const leftPx = Math.round((block.x || 0) * scaleRatio);
+            const topPx = Math.round((block.y || 0) * scaleRatio);
+            const canonicalW = typeof block.width === 'number' ? block.width : CANONICAL_WIDTH;
+            const widthPx = Math.round(canonicalW * scaleRatio);
+            const scaledFontSize = Math.max(10, Math.round((block.fontSize || 18) * scaleRatio));
+            const scaledLineHeight = Math.max(20, Math.round(28 * scaleRatio));
+            const minBoxHeight = scaledLineHeight * 1;
+            const textColor = block.color || '#111111';
+
+            return (
+              <div
+                key={block.id || idx}
+                style={{
+                  left: `${leftPx}px`,
+                  top: `${topPx}px`,
+                  width: `${widthPx}px`,
+                  minHeight: `${minBoxHeight + 8}px`,
+                  zIndex: blockZIndex,
+                  transform: `rotate(${blockRotation}deg) scale(${blockScale})`,
+                  transformOrigin: 'center center',
+                  fontFamily: block.fontFamily || "'Paperlogy', sans-serif",
+                  fontWeight: block.fontWeight || (block.fontFamily && !block.fontFamily.includes('Paperlogy') ? 'normal' : 600),
+                  fontSize: `${scaledFontSize}px`,
+                  color: textColor,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  lineHeight: `${scaledLineHeight}px`,
+                }}
+                className="absolute p-1.5"
+              >
+                {block.text || ''}
+              </div>
+            );
+          })}
+
+          {/* 스티커 */}
+          {(normalized.stickers || []).filter(Boolean).map((sticker, idx) => {
+            const stickerScale = sticker.scale || 1;
+            const stickerRotation = sticker.rotation || 0;
+            const stickerZIndex = typeof sticker.layerOrder === 'number' ? sticker.layerOrder : idx + 1;
+            const leftPercent = ((sticker.x || 0) / CANONICAL_WIDTH) * 100;
+            const topPx = Math.round((sticker.y || 0) * scaleRatio);
+            const isTape = sticker.category === 'tape' || sticker.type === 'tape';
+            const basePixelW = isTape ? 112 : 56;
+            const scaledPixelW = Math.max(24, Math.round(basePixelW * scaleRatio));
+            const resolvedImg = resolveStickerImage(sticker);
+
+            return (
+              <div
+                key={sticker.id || idx}
+                style={{
+                  left: `${leftPercent}%`,
+                  top: `${topPx}px`,
+                  zIndex: stickerZIndex,
+                  transform: `rotate(${stickerRotation}deg) scale(${stickerScale})`,
+                  transformOrigin: 'center center',
+                }}
+                className="absolute select-none p-1 pointer-events-none"
+              >
+                {resolvedImg ? (
+                  <img
+                    src={resolvedImg}
+                    alt=""
+                    draggable={false}
+                    className={
+                      sticker.category === 'tape' || sticker.type === 'tape'
+                        ? 'w-28 h-auto object-contain block'
+                        : 'w-14 h-14 object-contain block'
+                    }
+                  />
+                ) : sticker.type === 'tape' || sticker.category === 'tape' ? (
+                  <div
+                    className="rounded shadow-xs relative overflow-hidden"
+                    style={{
+                      width: `${scaledPixelW}px`,
+                      height: `${Math.round(24 * scaleRatio)}px`,
+                      backgroundColor: sticker.color || '#fef08a',
+                      backgroundImage:
+                        sticker.pattern === 'dots'
+                          ? 'radial-gradient(rgba(0,0,0,0.15) 1px, transparent 1px)'
+                          : sticker.pattern === 'stripes'
+                          ? 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.08) 4px, rgba(0,0,0,0.08) 8px)'
+                          : 'none',
+                      backgroundSize: sticker.pattern === 'dots' ? '6px 6px' : 'auto',
+                    }}
+                  />
+                ) : isEmojiSticker(sticker) ? (
+                  <span className="text-3xl sm:text-4xl filter drop-shadow-xs block leading-none">
+                    {sticker.content || sticker.icon || ''}
+                  </span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DiaryCanvas({ 
   diary, 
   diaryName, 
@@ -117,10 +280,43 @@ export default function DiaryCanvas({
   onBack, 
   diaries = [], 
   initialViewMode = false, 
-  onNavigateDiary 
+  onNavigateDiary,
+  pageTurnDirection = null
 }) {
   const [isViewMode, setIsViewMode] = useState(initialViewMode);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+
+  // 책장 넘김(달력 플립) / 실시간 스와이프 인터랙션 상태
+  const [dragX, setDragX] = useState(0);
+  const [isPageDragging, setIsPageDragging] = useState(false);
+  const [exitAnimation, setExitAnimation] = useState(null); // 'anim-page-exit-left' | 'anim-page-exit-right' | null
+  const [enterAnimation, setEnterAnimation] = useState(() => {
+    if (pageTurnDirection === 'next') return 'anim-page-enter-right';
+    if (pageTurnDirection === 'prev') return 'anim-page-enter-left';
+    return null;
+  });
+
+  // 진입 애니메이션 완료 후 클래스 해제
+  useEffect(() => {
+    if (enterAnimation) {
+      const timer = setTimeout(() => {
+        setEnterAnimation(null);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [enterAnimation]);
+
+  // 정렬된 일기 목록에서 이전 및 다음 일기 식별 (스와이프 트랙 렌더링용)
+  const sortedDiaries = useMemo(() => {
+    return [...(diaries || [])].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  }, [diaries]);
+
+  const currentDiaryIndex = useMemo(() => {
+    return sortedDiaries.findIndex((d) => d.id === diary?.id || d.date === diary?.date);
+  }, [sortedDiaries, diary?.id, diary?.date]);
+
+  const prevDiary = currentDiaryIndex > 0 ? sortedDiaries[currentDiaryIndex - 1] : null;
+  const nextDiary = currentDiaryIndex >= 0 && currentDiaryIndex < sortedDiaries.length - 1 ? sortedDiaries[currentDiaryIndex + 1] : null;
 
   useEffect(() => {
     setIsViewMode(initialViewMode);
@@ -1502,83 +1698,218 @@ export default function DiaryCanvas({
     }, 2400);
   };
 
-  // 뷰 모드에서 좌우 스와이프로 이전/이후 일기 탐색
-  const handleSwipeNavigation = (direction) => {
-    if (!onNavigateDiary) return;
+  // 현재 일기 인덱스 및 이전/다음 존재 여부 계산
+  const { hasNextDiary, hasPrevDiary } = useMemo(() => {
     const sorted = [...(diaries || [])].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const currentIdx = sorted.findIndex(
       (d) => d.id === diary?.id || d.date === date
     );
-    if (currentIdx === -1) return;
-    const targetIdx = direction === 'next' ? currentIdx + 1 : currentIdx - 1;
-    if (targetIdx < 0) {
-      showToast('가장 첫 번째 일기입니다.');
-      return;
+    return {
+      hasNextDiary: currentIdx !== -1 && currentIdx < sorted.length - 1,
+      hasPrevDiary: currentIdx > 0,
+    };
+  }, [diaries, diary?.id, date]);
+
+  // 뷰 모드에서 좌우 스와이프로 이전/이후 일기 탐색 (3D 달력 책장 넘김 전환 및 햅틱 효과)
+  const handleSwipeNavigation = (direction) => {
+    if (!onNavigateDiary || exitAnimation) return;
+    if (direction === 'next') {
+      if (hasNextDiary) {
+        triggerHaptic('pageTurn');
+        setExitAnimation('anim-page-exit-left');
+        setTimeout(() => {
+          onNavigateDiary('next');
+        }, 180);
+      } else {
+        triggerHaptic('boundary');
+        showToast('가장 최근 일기입니다.');
+        setDragX(0);
+      }
+    } else if (direction === 'prev') {
+      if (hasPrevDiary) {
+        triggerHaptic('pageTurn');
+        setExitAnimation('anim-page-exit-right');
+        setTimeout(() => {
+          onNavigateDiary('prev');
+        }, 180);
+      } else {
+        triggerHaptic('boundary');
+        showToast('가장 첫 번째 일기입니다.');
+        setDragX(0);
+      }
     }
-    if (targetIdx >= sorted.length) {
-      showToast('가장 최근 일기입니다.');
-      return;
-    }
-    onNavigateDiary(direction);
   };
 
   const viewSwipeTouchStartRef = useRef(null);
+  const isSwipingHorizontallyRef = useRef(false);
   const viewSwipeMouseDownRef = useRef(null);
 
+  // 터치 스와이프 시작
   const handleViewTouchStart = (e) => {
-    if (!isViewMode || !e.touches || e.touches.length !== 1) return;
+    if (!isViewMode || !e.touches || e.touches.length !== 1 || exitAnimation) return;
     viewSwipeTouchStartRef.current = {
       x: e.touches[0].clientX,
       y: e.touches[0].clientY,
       time: Date.now()
     };
+    isSwipingHorizontallyRef.current = false;
   };
 
-  const handleViewTouchEnd = (e) => {
-    if (!isViewMode || !viewSwipeTouchStartRef.current || !e.changedTouches || e.changedTouches.length !== 1) {
-      viewSwipeTouchStartRef.current = null;
-      return;
-    }
-    const touch = e.changedTouches[0];
+  // 터치 스와이프 드래그 (실시간 달력 넘김 이동)
+  const handleViewTouchMove = (e) => {
+    if (!isViewMode || !viewSwipeTouchStartRef.current || !e.touches || e.touches.length !== 1 || exitAnimation) return;
+    const touch = e.touches[0];
     const dx = touch.clientX - viewSwipeTouchStartRef.current.x;
     const dy = touch.clientY - viewSwipeTouchStartRef.current.y;
-    const dt = Date.now() - viewSwipeTouchStartRef.current.time;
-    viewSwipeTouchStartRef.current = null;
 
-    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3 && dt < 800) {
-      if (dx < 0) {
-        handleSwipeNavigation('next');
-      } else {
-        handleSwipeNavigation('prev');
+    if (!isSwipingHorizontallyRef.current && Math.abs(dx) > 10) {
+      if (Math.abs(dx) > Math.abs(dy) * 1.2) {
+        isSwipingHorizontallyRef.current = true;
+        setIsPageDragging(true);
       }
+    }
+
+    if (isSwipingHorizontallyRef.current) {
+      if (e.cancelable) e.preventDefault();
+      // 경계 도달 시 고무줄 저항감 (Rubber-band effect)
+      let effectiveDx = dx;
+      if (dx < 0 && !hasNextDiary) effectiveDx = dx * 0.25;
+      if (dx > 0 && !hasPrevDiary) effectiveDx = dx * 0.25;
+      setDragX(effectiveDx);
     }
   };
 
+  // 터치 스와이프 종료 (임계값 도달 시 책장 넘김 전환 및 햅틱)
+  const handleViewTouchEnd = () => {
+    if (!isViewMode || !viewSwipeTouchStartRef.current) {
+      viewSwipeTouchStartRef.current = null;
+      isSwipingHorizontallyRef.current = false;
+      setIsPageDragging(false);
+      setDragX(0);
+      return;
+    }
+    viewSwipeTouchStartRef.current = null;
+    const wasSwiping = isSwipingHorizontallyRef.current;
+    isSwipingHorizontallyRef.current = false;
+    setIsPageDragging(false);
+
+    if (!wasSwiping) {
+      setDragX(0);
+      return;
+    }
+
+    const currentDx = dragX;
+    if (currentDx < -50) {
+      if (hasNextDiary) {
+        triggerHaptic('pageTurn');
+        setExitAnimation('anim-page-exit-left');
+        setDragX(-window.innerWidth);
+        setTimeout(() => {
+          onNavigateDiary?.('next');
+        }, 180);
+      } else {
+        triggerHaptic('boundary');
+        showToast('가장 최근 일기입니다.');
+        setDragX(0);
+      }
+    } else if (currentDx > 50) {
+      if (hasPrevDiary) {
+        triggerHaptic('pageTurn');
+        setExitAnimation('anim-page-exit-right');
+        setDragX(window.innerWidth);
+        setTimeout(() => {
+          onNavigateDiary?.('prev');
+        }, 180);
+      } else {
+        triggerHaptic('boundary');
+        showToast('가장 첫 번째 일기입니다.');
+        setDragX(0);
+      }
+    } else {
+      setDragX(0);
+    }
+  };
+
+  // 마우스 드래그 시작
   const handleViewMouseDown = (e) => {
-    if (!isViewMode || e.button !== 0) return;
+    if (!isViewMode || e.button !== 0 || exitAnimation) return;
     viewSwipeMouseDownRef.current = {
       x: e.clientX,
       y: e.clientY,
       time: Date.now()
     };
+    isSwipingHorizontallyRef.current = false;
   };
 
-  const handleViewMouseUp = (e) => {
-    if (!isViewMode || !viewSwipeMouseDownRef.current) {
-      viewSwipeMouseDownRef.current = null;
-      return;
-    }
+  // 마우스 드래그 이동
+  const handleViewMouseMove = (e) => {
+    if (!isViewMode || !viewSwipeMouseDownRef.current || exitAnimation) return;
     const dx = e.clientX - viewSwipeMouseDownRef.current.x;
     const dy = e.clientY - viewSwipeMouseDownRef.current.y;
-    const dt = Date.now() - viewSwipeMouseDownRef.current.time;
-    viewSwipeMouseDownRef.current = null;
 
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3 && dt < 800) {
-      if (dx < 0) {
-        handleSwipeNavigation('next');
-      } else {
-        handleSwipeNavigation('prev');
+    if (!isSwipingHorizontallyRef.current && Math.abs(dx) > 10) {
+      if (Math.abs(dx) > Math.abs(dy) * 1.2) {
+        isSwipingHorizontallyRef.current = true;
+        setIsPageDragging(true);
       }
+    }
+
+    if (isSwipingHorizontallyRef.current) {
+      let effectiveDx = dx;
+      if (dx < 0 && !hasNextDiary) effectiveDx = dx * 0.25;
+      if (dx > 0 && !hasPrevDiary) effectiveDx = dx * 0.25;
+      setDragX(effectiveDx);
+    }
+  };
+
+  // 마우스 드래그 종료
+  const handleViewMouseUp = () => {
+    if (!isViewMode || !viewSwipeMouseDownRef.current) {
+      viewSwipeMouseDownRef.current = null;
+      isSwipingHorizontallyRef.current = false;
+      setIsPageDragging(false);
+      setDragX(0);
+      return;
+    }
+    viewSwipeMouseDownRef.current = null;
+    const wasSwiping = isSwipingHorizontallyRef.current;
+    isSwipingHorizontallyRef.current = false;
+    setIsPageDragging(false);
+
+    if (!wasSwiping) {
+      setDragX(0);
+      return;
+    }
+
+    const currentDx = dragX;
+    if (currentDx < -50) {
+      if (hasNextDiary) {
+        triggerHaptic('pageTurn');
+        setExitAnimation('anim-page-exit-left');
+        setDragX(-window.innerWidth);
+        setTimeout(() => {
+          onNavigateDiary?.('next');
+        }, 180);
+      } else {
+        triggerHaptic('boundary');
+        showToast('가장 최근 일기입니다.');
+        setDragX(0);
+      }
+    } else if (currentDx > 50) {
+      if (hasPrevDiary) {
+        triggerHaptic('pageTurn');
+        setExitAnimation('anim-page-exit-right');
+        setDragX(window.innerWidth);
+        setTimeout(() => {
+          onNavigateDiary?.('prev');
+        }, 180);
+      } else {
+        triggerHaptic('boundary');
+        showToast('가장 첫 번째 일기입니다.');
+        setDragX(0);
+      }
+    } else {
+      setDragX(0);
     }
   };
 
@@ -1620,6 +1951,7 @@ export default function DiaryCanvas({
 
     onSave(finalDiary);
     setIsViewMode(true);
+    triggerHaptic('medium');
     setTimeout(() => setIsSaving(false), 500);
 
     // 모바일/와이드 모든 화면에서 저장 토스트 알림 표시
@@ -1646,7 +1978,10 @@ export default function DiaryCanvas({
       <div className="w-full px-6 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-2 shrink-0 flex lg:hidden items-center justify-between bg-[#fafafa] z-30 relative">
         <div className="flex items-center space-x-2.5">
           <button
-            onClick={onBack}
+            onClick={() => {
+              triggerHaptic('light');
+              onBack();
+            }}
             className="text-black hover:opacity-70 transition p-1.5 -ml-1.5 rounded-full"
             title="뒤로가기"
           >
@@ -1661,7 +1996,10 @@ export default function DiaryCanvas({
         {isViewMode ? (
           <button
             type="button"
-            onClick={() => setIsViewMode(false)}
+            onClick={() => {
+              triggerHaptic('light');
+              setIsViewMode(false);
+            }}
             className="w-11 h-11 rounded-full bg-stone-900 text-white transition flex items-center justify-center shadow-xs hover:bg-stone-800 active:scale-95 cursor-pointer"
             title="일기 편집하기"
           >
@@ -1686,11 +2024,47 @@ export default function DiaryCanvas({
 
       {/* 
         ================================================================
-        [본문 영역] 다이어리 속지 / 필기 영역:
-        - 반응형으로 가로 100% (w-full) 풀 핏
+        [본문 슬라이더 래퍼]
+        - 뷰 모드 좌우 스와이프 시 실제 책장/달력이 사각거리며 넘어가는 3D 전환 애니메이션 적용
+        - 스와이프 도중 이전/다음 다이어리를 양옆에 실시간으로 나란히 배치하여 연속적인 페이지 전환 연출
         ================================================================
       */}
-      <div className="w-full flex-1 flex flex-col min-h-0 relative">
+      <div className="w-full flex-1 flex flex-col min-h-0 relative overflow-hidden">
+        {/* 이전 다이어리 프리뷰 (우측으로 드래그할 때 좌측에서 밀려 들어옴) */}
+        {isViewMode && (isPageDragging || exitAnimation === 'anim-page-exit-right') && prevDiary && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              transform: `translateX(calc(-100% + ${dragX}px))`,
+              transition: isPageDragging ? 'none' : 'transform 0.22s cubic-bezier(0.25, 1, 0.5, 1)',
+              zIndex: 10,
+              boxShadow: '10px 0 25px rgba(0,0,0,0.08)',
+            }}
+          >
+            <DiaryStaticPage diary={prevDiary} scaleRatio={scaleRatio} paperHeightPx={paperHeightPx} />
+          </div>
+        )}
+
+        {/* 현재 다이어리 페이지 */}
+        <div 
+          style={{
+            transform: (isPageDragging || exitAnimation) && dragX !== 0
+              ? `translateX(${dragX}px) rotateY(${dragX * -0.025}deg)`
+              : undefined,
+            transition: isPageDragging ? 'none' : 'transform 0.22s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.22s ease',
+            boxShadow: isPageDragging && Math.abs(dragX) > 5
+              ? (dragX > 0 ? `${-Math.min(18, dragX * 0.15)}px 0 25px rgba(0,0,0,0.12)` : `${Math.min(18, -dragX * 0.15)}px 0 25px rgba(0,0,0,0.12)`)
+              : undefined,
+            zIndex: 20,
+          }}
+          className={`w-full flex-1 flex flex-col min-h-0 relative calendar-page-container ${
+            enterAnimation || ''
+          }`}
+        >
         {/* 
           ================================================================
           [상단] 2. 날짜 헤더: 반응형 가로 100% 풀 핏
@@ -1994,7 +2368,10 @@ export default function DiaryCanvas({
           {isViewMode ? (
             <button
               type="button"
-              onClick={() => setIsViewMode(false)}
+              onClick={() => {
+                triggerHaptic('light');
+                setIsViewMode(false);
+              }}
               className="hidden lg:flex w-10 h-10 rounded-full bg-stone-900 text-white transition items-center justify-center shadow-xs shrink-0 hover:bg-stone-800 active:scale-95 cursor-pointer"
               title="일기 편집하기"
             >
@@ -2032,9 +2409,12 @@ export default function DiaryCanvas({
       <div 
         ref={scrollContainerRef}
         onTouchStart={isViewMode ? handleViewTouchStart : undefined}
+        onTouchMove={isViewMode ? handleViewTouchMove : undefined}
         onTouchEnd={isViewMode ? handleViewTouchEnd : undefined}
         onMouseDown={isViewMode ? handleViewMouseDown : undefined}
+        onMouseMove={isViewMode ? handleViewMouseMove : undefined}
         onMouseUp={isViewMode ? handleViewMouseUp : undefined}
+        onMouseLeave={isViewMode ? handleViewMouseUp : undefined}
         onContextMenu={(e) => {
           if (activeToolMode === 'pen') {
             e.preventDefault();
@@ -2453,6 +2833,26 @@ export default function DiaryCanvas({
         />
       </div>
     </div>
+
+        {/* 다음 다이어리 프리뷰 (좌측으로 드래그할 때 우측에서 밀려 들어옴) */}
+        {isViewMode && (isPageDragging || exitAnimation === 'anim-page-exit-left') && nextDiary && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              transform: `translateX(calc(100% + ${dragX}px))`,
+              transition: isPageDragging ? 'none' : 'transform 0.22s cubic-bezier(0.25, 1, 0.5, 1)',
+              zIndex: 10,
+              boxShadow: '-10px 0 25px rgba(0,0,0,0.08)',
+            }}
+          >
+            <DiaryStaticPage diary={nextDiary} scaleRatio={scaleRatio} paperHeightPx={paperHeightPx} />
+          </div>
+        )}
+      </div>
 
       {/* 
         ================================================================
