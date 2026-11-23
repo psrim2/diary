@@ -884,7 +884,6 @@ function DiaryMainApp() {
           currentView === 'editor' ? 'flex flex-1 w-full' : 'hidden lg:flex lg:flex-1'
         }`}>
           <DiaryCanvas
-            key={activeEditorDiary?.id || activeEditorDiary?.date}
             diary={activeEditorDiary}
             diaryName={diaryName}
             diaries={diaries}

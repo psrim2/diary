@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { 
   ArrowLeft, 
   Check, 
@@ -167,7 +167,7 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
             <StrokeBandCanvas key={band.id} band={band} />
           ))}
 
-          {/* 텍스트 블록 */}
+          {/* 텍스트 블록 (뷰 모드 본문과 100% 동일한 좌표, 패딩, 줄높이, 폰트 및 배지 스타일) */}
           {(normalized.textBlocks || []).map((block, idx) => {
             const blockScale = block.scale || 1;
             const blockRotation = block.rotation || 0;
@@ -177,14 +177,27 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
             const canonicalW = typeof block.width === 'number' ? block.width : CANONICAL_WIDTH;
             const widthPx = Math.round(canonicalW * scaleRatio);
             const scaledFontSize = Math.max(10, Math.round((block.fontSize || 18) * scaleRatio));
-            const scaledLineHeight = Math.max(20, Math.round(28 * scaleRatio));
-            const minBoxHeight = scaledLineHeight * 1;
-            const textColor = block.color || '#111111';
+            const minBoxHeight = Math.round(scaledFontSize * 1.5);
+            let textColor = block.color || '#111111';
+            let bgClass = '';
+            let customBgStyle = undefined;
+
+            if (block.bgStyle === 'light') {
+              bgClass = 'bg-white/95 text-stone-900 rounded-2xl shadow-sm px-3.5 py-1.5';
+            } else if (block.bgStyle === 'dark') {
+              bgClass = 'bg-black/90 text-white rounded-2xl shadow-sm px-3.5 py-1.5';
+              textColor = '#ffffff';
+            } else if (block.bgStyle === 'color') {
+              bgClass = 'text-white rounded-2xl shadow-sm px-3.5 py-1.5';
+              customBgStyle = { backgroundColor: block.color || '#111111' };
+              textColor = '#ffffff';
+            }
 
             return (
               <div
                 key={block.id || idx}
                 style={{
+                  position: 'absolute',
                   left: `${leftPx}px`,
                   top: `${topPx}px`,
                   width: `${widthPx}px`,
@@ -192,17 +205,28 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
                   zIndex: blockZIndex,
                   transform: `rotate(${blockRotation}deg) scale(${blockScale})`,
                   transformOrigin: 'center center',
-                  fontFamily: block.fontFamily || "'Paperlogy', sans-serif",
-                  fontWeight: block.fontWeight || (block.fontFamily && !block.fontFamily.includes('Paperlogy') ? 'normal' : 600),
-                  fontSize: `${scaledFontSize}px`,
-                  color: textColor,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  lineHeight: `${scaledLineHeight}px`,
+                  pointerEvents: 'none',
+                  userSelect: 'none',
                 }}
-                className="absolute p-1.5"
+                className="p-1.5 rounded-lg select-none"
               >
-                {block.text || ''}
+                <div
+                  style={{
+                    fontFamily: block.fontFamily || "'Paperlogy', sans-serif",
+                    fontWeight: block.fontWeight || (block.fontFamily && !block.fontFamily.includes('Paperlogy') ? 'normal' : 600),
+                    fontSize: `${scaledFontSize}px`,
+                    color: textColor,
+                    textAlign: block.textAlign || 'left',
+                    lineHeight: 1.5,
+                    minHeight: `${minBoxHeight}px`,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    ...customBgStyle,
+                  }}
+                  className={`w-full select-none pointer-events-none ${bgClass}`}
+                >
+                  {block.text || ''}
+                </div>
               </div>
             );
           })}
@@ -467,6 +491,17 @@ export default function DiaryCanvas({
       setSelectedTextId(null);
       setSelectedStickerId(null);
       setActiveToolMode(getDefaultToolMode());
+      setDragX(0);
+      setExitAnimation(null);
+      setIsPageDragging(false);
+      setIsWeatherOpen(false);
+      setIsPaperModalOpen(false);
+      setIsStickerPaletteOpen(false);
+      setIsDatePickerOpen(false);
+      setIsDeleteModalOpen(false);
+      setDraggingItem(null);
+      setTransformingItem(null);
+      if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
     }
   }, [diary?.id, diary?.date]);
 
@@ -505,11 +540,19 @@ export default function DiaryCanvas({
     }
   }, [selectedTextId]);
 
-  // 실제 렌더링된 속지의 가로/세로 픽셀 크기 실시간 측정 (ResizeObserver)
-  const [paperWidth, setPaperWidth] = useState(CANONICAL_WIDTH);
+  // 실제 렌더링된 속지의 가로/세로 픽셀 크기 실시간 측정 (화면 크기 기반 즉시 초기화 & useLayoutEffect 동기 측정)
+  const [paperWidth, setPaperWidth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const w = window.innerWidth;
+      const pad = w >= 640 ? 48 : 28;
+      const containerW = w >= 1024 ? (w / 2) - 48 : w - pad;
+      return Math.max(280, Math.round(containerW));
+    }
+    return CANONICAL_WIDTH;
+  });
   const [paperHeight, setPaperHeight] = useState(CANONICAL_HEIGHT);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = canvasContainerRef.current;
     if (!el) return;
 
@@ -1713,9 +1756,10 @@ export default function DiaryCanvas({
       if (hasNextDiary) {
         triggerHaptic('pageTurn');
         setExitAnimation('anim-page-exit-left');
+        setDragX(-window.innerWidth - 32);
         setTimeout(() => {
           onNavigateDiary('next');
-        }, 180);
+        }, 220);
       } else {
         triggerHaptic('boundary');
         showToast('가장 최근 일기입니다.');
@@ -1725,9 +1769,10 @@ export default function DiaryCanvas({
       if (hasPrevDiary) {
         triggerHaptic('pageTurn');
         setExitAnimation('anim-page-exit-right');
+        setDragX(window.innerWidth + 32);
         setTimeout(() => {
           onNavigateDiary('prev');
-        }, 180);
+        }, 220);
       } else {
         triggerHaptic('boundary');
         showToast('가장 첫 번째 일기입니다.');
@@ -2036,7 +2081,7 @@ export default function DiaryCanvas({
               left: 0,
               right: 0,
               transform: `translateX(calc(-100% - 32px + ${dragX}px))`,
-              transition: isPageDragging ? 'none' : 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)',
+              transition: exitAnimation ? 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
               zIndex: 10,
             }}
           >
@@ -2050,7 +2095,7 @@ export default function DiaryCanvas({
             transform: (isPageDragging || exitAnimation) && dragX !== 0
               ? `translateX(${dragX}px)`
               : undefined,
-            transition: isPageDragging ? 'none' : 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)',
+            transition: exitAnimation ? 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
             zIndex: 20,
           }}
           className="w-full flex-1 flex flex-col min-h-0 relative bg-[#fafafa]"
@@ -2091,33 +2136,37 @@ export default function DiaryCanvas({
             {/* 우측 대표 날씨/스티커 아이콘 버튼 + 와이드 전용 체크 버튼 (날짜와 정확한 세로 중앙 정렬) */}
             <div className="flex items-center space-x-2.5">
               <div className="relative flex items-center">
-                <button
-                  type="button"
-                  disabled={isViewMode}
-                  onClick={() => {
-                    if (!isViewMode) setIsWeatherOpen(!isWeatherOpen);
-                  }}
-                  className={`w-10 h-10 bg-transparent border-0 p-0 ${!isViewMode ? 'active:scale-95 cursor-pointer' : 'cursor-default'} transition flex items-center justify-center overflow-visible`}
-                  title={!isViewMode ? "날씨 / 대표 스티커 선택" : undefined}
-                >
-                {weather ? (
-                  isImageAsset(weather) ? (
-                    <img
-                      src={upgradePresetSvgUrl(typeof weather === 'string' ? weather : weather?.imageUrl || '')}
-                      alt="대표 아이콘"
-                      className="w-10 h-10 object-contain block select-none overflow-visible p-0.5"
-                    />
-                  ) : (
-                    <span className="text-3xl leading-none select-none">
-                      {typeof weather === 'string' || typeof weather === 'number'
-                        ? String(weather)
-                        : (weather?.icon || weather?.label || '')}
-                    </span>
-                  )
-                ) : (
-                  <Plus size={24} className="text-black" strokeWidth={2.5} />
+                {(!isViewMode || weather) && (
+                  <button
+                    type="button"
+                    disabled={isViewMode}
+                    onClick={() => {
+                      if (!isViewMode) setIsWeatherOpen(!isWeatherOpen);
+                    }}
+                    className={`w-10 h-10 bg-transparent border-0 p-0 ${!isViewMode ? 'active:scale-95 cursor-pointer' : 'cursor-default'} transition flex items-center justify-center overflow-visible`}
+                    title={!isViewMode ? "날씨 / 대표 스티커 선택" : undefined}
+                  >
+                    {weather ? (
+                      isImageAsset(weather) ? (
+                        <img
+                          src={upgradePresetSvgUrl(typeof weather === 'string' ? weather : weather?.imageUrl || '')}
+                          alt="대표 아이콘"
+                          className="w-10 h-10 object-contain block select-none overflow-visible p-0.5"
+                        />
+                      ) : (
+                        <span className="text-3xl leading-none select-none">
+                          {typeof weather === 'string' || typeof weather === 'number'
+                            ? String(weather)
+                            : (weather?.icon || weather?.label || '')}
+                        </span>
+                      )
+                    ) : (
+                      !isViewMode ? (
+                        <Plus size={24} className="text-black" strokeWidth={2.5} />
+                      ) : null
+                    )}
+                  </button>
                 )}
-              </button>
 
               {isWeatherOpen && (
               <div 
@@ -2530,9 +2579,21 @@ export default function DiaryCanvas({
           const canonicalW = typeof block.width === 'number' ? block.width : CANONICAL_WIDTH;
           const widthPx = Math.round(canonicalW * scaleRatio);
           const scaledFontSize = Math.max(10, Math.round((block.fontSize || 18) * scaleRatio));
-          const scaledLineHeight = Math.max(20, Math.round(28 * scaleRatio));
-          const minBoxHeight = scaledLineHeight * 1;
-          const textColor = block.color || '#111111';
+          const minBoxHeight = Math.round(scaledFontSize * 1.5);
+          let textColor = block.color || '#111111';
+          let bgClass = '';
+          let customBgStyle = undefined;
+
+          if (block.bgStyle === 'light') {
+            bgClass = 'bg-white/95 text-stone-900 rounded-2xl shadow-sm px-3.5 py-1.5';
+          } else if (block.bgStyle === 'dark') {
+            bgClass = 'bg-black/90 text-white rounded-2xl shadow-sm px-3.5 py-1.5';
+            textColor = '#ffffff';
+          } else if (block.bgStyle === 'color') {
+            bgClass = 'text-white rounded-2xl shadow-sm px-3.5 py-1.5';
+            customBgStyle = { backgroundColor: block.color || '#111111' };
+            textColor = '#ffffff';
+          }
 
           return (
             <div
@@ -2585,7 +2646,7 @@ export default function DiaryCanvas({
                 transformOrigin: 'center center',
                 touchAction: isViewMode ? 'auto' : 'pan-y',
                 backgroundColor: 'transparent',
-                border: isSelected && !isViewMode ? '1px solid rgba(0, 0, 0, 0.1)' : '1px solid transparent',
+                border: isSelected && !isViewMode ? '1px solid rgba(0, 0, 0, 0.1)' : 'none',
                 pointerEvents: isViewMode ? 'none' : 'auto',
               }}
               className={`absolute select-text ${isSelected && !isViewMode && draggingItem?.id === block.id ? '' : 'transition-[border,box-shadow]'} p-1.5 rounded-lg`}
@@ -2617,51 +2678,69 @@ export default function DiaryCanvas({
                 </>
               )}
 
-              {/* 본문 텍스트에어리어 (기본 1줄 높이 생성, 입력 내용에 따라 자연스럽게 자동 높이 확장) */}
-              <textarea
-                ref={(el) => {
-                  if (el) {
-                    textareaRefs.current[block.id] = el;
-                    el.style.height = 'auto';
-                    el.style.height = `${Math.max(minBoxHeight, el.scrollHeight)}px`;
-                  } else {
-                    delete textareaRefs.current[block.id];
-                  }
-                }}
-                value={block.text || ''}
-                readOnly={isViewMode}
-                placeholder={isSelected && !isViewMode ? '텍스트를 입력하세요...' : ''}
-                onClick={(e) => e.stopPropagation()}
-                onFocus={() => {
-                  if (isViewMode) return;
-                  setSelectedTextId(block.id);
-                  setSelectedStickerId(null);
-                  setActiveToolMode('text');
-                  if (window.scrollY > 2 || window.scrollX > 2) {
-                    window.scrollTo(0, 0);
-                  }
-                  setTimeout(() => ensureTextBlockVisible(block.id), 80);
-                  setTimeout(() => ensureTextBlockVisible(block.id), 250);
-                }}
-                onChange={(e) => {
-                  if (isViewMode) return;
-                  updateTextBlock(block.id, { text: e.target.value });
-                  e.target.style.height = 'auto';
-                  e.target.style.height = `${Math.max(minBoxHeight, e.target.scrollHeight)}px`;
-                }}
-                style={{
-                  fontFamily: block.fontFamily || "'Paperlogy', sans-serif",
-                  fontWeight: block.fontWeight || (block.fontFamily && !block.fontFamily.includes('Paperlogy') ? 'normal' : 600),
-                  fontSize: `${scaledFontSize}px`,
-                  color: textColor,
-                  textAlign: block.textAlign || 'left',
-                  lineHeight: 1.5,
-                  minHeight: `${minBoxHeight}px`,
-                  touchAction: 'pan-y',
-                }}
-                className="w-full bg-transparent border-0 focus:ring-0 p-1 resize-none overflow-hidden outline-none block touch-pan-y"
-                rows={1}
-              />
+              {/* 뷰 모드일 때는 정적 페이지 프리뷰와 100% 동일한 div 렌더링, 편집 모드일 때는 textarea */}
+              {isViewMode ? (
+                <div
+                  style={{
+                    fontFamily: block.fontFamily || "'Paperlogy', sans-serif",
+                    fontWeight: block.fontWeight || (block.fontFamily && !block.fontFamily.includes('Paperlogy') ? 'normal' : 600),
+                    fontSize: `${scaledFontSize}px`,
+                    color: textColor,
+                    textAlign: block.textAlign || 'left',
+                    lineHeight: 1.5,
+                    minHeight: `${minBoxHeight}px`,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    ...customBgStyle,
+                  }}
+                  className={`w-full select-none pointer-events-none ${bgClass}`}
+                >
+                  {block.text || ''}
+                </div>
+              ) : (
+                <textarea
+                  ref={(el) => {
+                    if (el) {
+                      textareaRefs.current[block.id] = el;
+                      el.style.height = 'auto';
+                      el.style.height = `${Math.max(minBoxHeight, el.scrollHeight)}px`;
+                    } else {
+                      delete textareaRefs.current[block.id];
+                    }
+                  }}
+                  value={block.text || ''}
+                  placeholder={isSelected ? '텍스트를 입력하세요...' : ''}
+                  onClick={(e) => e.stopPropagation()}
+                  onFocus={() => {
+                    setSelectedTextId(block.id);
+                    setSelectedStickerId(null);
+                    setActiveToolMode('text');
+                    if (window.scrollY > 2 || window.scrollX > 2) {
+                      window.scrollTo(0, 0);
+                    }
+                    setTimeout(() => ensureTextBlockVisible(block.id), 80);
+                    setTimeout(() => ensureTextBlockVisible(block.id), 250);
+                  }}
+                  onChange={(e) => {
+                    updateTextBlock(block.id, { text: e.target.value });
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${Math.max(minBoxHeight, e.target.scrollHeight)}px`;
+                  }}
+                  style={{
+                    fontFamily: block.fontFamily || "'Paperlogy', sans-serif",
+                    fontWeight: block.fontWeight || (block.fontFamily && !block.fontFamily.includes('Paperlogy') ? 'normal' : 600),
+                    fontSize: `${scaledFontSize}px`,
+                    color: textColor,
+                    textAlign: block.textAlign || 'left',
+                    lineHeight: 1.5,
+                    minHeight: `${minBoxHeight}px`,
+                    touchAction: 'pan-y',
+                    ...customBgStyle,
+                  }}
+                  className={`w-full bg-transparent border-0 focus:ring-0 p-0 m-0 resize-none overflow-hidden outline-none block touch-pan-y ${bgClass}`}
+                  rows={1}
+                />
+              )}
             </div>
           );
         })}
@@ -2844,7 +2923,7 @@ export default function DiaryCanvas({
               left: 0,
               right: 0,
               transform: `translateX(calc(100% + 32px + ${dragX}px))`,
-              transition: isPageDragging ? 'none' : 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)',
+              transition: exitAnimation ? 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
               zIndex: 10,
             }}
           >

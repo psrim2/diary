@@ -414,11 +414,11 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
               alt=""
               className="w-9 h-9 object-contain select-none overflow-visible p-0.5"
             />
-          ) : (
+          ) : mood ? (
             <span className="text-2xl select-none filter drop-shadow-2xs">
               {mood}
             </span>
-          )}
+          ) : null}
         </div>
 
         {/* 박스 본문: 라운드 박스 없이 상단 1px solid #222 구분선 적용 */}
@@ -478,17 +478,25 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
                       zIndex: typeof block.layerOrder === 'number' ? block.layerOrder : idx + 1,
                       transform: `rotate(${block.rotation || 0}deg) scale(${block.scale || 1})`,
                       transformOrigin: 'center center',
-                      fontFamily: block.fontFamily || "'Paperlogy', sans-serif",
-                      fontWeight: block.fontWeight || (block.fontFamily && !block.fontFamily.includes('Paperlogy') ? 'normal' : 600),
-                      fontSize: `${block.fontSize || 18}px`,
-                      color: textColor,
-                      textAlign: block.textAlign || 'left',
-                      lineHeight: 1.5,
-                      ...customBgStyle,
                     }}
-                    className={`whitespace-pre-wrap break-words select-none pointer-events-none p-1 ${bgClass}`}
+                    className="p-1.5 rounded-lg select-none pointer-events-none"
                   >
-                    {block.text}
+                    <div
+                      style={{
+                        fontFamily: block.fontFamily || "'Paperlogy', sans-serif",
+                        fontWeight: block.fontWeight || (block.fontFamily && !block.fontFamily.includes('Paperlogy') ? 'normal' : 600),
+                        fontSize: `${block.fontSize || 18}px`,
+                        color: textColor,
+                        textAlign: block.textAlign || 'left',
+                        lineHeight: 1.5,
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        ...customBgStyle,
+                      }}
+                      className={`w-full ${bgClass}`}
+                    >
+                      {block.text}
+                    </div>
                   </div>
                 );
               })}
