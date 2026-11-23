@@ -6,7 +6,7 @@ import DiaryCanvas from './components/DiaryCanvas';
 import AdminPage from './components/AdminPage';
 import YearlyCalendarModal from './components/YearlyCalendarModal';
 import { INITIAL_DIARIES } from './constants';
-import { resolveStickerImage } from './utils/canvasLayers';
+import { resolveStickerImage, upgradePresetSvgUrl } from './utils/canvasLayers';
 import {
   loginWithGoogle,
   handleRedirectLoginResult,
@@ -187,12 +187,19 @@ function DiaryMainApp() {
               const rehydratedStickers = rawStickers.map((st) => {
                 if (st && (!st.imageUrl || st.imageUrl === '')) {
                   const resolved = resolveStickerImage(st);
-                  if (resolved) return { ...st, imageUrl: resolved };
+                  if (resolved) return { ...st, imageUrl: upgradePresetSvgUrl(resolved) };
+                }
+                if (st?.imageUrl) {
+                  return { ...st, imageUrl: upgradePresetSvgUrl(st.imageUrl) };
                 }
                 return st;
               });
+              const upgradedWeather = upgradePresetSvgUrl(d.weather);
+              const upgradedMood = upgradePresetSvgUrl(d.thumbnailMood || d.weather);
               return {
                 ...d,
+                weather: upgradedWeather,
+                thumbnailMood: upgradedMood,
                 textBlocks: Array.isArray(d.textBlocks)
                   ? d.textBlocks
                   : (d.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
@@ -397,12 +404,19 @@ function DiaryMainApp() {
           const rehydratedStickers = rawStickers.map((st) => {
             if (st && (!st.imageUrl || st.imageUrl === '')) {
               const resolved = resolveStickerImage(st);
-              if (resolved) return { ...st, imageUrl: resolved };
+              if (resolved) return { ...st, imageUrl: upgradePresetSvgUrl(resolved) };
+            }
+            if (st?.imageUrl) {
+              return { ...st, imageUrl: upgradePresetSvgUrl(st.imageUrl) };
             }
             return st;
           });
+          const upgradedWeather = upgradePresetSvgUrl(d?.weather);
+          const upgradedMood = upgradePresetSvgUrl(d?.thumbnailMood || d?.weather);
           return {
             ...d,
+            weather: upgradedWeather,
+            thumbnailMood: upgradedMood,
             textBlocks: Array.isArray(d?.textBlocks)
               ? d.textBlocks
               : (d?.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),

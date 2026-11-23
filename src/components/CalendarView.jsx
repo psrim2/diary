@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import YearlyCalendarModal from './YearlyCalendarModal';
-import { resolveStickerImage } from '../utils/canvasLayers';
+import { resolveStickerImage, upgradePresetSvgUrl } from '../utils/canvasLayers';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -440,19 +440,21 @@ export default function CalendarView({
                 const isWeekend = colIdx === 0 || colIdx === 6;
 
                 // 날짜 옆 대표 스티커/날씨로 지정한 값만 달력 아이콘으로 표출 (본문 속지 스티커와 분리)
-                const rawSticker =
+                const rawSticker = upgradePresetSvgUrl(
                   cell.diary?.thumbnailMood ||
                   cell.diary?.weather ||
-                  '';
+                  ''
+                );
 
                 let stickerVal = '';
                 let isStickerImage = false;
 
                 if (typeof rawSticker === 'string' || typeof rawSticker === 'number') {
-                  stickerVal = String(rawSticker);
+                  stickerVal = upgradePresetSvgUrl(String(rawSticker));
                 } else if (rawSticker && typeof rawSticker === 'object') {
                   const resolvedImg = resolveStickerImage(rawSticker);
                   if (resolvedImg) {
+                    stickerVal = upgradePresetSvgUrl(resolvedImg);
                     stickerVal = resolvedImg;
                   } else if (rawSticker.icon && typeof rawSticker.icon === 'string' && rawSticker.icon.length <= 4) {
                     stickerVal = rawSticker.icon;

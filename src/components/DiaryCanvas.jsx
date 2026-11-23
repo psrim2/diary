@@ -28,7 +28,8 @@ import {
   CANONICAL_WIDTH, 
   CANONICAL_HEIGHT,
   resolveStickerImage,
-  isEmojiSticker
+  isEmojiSticker,
+  upgradePresetSvgUrl
 } from '../utils/canvasLayers';
 import StickerPalette from './StickerPalette';
 import PaperSelectModal from './PaperSelectModal';
@@ -118,7 +119,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   const [title, setTitle] = useState(diary?.title || '');
   const [date, setDate] = useState(diary?.date || getLocalTodayStr());
   const [weather, setWeather] = useState(() => {
-    return diary?.weather || diary?.thumbnailMood || '';
+    return upgradePresetSvgUrl(diary?.weather || diary?.thumbnailMood || '');
   });
   const [paperStyle, setPaperStyle] = useState(diary?.paperStyle || 'lined');
   
@@ -250,7 +251,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
       layerOrderCounterRef.current = normalized.maxOrder;
       setTitle(diary.title || '');
       setDate(diary.date || getLocalTodayStr());
-      setWeather(diary.weather || diary.thumbnailMood || '');
+      setWeather(upgradePresetSvgUrl(diary.weather || diary.thumbnailMood || ''));
       setPaperStyle(diary.paperStyle || 'lined');
       setTextBlocks(normalized.textBlocks);
       setStickers(normalized.stickers);
@@ -1497,12 +1498,13 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
     const sanitizedTextBlocks = (textBlocks || []).filter(t => t && t.text && t.text.trim().length > 0);
     setTextBlocks(sanitizedTextBlocks);
 
+    const upgradedWeather = upgradePresetSvgUrl(weather);
     const finalDiary = {
       id: diary?.id || `entry-${date}-${Date.now()}`,
       title: title || `${yearNum}.${monthNum}.${dayNum} 기록`,
       date,
-      weather,
-      thumbnailMood: weather,
+      weather: upgradedWeather,
+      thumbnailMood: upgradedWeather,
       paperStyle,
       textBlocks: sanitizedTextBlocks,
       stickers,
@@ -1616,7 +1618,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 {weather ? (
                   isImageAsset(weather) ? (
                     <img
-                      src={typeof weather === 'string' ? weather : weather?.imageUrl || ''}
+                      src={upgradePresetSvgUrl(typeof weather === 'string' ? weather : weather?.imageUrl || '')}
                       alt="대표 아이콘"
                       className="w-10 h-10 object-contain block select-none overflow-visible p-0.5"
                     />

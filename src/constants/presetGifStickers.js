@@ -21,7 +21,7 @@ export const PRESET_GIF_STICKERS = [
             42% { transform: scale(1.15); }
             70% { transform: scale(1); }
           }
-          .heart { transform-origin: 50px 48px; animation: heartbeat 1.2s ease-in-out infinite; }
+          .heart { transform-box: fill-box; transform-origin: center; animation: heartbeat 1.2s ease-in-out infinite; }
         </style>
         <path class="heart" d="M50,88 C20,65 5,45 5,28 C5,13 16,3 30,3 C38,3 45,7 50,15 C55,7 62,3 70,3 C84,3 95,13 95,28 C95,45 80,65 50,88 Z" fill="#ff4d6d" stroke="#c9184a" stroke-width="2" />
       </svg>
@@ -39,7 +39,7 @@ export const PRESET_GIF_STICKERS = [
             0%, 100% { transform: scale(0.85) rotate(0deg); opacity: 0.85; }
             50% { transform: scale(1.18) rotate(180deg); opacity: 1; filter: drop-shadow(0 0 6px #facc15); }
           }
-          .star { transform-origin: 50px 50px; animation: twinkle 1.8s ease-in-out infinite; }
+          .star { transform-box: fill-box; transform-origin: center; animation: twinkle 1.8s ease-in-out infinite; }
         </style>
         <path class="star" d="M50 2 L58 35 L95 50 L58 65 L50 98 L42 65 L5 50 L42 35 Z" fill="#facc15" stroke="#eab308" stroke-width="2"/>
       </svg>
@@ -57,7 +57,7 @@ export const PRESET_GIF_STICKERS = [
             0%, 100% { transform: rotate(0deg); }
             50% { transform: rotate(-24deg); }
           }
-          .paw { transform-origin: 75px 55px; animation: paw 0.8s ease-in-out infinite; }
+          .paw { transform-box: fill-box; transform-origin: center; animation: paw 0.8s ease-in-out infinite; }
         </style>
         <circle cx="50" cy="55" r="32" fill="#ffffff" stroke="#1c1917" stroke-width="3"/>
         <polygon points="26,30 36,12 48,26" fill="#ffffff" stroke="#1c1917" stroke-width="3"/>
@@ -141,9 +141,9 @@ export const PRESET_GIF_STICKERS = [
         <style>
           @keyframes s1 { 0%, 100% { transform: scale(0.2); opacity: 0.1; } 50% { transform: scale(1.1); opacity: 1; } }
           @keyframes s2 { 0%, 100% { transform: scale(1.1); opacity: 1; } 50% { transform: scale(0.2); opacity: 0.1; } }
-          .sp1 { transform-origin: 35px 35px; animation: s1 1.2s ease-in-out infinite; }
-          .sp2 { transform-origin: 70px 65px; animation: s2 1.2s ease-in-out infinite; }
-          .sp3 { transform-origin: 75px 25px; animation: s1 1.2s ease-in-out 0.6s infinite; }
+          .sp1 { transform-box: fill-box; transform-origin: center; animation: s1 1.2s ease-in-out infinite; }
+          .sp2 { transform-box: fill-box; transform-origin: center; animation: s2 1.2s ease-in-out infinite; }
+          .sp3 { transform-box: fill-box; transform-origin: center; animation: s1 1.2s ease-in-out 0.6s infinite; }
         </style>
         <path class="sp1" d="M35 15 L39 30 L54 35 L39 40 L35 55 L31 40 L16 35 L31 30 Z" fill="#fbbf24"/>
         <path class="sp2" d="M70 50 L73 61 L84 65 L73 69 L70 80 L67 69 L56 65 L67 61 Z" fill="#f472b6"/>
@@ -163,7 +163,7 @@ export const PRESET_GIF_STICKERS = [
             0%, 100% { transform: scale(1) rotate(-3deg); }
             50% { transform: scale(1.08, 0.95) rotate(3deg); }
           }
-          .flame { transform-origin: 50px 85px; animation: flame 0.65s ease-in-out infinite alternate; }
+          .flame { transform-box: fill-box; transform-origin: center; animation: flame 0.65s ease-in-out infinite alternate; }
         </style>
         <g class="flame">
           <path d="M50 10 C65 35 85 55 85 72 C85 88 70 95 50 95 C30 95 15 88 15 72 C15 55 35 35 50 10 Z" fill="#f97316"/>
@@ -184,7 +184,7 @@ export const PRESET_GIF_STICKERS = [
             0%, 100% { transform: rotate(-15deg); }
             50% { transform: rotate(18deg); }
           }
-          .leaf { transform-origin: 50px 85px; animation: sway 2s ease-in-out infinite; }
+          .leaf { transform-box: fill-box; transform-origin: center; animation: sway 2s ease-in-out infinite; }
         </style>
         <g class="leaf">
           <path d="M50 15 Q80 40 50 85 Q20 40 50 15 Z" fill="#22c55e" stroke="#15803d" stroke-width="2.5"/>
@@ -203,7 +203,7 @@ export const PRESET_GIF_STICKERS = [
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -10 120 120">
         <style>
           @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-          .rays { transform-origin: 50px 50px; animation: spin 10s linear infinite; }
+          .rays { transform-box: fill-box; transform-origin: center; animation: spin 10s linear infinite; }
         </style>
         <g class="rays">
           <line x1="50" y1="10" x2="50" y2="20" stroke="#f59e0b" stroke-width="4" stroke-linecap="round"/>
@@ -231,7 +231,7 @@ export const PRESET_GIF_STICKERS = [
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -12 124 124">
         <style>
           @keyframes glow { 0%, 100% { opacity: 0.85; filter: drop-shadow(0 0 2px #e0e7ff); } 50% { opacity: 1; filter: drop-shadow(0 0 8px #818cf8); } }
-          .moon { animation: glow 2.5s ease-in-out infinite; }
+          .moon { transform-box: fill-box; transform-origin: center; animation: glow 2.5s ease-in-out infinite; }
         </style>
         <path class="moon" d="M68 20 A38 38 0 1 0 68 80 A28 28 0 0 1 68 20 Z" fill="#6366f1" stroke="#4338ca" stroke-width="2"/>
         <circle cx="78" cy="30" r="3" fill="#facc15"/>

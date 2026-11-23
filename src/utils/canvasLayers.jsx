@@ -61,34 +61,125 @@ export function getKnownStickersMap(forceRefresh = false) {
 }
 
 /**
+ * 과거에 저장된 다이어리 내 구버전 SVG 스티커(viewBox 0 0 100 100 등)가 확대/축소 애니메이션 시
+ * 상하좌우가 잘리는 현상을 방지하기 위해 최신 안전 여백(-15 -12 130 126 및 transform-box)이 적용된
+ * 최신 에셋으로 실시간 업그레이드 및 변환
+ */
+export function upgradePresetSvgUrl(val) {
+  if (!val) return val;
+  if (typeof val === 'object') {
+    if (val.imageUrl) {
+      return { ...val, imageUrl: upgradePresetSvgUrl(val.imageUrl) };
+    }
+    return val;
+  }
+  if (typeof val !== 'string') return val;
+  if (!val.includes('data:image/svg+xml')) return val;
+
+  // 1. 프리셋별 고유 키프레임/클래스명 감지하여 최신 프리셋 에셋으로 1:1 완벽 교체
+  if (val.includes('heartbeat')) {
+    const p = PRESET_GIF_STICKERS.find((s) => s.id === 'gif-heart');
+    if (p) return p.imageUrl;
+  }
+  if (val.includes('twinkle')) {
+    const p = PRESET_GIF_STICKERS.find((s) => s.id === 'gif-sparkle');
+    if (p) return p.imageUrl;
+  }
+  if (val.includes('paw')) {
+    const p = PRESET_GIF_STICKERS.find((s) => s.id === 'gif-cat');
+    if (p) return p.imageUrl;
+  }
+  if (val.includes('drop1') || val.includes('drop2')) {
+    const p = PRESET_GIF_STICKERS.find((s) => s.id === 'gif-rain');
+    if (p) return p.imageUrl;
+  }
+  if (val.includes('steam')) {
+    const p = PRESET_GIF_STICKERS.find((s) => s.id === 'gif-coffee');
+    if (p) return p.imageUrl;
+  }
+  if (val.includes('sp1') && val.includes('sp2')) {
+    const p = PRESET_GIF_STICKERS.find((s) => s.id === 'gif-sparkles');
+    if (p) return p.imageUrl;
+  }
+  if (val.includes('flame')) {
+    const p = PRESET_GIF_STICKERS.find((s) => s.id === 'gif-fire');
+    if (p) return p.imageUrl;
+  }
+  if (val.includes('sway')) {
+    const p = PRESET_GIF_STICKERS.find((s) => s.id === 'gif-leaf');
+    if (p) return p.imageUrl;
+  }
+  if (val.includes('spin') && val.includes('rays')) {
+    const p = PRESET_GIF_STICKERS.find((s) => s.id === 'gif-sun');
+    if (p) return p.imageUrl;
+  }
+  if (val.includes('glow') && val.includes('moon')) {
+    const p = PRESET_GIF_STICKERS.find((s) => s.id === 'gif-moon');
+    if (p) return p.imageUrl;
+  }
+
+  // 2. 범용적인 viewBox 잘림 방지 (어떤 SVG든 0 0 100 100 viewBox와 애니메이션이 있는 경우)
+  if (
+    val.includes('viewBox="0 0 100 100"') ||
+    val.includes('viewBox%3D%220%200%20100%20100%22') ||
+    val.includes("viewBox='0 0 100 100'")
+  ) {
+    try {
+      const isPercentEncoded = val.includes('%3Csvg') || val.includes('%20');
+      let decoded = isPercentEncoded
+        ? decodeURIComponent(val.replace(/^data:image\/svg\+xml;utf8,/, ''))
+        : val.replace(/^data:image\/svg\+xml;utf8,/, '');
+
+      decoded = decoded
+        .replace('viewBox="0 0 100 100"', 'viewBox="-15 -15 130 130"')
+        .replace("viewBox='0 0 100 100'", "viewBox='-15 -15 130 130'");
+
+      if (!decoded.includes('transform-box: fill-box')) {
+        decoded = decoded.replace(
+          /transform-origin:\s*[^;]+;/g,
+          'transform-box: fill-box; transform-origin: center;'
+        );
+      }
+      return `data:image/svg+xml;utf8,${encodeURIComponent(decoded.trim())}`;
+    } catch {}
+  }
+
+  return val;
+}
+
+/**
  * 스티커의 실제 이미지 URL을 확인 및 복원(hydration).
  * 용량 초과로 imageUrl이 비어있는 경우에도 analog_my_stickers 및 프리셋에서 찾아 복구
  */
 export function resolveStickerImage(st) {
   if (!st || typeof st !== 'object') return '';
+  let url = '';
   if (typeof st.imageUrl === 'string' && st.imageUrl.trim().length > 0) {
-    return st.imageUrl.trim();
-  }
-  const map = getKnownStickersMap();
-  const keysToTry = [
-    st.decorationId,
-    st.id,
-    st.name,
-    st.fileName,
-    st.label,
-  ].filter((k) => typeof k === 'string' && k.trim().length > 0);
+    url = st.imageUrl.trim();
+  } else {
+    const map = getKnownStickersMap();
+    const keysToTry = [
+      st.decorationId,
+      st.id,
+      st.name,
+      st.fileName,
+      st.label,
+    ].filter((k) => typeof k === 'string' && k.trim().length > 0);
 
-  for (const key of keysToTry) {
-    const cleanKey = key.trim();
-    if (map.has(cleanKey)) {
-      return map.get(cleanKey);
-    }
-    const noExt = cleanKey.replace(/\.[^/.]+$/, '').trim();
-    if (map.has(noExt)) {
-      return map.get(noExt);
+    for (const key of keysToTry) {
+      const cleanKey = key.trim();
+      if (map.has(cleanKey)) {
+        url = map.get(cleanKey);
+        break;
+      }
+      const noExt = cleanKey.replace(/\.[^/.]+$/, '').trim();
+      if (map.has(noExt)) {
+        url = map.get(noExt);
+        break;
+      }
     }
   }
-  return '';
+  return upgradePresetSvgUrl(url);
 }
 
 /**

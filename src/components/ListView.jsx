@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, Trash2, X } from 'lucide-react';
 import { PAPER_STYLES } from '../constants';
-import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas, CANONICAL_WIDTH, CANONICAL_HEIGHT, resolveStickerImage, isEmojiSticker } from '../utils/canvasLayers';
+import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas, CANONICAL_WIDTH, CANONICAL_HEIGHT, resolveStickerImage, isEmojiSticker, upgradePresetSvgUrl } from '../utils/canvasLayers';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -40,12 +40,12 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
   const dateObj = new Date(year, month, day);
   const dayNum = String(isNaN(day) ? 17 : day).padStart(2, '0');
   const dayEn = DAY_NAMES_EN[isNaN(dateObj.getDay()) ? 0 : dateObj.getDay()] || 'WED';
-  const rawMood = diary?.thumbnailMood || diary?.weather || '';
+  const rawMood = upgradePresetSvgUrl(diary?.thumbnailMood || diary?.weather || '');
   let mood = '';
   if (typeof rawMood === 'string' || typeof rawMood === 'number') {
-    mood = String(rawMood);
+    mood = upgradePresetSvgUrl(String(rawMood));
   } else if (rawMood && typeof rawMood === 'object') {
-    mood = rawMood.icon || rawMood.imageUrl || rawMood.content || rawMood.label || '';
+    mood = upgradePresetSvgUrl(rawMood.icon || rawMood.imageUrl || rawMood.content || rawMood.label || '');
   }
   const isMoodImage =
     typeof mood === 'string' &&
