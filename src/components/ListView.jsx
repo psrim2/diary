@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, Trash2, X } from 'lucide-react';
 import { PAPER_STYLES } from '../constants';
-import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas, CANONICAL_WIDTH, CANONICAL_HEIGHT } from '../utils/canvasLayers';
+import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas, CANONICAL_WIDTH, CANONICAL_HEIGHT, resolveStickerImage, isEmojiSticker } from '../utils/canvasLayers';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -486,41 +486,52 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
                   }}
                   className="select-none pointer-events-none p-1"
                 >
-                  {sticker.imageUrl ? (
-                    <img
-                      src={sticker.imageUrl}
-                      alt=""
-                      draggable={false}
-                      className={
-                        sticker.category === 'tape' || sticker.type === 'tape'
-                          ? 'w-28 h-auto object-contain select-none block'
-                          : 'w-14 h-14 object-contain select-none block'
-                      }
-                    />
-                  ) : sticker.type === 'tape' ? (
-                    <div
-                      className="w-28 h-6 rounded shadow-xs relative overflow-hidden"
-                      style={{
-                        backgroundColor: sticker.color,
-                        backgroundImage:
-                          sticker.pattern === 'dots'
-                            ? 'radial-gradient(rgba(0,0,0,0.15) 1px, transparent 1px)'
-                            : sticker.pattern === 'stripes'
-                            ? 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.08) 4px, rgba(0,0,0,0.08) 8px)'
-                            : 'none',
-                        backgroundSize: sticker.pattern === 'dots' ? '6px 6px' : 'auto',
-                      }}
-                    >
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
-                      <div className="absolute right-0 top-0 bottom-0 w-1 bg-black/10" />
-                    </div>
-                  ) : (
-                    <span className="text-3xl sm:text-4xl filter drop-shadow-xs block leading-none">
-                      {typeof sticker.content === 'string' || typeof sticker.content === 'number'
-                        ? String(sticker.content)
-                        : (sticker.icon || sticker.label || '')}
-                    </span>
-                  )}
+                  {(() => {
+                    const resolvedImg = resolveStickerImage(sticker);
+                    if (resolvedImg) {
+                      return (
+                        <img
+                          src={resolvedImg}
+                          alt=""
+                          draggable={false}
+                          className={
+                            sticker.category === 'tape' || sticker.type === 'tape'
+                              ? 'w-28 h-auto object-contain select-none block'
+                              : 'w-14 h-14 object-contain select-none block'
+                          }
+                        />
+                      );
+                    }
+                    if (sticker.type === 'tape' || sticker.category === 'tape') {
+                      return (
+                        <div
+                          className="w-28 h-6 rounded shadow-xs relative overflow-hidden"
+                          style={{
+                            backgroundColor: sticker.color || '#fef08a',
+                            backgroundImage:
+                              sticker.pattern === 'dots'
+                                ? 'radial-gradient(rgba(0,0,0,0.15) 1px, transparent 1px)'
+                                : sticker.pattern === 'stripes'
+                                ? 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.08) 4px, rgba(0,0,0,0.08) 8px)'
+                                : 'none',
+                            backgroundSize: sticker.pattern === 'dots' ? '6px 6px' : 'auto',
+                          }}
+                        >
+                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
+                          <div className="absolute right-0 top-0 bottom-0 w-1 bg-black/10" />
+                        </div>
+                      );
+                    }
+                    if (isEmojiSticker(sticker)) {
+                      return (
+                        <span className="text-3xl sm:text-4xl filter drop-shadow-xs block leading-none select-none">
+                          {sticker.content || sticker.icon || ''}
+                        </span>
+                      );
+                    }
+                    // 이미지 스티커의 파일명/라벨(예: "moomi")이 화면에 텍스트로 노출되는 현상 완전 방지
+                    return null;
+                  })()}
                 </div>
               ))}
             </div>

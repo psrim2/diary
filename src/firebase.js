@@ -411,16 +411,16 @@ export function fileToDataUrl(file) {
       const isSvg = file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg');
       
       // 움직이는 GIF는 캔버스 drawImage 거치면 정지 화상이 되므로 반드시 원본 Data URL 그대로 반환
-      // SVG 및 400KB 이하 소용량 이미지도 원본 그대로 반환
-      if (isGif || isSvg || file.size <= 400 * 1024) {
+      // SVG도 벡터 데이터이므로 원본 그대로 반환
+      if (isGif || isSvg) {
         resolve(dataUrl);
         return;
       }
 
-      // 고용량 비트맵(PNG/JPG)인 경우 Firestore 문서 제한 내에 들어오도록 리사이징
+      // 비트맵(PNG/JPG/WEBP)인 경우 스티커 최적 해상도(최대 320px)로 경량화하여 로컬스토리지 쿼터 초과 원천 방어
       const img = new Image();
       img.onload = () => {
-        const maxDim = 512;
+        const maxDim = 320;
         let { width, height } = img;
         if (width > maxDim || height > maxDim) {
           if (width >= height) {

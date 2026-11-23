@@ -26,7 +26,9 @@ import {
   buildStrokeBands, 
   StrokeBandCanvas, 
   CANONICAL_WIDTH, 
-  CANONICAL_HEIGHT 
+  CANONICAL_HEIGHT,
+  resolveStickerImage,
+  isEmojiSticker
 } from '../utils/canvasLayers';
 import StickerPalette from './StickerPalette';
 import PaperSelectModal from './PaperSelectModal';
@@ -2222,55 +2224,66 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 </>
               )}
 
-              {sticker.imageUrl ? (
-                <img
-                  src={sticker.imageUrl}
-                  alt={sticker.label || sticker.category || 'decoration'}
-                  draggable={false}
-                  onLoad={(e) => {
-                    const naturalW = e.currentTarget.naturalWidth || 1;
-                    const naturalH = e.currentTarget.naturalHeight || 1;
-                    const isTape = sticker.category === 'tape' || sticker.type === 'tape';
-                    const isPhoto = sticker.isPhoto || sticker.type === 'photo';
-                    const baseW = isTape ? 112 : isPhoto ? 140 : 56;
-                    const maxH = isTape ? 32 : isPhoto ? 180 : 56;
-                    const canonicalImgH = Math.min(maxH, Math.round(baseW * (naturalH / naturalW)));
-                    if (!sticker.height || Math.abs(sticker.height - canonicalImgH) > 4) {
-                      updateSticker(sticker.id, { height: canonicalImgH });
-                    }
-                  }}
-                  style={{ width: `${scaledPixelW}px`, height: 'auto' }}
-                  className="object-contain select-none pointer-events-none block"
-                />
-              ) : sticker.type === 'tape' ? (
-                <div
-                  className="rounded shadow-xs relative overflow-hidden"
-                  style={{
-                    width: `${scaledPixelW}px`,
-                    height: `${Math.round(24 * scaleRatio)}px`,
-                    backgroundColor: sticker.color,
-                    backgroundImage:
-                      sticker.pattern === 'dots'
-                        ? 'radial-gradient(rgba(0,0,0,0.15) 1px, transparent 1px)'
-                        : sticker.pattern === 'stripes'
-                        ? 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.08) 4px, rgba(0,0,0,0.08) 8px)'
-                        : 'none',
-                    backgroundSize: sticker.pattern === 'dots' ? '6px 6px' : 'auto',
-                  }}
-                >
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
-                  <div className="absolute right-0 top-0 bottom-0 w-1 bg-black/10" />
-                </div>
-              ) : (
-                <span 
-                  style={{ fontSize: `${Math.round(36 * scaleRatio)}px` }}
-                  className="filter drop-shadow-xs block leading-none select-none"
-                >
-                  {typeof sticker.content === 'string' || typeof sticker.content === 'number'
-                    ? String(sticker.content)
-                    : (sticker.icon || sticker.label || '')}
-                </span>
-              )}
+              {(() => {
+                const resolvedImg = resolveStickerImage(sticker);
+                if (resolvedImg) {
+                  return (
+                    <img
+                      src={resolvedImg}
+                      alt={sticker.label || sticker.category || 'decoration'}
+                      draggable={false}
+                      onLoad={(e) => {
+                        const naturalW = e.currentTarget.naturalWidth || 1;
+                        const naturalH = e.currentTarget.naturalHeight || 1;
+                        const isTape = sticker.category === 'tape' || sticker.type === 'tape';
+                        const isPhoto = sticker.isPhoto || sticker.type === 'photo';
+                        const baseW = isTape ? 112 : isPhoto ? 140 : 56;
+                        const maxH = isTape ? 32 : isPhoto ? 180 : 56;
+                        const canonicalImgH = Math.min(maxH, Math.round(baseW * (naturalH / naturalW)));
+                        if (!sticker.height || Math.abs(sticker.height - canonicalImgH) > 4) {
+                          updateSticker(sticker.id, { height: canonicalImgH });
+                        }
+                      }}
+                      style={{ width: `${scaledPixelW}px`, height: 'auto' }}
+                      className="object-contain select-none pointer-events-none block"
+                    />
+                  );
+                }
+                if (sticker.type === 'tape' || sticker.category === 'tape') {
+                  return (
+                    <div
+                      className="rounded shadow-xs relative overflow-hidden"
+                      style={{
+                        width: `${scaledPixelW}px`,
+                        height: `${Math.round(24 * scaleRatio)}px`,
+                        backgroundColor: sticker.color || '#fef08a',
+                        backgroundImage:
+                          sticker.pattern === 'dots'
+                            ? 'radial-gradient(rgba(0,0,0,0.15) 1px, transparent 1px)'
+                            : sticker.pattern === 'stripes'
+                            ? 'repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.08) 4px, rgba(0,0,0,0.08) 8px)'
+                            : 'none',
+                        backgroundSize: sticker.pattern === 'dots' ? '6px 6px' : 'auto',
+                      }}
+                    >
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
+                      <div className="absolute right-0 top-0 bottom-0 w-1 bg-black/10" />
+                    </div>
+                  );
+                }
+                if (isEmojiSticker(sticker)) {
+                  return (
+                    <span 
+                      style={{ fontSize: `${Math.round(36 * scaleRatio)}px` }}
+                      className="filter drop-shadow-xs block leading-none select-none"
+                    >
+                      {sticker.content || sticker.icon || ''}
+                    </span>
+                  );
+                }
+                // 이미지 스티커의 파일명/라벨(예: "moomi")이 화면에 텍스트로 노출되는 현상 완전 방지
+                return null;
+              })()}
             </div>
           );
         })}

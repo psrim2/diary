@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import YearlyCalendarModal from './YearlyCalendarModal';
+import { resolveStickerImage } from '../utils/canvasLayers';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -445,24 +446,36 @@ export default function CalendarView({
                   '';
 
                 let stickerVal = '';
+                let isStickerImage = false;
+
                 if (typeof rawSticker === 'string' || typeof rawSticker === 'number') {
                   stickerVal = String(rawSticker);
                 } else if (rawSticker && typeof rawSticker === 'object') {
-                  stickerVal =
-                    rawSticker.imageUrl ||
-                    rawSticker.icon ||
-                    rawSticker.content ||
-                    rawSticker.label ||
-                    '';
+                  const resolvedImg = resolveStickerImage(rawSticker);
+                  if (resolvedImg) {
+                    stickerVal = resolvedImg;
+                  } else if (rawSticker.icon && typeof rawSticker.icon === 'string' && rawSticker.icon.length <= 4) {
+                    stickerVal = rawSticker.icon;
+                  } else if (rawSticker.content && typeof rawSticker.content === 'string' && rawSticker.content.length <= 4) {
+                    stickerVal = rawSticker.content;
+                  }
                 }
 
-                const isStickerImage =
+                isStickerImage =
                   typeof stickerVal === 'string' &&
                   (stickerVal.startsWith('data:') ||
                     stickerVal.startsWith('http://') ||
                     stickerVal.startsWith('https://') ||
                     stickerVal.startsWith('/') ||
                     stickerVal.startsWith('blob:'));
+
+                // 영문 단어 라벨(예: "moomi", "cat" 등)이 달력 날짜 아래에 텍스트로 노출되는 현상 완전 방지
+                const isShortEmojiOrSymbol =
+                  !isStickerImage &&
+                  typeof stickerVal === 'string' &&
+                  stickerVal.length > 0 &&
+                  stickerVal.length <= 4 &&
+                  !/^[a-zA-Z0-9_\-|\s]+$/.test(stickerVal);
 
                 return (
                   <div
@@ -513,7 +526,7 @@ export default function CalendarView({
                             style={{ width: '80%', maxWidth: '36px', maxHeight: '36px', height: 'auto' }}
                             className="w-[80%] max-w-[36px] max-h-[36px] h-auto object-contain select-none pointer-events-none"
                           />
-                        ) : stickerVal ? (
+                        ) : isShortEmojiOrSymbol ? (
                           <span className="text-base sm:text-lg leading-none filter drop-shadow-2xs select-none">
                             {stickerVal}
                           </span>

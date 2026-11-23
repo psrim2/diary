@@ -6,6 +6,7 @@ import DiaryCanvas from './components/DiaryCanvas';
 import AdminPage from './components/AdminPage';
 import YearlyCalendarModal from './components/YearlyCalendarModal';
 import { INITIAL_DIARIES } from './constants';
+import { resolveStickerImage } from './utils/canvasLayers';
 import {
   loginWithGoogle,
   handleRedirectLoginResult,
@@ -179,18 +180,28 @@ function DiaryMainApp() {
         if (Array.isArray(parsed)) {
           const validDiaries = parsed
             .filter((d) => d && typeof d === 'object' && !LEGACY_SAMPLE_IDS.has(String(d?.id)))
-            .map((d) => ({
-              ...d,
-              textBlocks: Array.isArray(d.textBlocks)
-                ? d.textBlocks
-                : (d.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
-              stickers: Array.isArray(d.stickers)
+            .map((d) => {
+              const rawStickers = Array.isArray(d.stickers)
                 ? d.stickers
-                : (d.stickers && typeof d.stickers === 'object' ? Object.values(d.stickers) : []),
-              strokes: Array.isArray(d.strokes)
-                ? d.strokes
-                : (d.strokes && typeof d.strokes === 'object' ? Object.values(d.strokes) : []),
-            }));
+                : (d.stickers && typeof d.stickers === 'object' ? Object.values(d.stickers) : []);
+              const rehydratedStickers = rawStickers.map((st) => {
+                if (st && (!st.imageUrl || st.imageUrl === '')) {
+                  const resolved = resolveStickerImage(st);
+                  if (resolved) return { ...st, imageUrl: resolved };
+                }
+                return st;
+              });
+              return {
+                ...d,
+                textBlocks: Array.isArray(d.textBlocks)
+                  ? d.textBlocks
+                  : (d.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
+                stickers: rehydratedStickers,
+                strokes: Array.isArray(d.strokes)
+                  ? d.strokes
+                  : (d.strokes && typeof d.strokes === 'object' ? Object.values(d.strokes) : []),
+              };
+            });
           return deduplicateDiariesByDate(validDiaries);
         }
       } catch (e) {
@@ -266,9 +277,13 @@ function DiaryMainApp() {
               st?.imageUrl &&
               typeof st.imageUrl === 'string' &&
               st.imageUrl.startsWith('data:') &&
-              st.imageUrl.length > 100000
+              st.imageUrl.length > 50000
             ) {
-              return { ...st, imageUrl: '' };
+              return {
+                ...st,
+                decorationId: st.decorationId || st.id || st.name || st.label,
+                imageUrl: '',
+              };
             }
             return st;
           });
@@ -375,18 +390,28 @@ function DiaryMainApp() {
       user.uid,
       async (cloudDiaries) => {
         if (syncSafetyTimer) clearTimeout(syncSafetyTimer);
-        const sanitizedCloud = (cloudDiaries || []).map((d) => ({
-          ...d,
-          textBlocks: Array.isArray(d?.textBlocks)
-            ? d.textBlocks
-            : (d?.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
-          stickers: Array.isArray(d?.stickers)
+        const sanitizedCloud = (cloudDiaries || []).map((d) => {
+          const rawStickers = Array.isArray(d?.stickers)
             ? d.stickers
-            : (d?.stickers && typeof d.stickers === 'object' ? Object.values(d.stickers) : []),
-          strokes: Array.isArray(d?.strokes)
-            ? d.strokes
-            : (d?.strokes && typeof d.strokes === 'object' ? Object.values(d.strokes) : []),
-        }));
+            : (d?.stickers && typeof d.stickers === 'object' ? Object.values(d.stickers) : []);
+          const rehydratedStickers = rawStickers.map((st) => {
+            if (st && (!st.imageUrl || st.imageUrl === '')) {
+              const resolved = resolveStickerImage(st);
+              if (resolved) return { ...st, imageUrl: resolved };
+            }
+            return st;
+          });
+          return {
+            ...d,
+            textBlocks: Array.isArray(d?.textBlocks)
+              ? d.textBlocks
+              : (d?.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
+            stickers: rehydratedStickers,
+            strokes: Array.isArray(d?.strokes)
+              ? d.strokes
+              : (d?.strokes && typeof d.strokes === 'object' ? Object.values(d.strokes) : []),
+          };
+        });
         const deduped = deduplicateDiariesByDate(sanitizedCloud);
         setDiaries(deduped);
         setIsSyncing(false);
