@@ -137,7 +137,7 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
           <div className="text-2xl sm:text-3xl font-black text-black tracking-tight leading-none">
             {monthNum}.{dayNum} {dayEn}
           </div>
-          <div className="w-10 h-10 flex items-center justify-center">
+          <div className="w-10 h-10 flex items-center justify-center shrink-0">
             {weather ? (
               isImageAsset(weather) ? (
                 <img
@@ -366,6 +366,8 @@ export default function DiaryCanvas({
   const [isStickerPaletteOpen, setIsStickerPaletteOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [draggingItem, setDraggingItem] = useState(null);
+  const [transformingItem, setTransformingItem] = useState(null);
 
   // Firestore decorations 목록 (날짜 옆 대표 아이콘 선택용)
   const [decorations, setDecorations] = useState([]);
@@ -471,11 +473,22 @@ export default function DiaryCanvas({
 
   const currentDiaryKeyRef = useRef(diary ? (diary.id || diary.date) : null);
 
-  // diary prop이 변경될 때 (사용자가 다른 날짜나 다른 일기를 선택했을 때만) 상태 초기화
+  // 뷰 모드일 때는 props.diary의 최신 데이터를 동기적으로 직접 참조하여 1프레임 지연(lag/flicker)을 원천 차단
+  const activeNormalized = useMemo(() => {
+    return normalizeDiaryLayers(diary);
+  }, [diary]);
+
+  const activeDate = isViewMode ? (diary?.date || date) : date;
+  const activeWeather = isViewMode ? upgradePresetSvgUrl(diary?.weather || diary?.thumbnailMood || weather) : weather;
+  const activePaperStyle = isViewMode ? (diary?.paperStyle || paperStyle) : paperStyle;
+  const activeTextBlocks = isViewMode ? activeNormalized.textBlocks : textBlocks;
+  const activeStickers = isViewMode ? activeNormalized.stickers : stickers;
+  const activeStrokes = isViewMode ? activeNormalized.strokes : strokesHistory.slice(0, historyIndex + 1);
+
+  // diary prop이 변경될 때 상태 동기화 및 스크롤 상단 리셋
   useEffect(() => {
     if (!diary) return;
     const newKey = diary.id || diary.date;
-    // 같은 일기 내에서 background sync나 부모 컴포넌트 리렌더링 시에는 작성 중인 내용을 덮어쓰거나 글상자를 닫지 않음
     if (currentDiaryKeyRef.current !== newKey) {
       currentDiaryKeyRef.current = newKey;
       const normalized = normalizeDiaryLayers(diary);
@@ -501,9 +514,27 @@ export default function DiaryCanvas({
       setIsDeleteModalOpen(false);
       setDraggingItem(null);
       setTransformingItem(null);
-      if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
     }
+    if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
   }, [diary?.id, diary?.date]);
+
+  // 편집 모드로 진입 시 현재 보고 있는 다이어리 데이터로 상태를 즉시 동기화
+  const handleEnterEditMode = () => {
+    triggerHaptic('light');
+    if (diary) {
+      const normalized = normalizeDiaryLayers(diary);
+      layerOrderCounterRef.current = normalized.maxOrder;
+      setTitle(diary.title || '');
+      setDate(diary.date || getLocalTodayStr());
+      setWeather(upgradePresetSvgUrl(diary.weather || diary.thumbnailMood || ''));
+      setPaperStyle(diary.paperStyle || 'lined');
+      setTextBlocks(normalized.textBlocks);
+      setStickers(normalized.stickers);
+      setStrokesHistory(normalized.strokes);
+      setHistoryIndex(normalized.strokes.length ? normalized.strokes.length - 1 : -1);
+    }
+    setIsViewMode(false);
+  };
 
   // 컬러 피커 인풋 레퍼런스
   const colorPickerInputRef = useRef(null);
@@ -599,7 +630,7 @@ export default function DiaryCanvas({
   // 컨텐츠(필기 스트로크, 스티커, 텍스트)의 가장 아래쪽 Y 좌표 계산 (실제 렌더링 픽셀)
   const contentMaxBottomPx = useMemo(() => {
     let maxY = 0;
-    (stickers || []).forEach((s) => {
+    (activeStickers || []).forEach((s) => {
       if (!s) return;
       const isTape = s.category === 'tape' || s.type === 'tape';
       const approxH = (s.height || (isTape ? 32 : 60)) * (s.scale || 1);
@@ -607,7 +638,7 @@ export default function DiaryCanvas({
       if (bottom > maxY) maxY = bottom;
     });
 
-    (textBlocks || []).forEach((t) => {
+    (activeTextBlocks || []).forEach((t) => {
       if (!t || !t.text || t.text.trim().length === 0) return;
       const text = t.text;
       const lineCount = text.split('\n').reduce((acc, line) => {
@@ -620,8 +651,7 @@ export default function DiaryCanvas({
       if (bottom > maxY) maxY = bottom;
     });
 
-    const activeStrokes = strokesHistory.slice(0, historyIndex + 1);
-    activeStrokes.forEach((stroke) => {
+    (activeStrokes || []).forEach((stroke) => {
       if (!stroke || stroke.tool === 'eraser') return;
       (stroke.points || []).forEach((pt) => {
         if (!pt) return;
@@ -630,7 +660,7 @@ export default function DiaryCanvas({
       });
     });
     return maxY;
-  }, [stickers, textBlocks, strokesHistory, historyIndex, scaleRatio]);
+  }, [activeStickers, activeTextBlocks, activeStrokes, scaleRatio]);
 
   // 뷰 모드에서 실제 컨텐츠가 화면 가시 영역을 벗어나는지 여부 판별 (미초과 시 세로 스크롤 완전 방지)
   const isContentOverflowing = useMemo(() => {
@@ -805,17 +835,14 @@ export default function DiaryCanvas({
     };
   }, []);
 
-  // 드래그 및 크기조절/회전 상태
-  const [draggingItem, setDraggingItem] = useState(null);
-  const [transformingItem, setTransformingItem] = useState(null);
 
-  // 날짜 계산 (2026, 11.17 THU)
-  const dateObj = new Date(date + 'T00:00:00');
+  // 날짜 계산 (2026, 11.17 THU) - 뷰 모드 최신 일기 데이터 즉시 반영
+  const dateObj = new Date(activeDate + 'T00:00:00');
   const validDate = isNaN(dateObj) ? new Date() : dateObj;
   const yearNum = validDate.getFullYear();
   const monthNum = String(validDate.getMonth() + 1).padStart(2, '0');
   const dayNum = String(validDate.getDate()).padStart(2, '0');
-  const dayEn = DAY_NAMES_EN[validDate.getDay()];
+  const dayEn = DAY_NAMES_EN[validDate.getDay()] || 'MON';
 
   // 활성 입력 오버레이 캔버스 초기화
   const clearOverlayCanvas = useCallback(() => {
@@ -828,15 +855,10 @@ export default function DiaryCanvas({
     ctx.restore();
   }, []);
 
-  // 생성 순서(layerOrder) 기준 드로잉 밴드 계산
-  const activeStrokes = React.useMemo(
-    () => strokesHistory.slice(0, historyIndex + 1),
-    [strokesHistory, historyIndex]
-  );
-
+  // 생성 순서(layerOrder) 기준 드로잉 밴드 계산 (뷰 모드 즉시 반영)
   const strokeBands = React.useMemo(
-    () => buildStrokeBands(activeStrokes, textBlocks, stickers),
-    [activeStrokes, textBlocks, stickers]
+    () => buildStrokeBands(activeStrokes, activeTextBlocks, activeStickers),
+    [activeStrokes, activeTextBlocks, activeStickers]
   );
 
   // 캔버스 크기 업데이트 (실제 렌더링된 픽셀 크기에 맞춰 해상도 & DPR 동적 동기화)
@@ -1999,9 +2021,46 @@ export default function DiaryCanvas({
     showToast('저장되었습니다.');
   };
 
-  const currentPaperClass = PAPER_STYLES.find(p => p.id === paperStyle)?.class || 'paper-minimal-lined';
-  const selectedText = textBlocks.find(t => t.id === selectedTextId);
-  const selectedSticker = stickers.find(s => s.id === selectedStickerId);
+  // 편집 취소: 기존 일기면 원래 저장된 내용으로 원복하고 뷰 모드로 전환, 새 일기면 이전 목록/달력으로 복귀
+  const handleCancelEdit = () => {
+    triggerHaptic('light');
+    const isExisting = (diaries || []).some(
+      (d) => d && (d.id === diary?.id || (d.date && d.date === (diary?.date || date)))
+    );
+
+    if (isExisting) {
+      const original = (diaries || []).find(
+        (d) => d && (d.id === diary?.id || d.date === (diary?.date || date))
+      ) || diary;
+      const normalized = normalizeDiaryLayers(original);
+      layerOrderCounterRef.current = normalized.maxOrder;
+      setTitle(original.title || '');
+      setDate(original.date || getLocalTodayStr());
+      setWeather(upgradePresetSvgUrl(original.weather || original.thumbnailMood || ''));
+      setPaperStyle(original.paperStyle || 'lined');
+      setTextBlocks(normalized.textBlocks);
+      setStickers(normalized.stickers);
+      setStrokesHistory(normalized.strokes);
+      setHistoryIndex(normalized.strokes.length ? normalized.strokes.length - 1 : -1);
+      setSelectedTextId(null);
+      setSelectedStickerId(null);
+      setIsWeatherOpen(false);
+      setIsDatePickerOpen(false);
+      setIsPaperModalOpen(false);
+      setIsStickerPaletteOpen(false);
+      setIsViewMode(true);
+    } else {
+      if (onBack) {
+        onBack();
+      } else {
+        setIsViewMode(true);
+      }
+    }
+  };
+
+  const currentPaperClass = PAPER_STYLES.find(p => p.id === activePaperStyle)?.class || 'paper-minimal-lined';
+  const selectedText = (activeTextBlocks || []).find(t => t.id === selectedTextId);
+  const selectedSticker = (activeStickers || []).find(s => s.id === selectedStickerId);
 
   return (
     <div 
@@ -2033,33 +2092,40 @@ export default function DiaryCanvas({
           </span>
         </div>
 
-        {/* 모바일 화면 전용 상단 우측 버튼: 뷰 모드일 때는 [ 연필(편집) ], 편집 모드일 때는 [ ✔(저장 완료) ] */}
+        {/* 모바일 화면 전용 상단 우측 버튼: 뷰 모드일 때는 [ 연필(편집) ], 편집 모드일 때는 [ 취소(라인 버튼) ] + [ ✔(저장 완료) ] */}
         {isViewMode ? (
           <button
             type="button"
-            onClick={() => {
-              triggerHaptic('light');
-              setIsViewMode(false);
-            }}
+            onClick={handleEnterEditMode}
             className="w-11 h-11 rounded-full bg-stone-900 text-white transition flex items-center justify-center shadow-xs hover:bg-stone-800 active:scale-95 cursor-pointer"
             title="일기 편집하기"
           >
             <Pencil size={19} strokeWidth={2.4} />
           </button>
         ) : (
-          <button
-            type="button"
-            disabled={!hasContent || isSaving}
-            onClick={handleSaveDiary}
-            className={`w-11 h-11 rounded-full bg-black text-white transition flex items-center justify-center shadow-xs ${
-              !hasContent
-                ? 'opacity-25 cursor-not-allowed pointer-events-none'
-                : 'hover:bg-stone-800 active:scale-95 cursor-pointer'
-            }`}
-            title={hasContent ? "다이어리 저장" : "저장할 내용이 없습니다"}
-          >
-            <Check size={20} strokeWidth={3} />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="h-11 px-4 rounded-full border border-stone-300 bg-white text-stone-700 hover:text-black hover:border-stone-500 active:scale-95 transition text-xs sm:text-sm font-bold flex items-center justify-center cursor-pointer shadow-2xs"
+              title="편집 취소"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={!hasContent || isSaving}
+              onClick={handleSaveDiary}
+              className={`w-11 h-11 rounded-full bg-black text-white transition flex items-center justify-center shadow-xs ${
+                !hasContent
+                  ? 'opacity-25 cursor-not-allowed pointer-events-none'
+                  : 'hover:bg-stone-800 active:scale-95 cursor-pointer'
+              }`}
+              title={hasContent ? "다이어리 저장" : "저장할 내용이 없습니다"}
+            >
+              <Check size={20} strokeWidth={3} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -2133,39 +2199,57 @@ export default function DiaryCanvas({
               </div>
             </div>
 
-            {/* 우측 대표 날씨/스티커 아이콘 버튼 + 와이드 전용 체크 버튼 (날짜와 정확한 세로 중앙 정렬) */}
-            <div className="flex items-center space-x-2.5">
-              <div className="relative flex items-center">
-                {(!isViewMode || weather) && (
-                  <button
-                    type="button"
-                    disabled={isViewMode}
-                    onClick={() => {
-                      if (!isViewMode) setIsWeatherOpen(!isWeatherOpen);
-                    }}
-                    className={`w-10 h-10 bg-transparent border-0 p-0 ${!isViewMode ? 'active:scale-95 cursor-pointer' : 'cursor-default'} transition flex items-center justify-center overflow-visible`}
-                    title={!isViewMode ? "날씨 / 대표 스티커 선택" : undefined}
-                  >
-                    {weather ? (
-                      isImageAsset(weather) ? (
+            {/* 우측 대표 날씨/스티커 아이콘 영역 (항상 w-10 h-10 40px 고정 높이를 유지하여 스티커 유무에 따른 헤더 높이 흔들림 방지) + 와이드 전용 버튼 */}
+            <div className="flex items-center space-x-2.5 shrink-0">
+              <div className="relative w-10 h-10 flex items-center justify-center shrink-0">
+                {activeWeather ? (
+                  !isViewMode ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsWeatherOpen(!isWeatherOpen)}
+                      className="w-10 h-10 bg-transparent border-0 p-0 active:scale-95 cursor-pointer transition flex items-center justify-center overflow-visible"
+                      title="날씨 / 대표 스티커 선택"
+                    >
+                      {isImageAsset(activeWeather) ? (
                         <img
-                          src={upgradePresetSvgUrl(typeof weather === 'string' ? weather : weather?.imageUrl || '')}
+                          src={upgradePresetSvgUrl(typeof activeWeather === 'string' ? activeWeather : activeWeather?.imageUrl || '')}
                           alt="대표 아이콘"
                           className="w-10 h-10 object-contain block select-none overflow-visible p-0.5"
                         />
                       ) : (
                         <span className="text-3xl leading-none select-none">
-                          {typeof weather === 'string' || typeof weather === 'number'
-                            ? String(weather)
-                            : (weather?.icon || weather?.label || '')}
+                          {typeof activeWeather === 'string' || typeof activeWeather === 'number'
+                            ? String(activeWeather)
+                            : (activeWeather?.icon || activeWeather?.label || '')}
                         </span>
-                      )
+                      )}
+                    </button>
+                  ) : (
+                    isImageAsset(activeWeather) ? (
+                      <img
+                        src={upgradePresetSvgUrl(typeof activeWeather === 'string' ? activeWeather : activeWeather?.imageUrl || '')}
+                        alt="대표 아이콘"
+                        className="w-10 h-10 object-contain block select-none overflow-visible p-0.5"
+                      />
                     ) : (
-                      !isViewMode ? (
-                        <Plus size={24} className="text-black" strokeWidth={2.5} />
-                      ) : null
-                    )}
-                  </button>
+                      <span className="text-3xl leading-none select-none">
+                        {typeof activeWeather === 'string' || typeof activeWeather === 'number'
+                          ? String(activeWeather)
+                          : (activeWeather?.icon || activeWeather?.label || '')}
+                      </span>
+                    )
+                  )
+                ) : (
+                  !isViewMode ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsWeatherOpen(!isWeatherOpen)}
+                      className="w-10 h-10 bg-transparent border-0 p-0 active:scale-95 cursor-pointer transition flex items-center justify-center overflow-visible"
+                      title="날씨 / 대표 스티커 선택"
+                    >
+                      <Plus size={24} className="text-black" strokeWidth={2.5} />
+                    </button>
+                  ) : null
                 )}
 
               {isWeatherOpen && (
@@ -2403,33 +2487,40 @@ export default function DiaryCanvas({
             )}
           </div>
 
-          {/* 와이드 버전(lg: >=1024px) 전용 [ 연필(편집) / ✔(저장 완료) ] 버튼 */}
+          {/* 와이드 버전(lg: >=1024px) 전용 [ 연필(편집) / 취소 및 ✔(저장 완료) ] 버튼 */}
           {isViewMode ? (
             <button
               type="button"
-              onClick={() => {
-                triggerHaptic('light');
-                setIsViewMode(false);
-              }}
+              onClick={handleEnterEditMode}
               className="hidden lg:flex w-10 h-10 rounded-full bg-stone-900 text-white transition items-center justify-center shadow-xs shrink-0 hover:bg-stone-800 active:scale-95 cursor-pointer"
               title="일기 편집하기"
             >
               <Pencil size={18} strokeWidth={2.4} />
             </button>
           ) : (
-            <button
-              type="button"
-              disabled={!hasContent || isSaving}
-              onClick={handleSaveDiary}
-              className={`hidden lg:flex w-10 h-10 rounded-full bg-black text-white transition items-center justify-center shadow-xs shrink-0 ${
-                !hasContent
-                  ? 'opacity-25 cursor-not-allowed pointer-events-none'
-                  : 'hover:bg-stone-800 active:scale-95 cursor-pointer'
-              }`}
-              title={hasContent ? "다이어리 저장" : "저장할 내용이 없습니다"}
-            >
-              <Check size={18} strokeWidth={3} />
-            </button>
+            <div className="hidden lg:flex items-center space-x-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="h-10 px-3.5 rounded-full border border-stone-300 bg-white text-stone-700 hover:text-black hover:border-stone-500 active:scale-95 transition text-xs font-bold flex items-center justify-center cursor-pointer shadow-2xs"
+                title="편집 취소"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={!hasContent || isSaving}
+                onClick={handleSaveDiary}
+                className={`w-10 h-10 rounded-full bg-black text-white transition items-center justify-center shadow-xs shrink-0 ${
+                  !hasContent
+                    ? 'opacity-25 cursor-not-allowed pointer-events-none'
+                    : 'hover:bg-stone-800 active:scale-95 cursor-pointer'
+                }`}
+                title={hasContent ? "다이어리 저장" : "저장할 내용이 없습니다"}
+              >
+                <Check size={18} strokeWidth={3} />
+              </button>
+            </div>
           )}
         </div>
       </div>
