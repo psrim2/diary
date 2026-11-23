@@ -5,6 +5,7 @@ export default function Header({
   currentView, 
   setCurrentView, 
   onNewDiary,
+  onGoToToday,
   diaryName,
   setDiaryName,
   user,
@@ -130,13 +131,14 @@ export default function Header({
           </button>
         )}
 
-        {/* 새 일기 작성 [+] 버튼 (다이어리 작성 화면의 저장버튼과 동일한 w-11 h-11) */}
+        {/* 상단 [오늘] 바로가기 버튼 (44px 원형, 기존 + 버튼 대체) */}
         <button
-          onClick={onNewDiary}
-          className="w-11 h-11 rounded-full bg-black text-white hover:bg-stone-800 active:scale-95 transition flex items-center justify-center shadow-xs shrink-0"
-          title="새 일기 쓰기"
+          type="button"
+          onClick={onGoToToday}
+          className="w-11 h-11 rounded-full bg-white border border-stone-300 shadow-xs flex items-center justify-center font-bold text-xs sm:text-sm text-stone-900 active:scale-95 hover:bg-stone-50 transition-all cursor-pointer select-none shrink-0"
+          title="오늘 날짜로 이동"
         >
-          <Plus size={22} strokeWidth={2.8} />
+          오늘
         </button>
       </div>
 

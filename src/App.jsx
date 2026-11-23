@@ -4,6 +4,7 @@ import CalendarView from './components/CalendarView';
 import ListView from './components/ListView';
 import DiaryCanvas from './components/DiaryCanvas';
 import AdminPage from './components/AdminPage';
+import YearlyCalendarModal from './components/YearlyCalendarModal';
 import { INITIAL_DIARIES } from './constants';
 import {
   loginWithGoogle,
@@ -206,6 +207,14 @@ function DiaryMainApp() {
 
   // 현재 달력에서 조회 중인 월/날짜 (목록 탭 전환 시 해당 월로 스크롤 동기화)
   const [calendarViewingDate, setCalendarViewingDate] = useState(() => new Date());
+
+  // 1년 단위 연력(Yearly Calendar) 모달 상태 & 조회 연도
+  const [isYearViewOpen, setIsYearViewOpen] = useState(false);
+  const [yearViewYear, setYearViewYear] = useState(() => new Date().getFullYear());
+
+  // 목록 뷰 스크롤 위치 복원 상태 (상세 확인 후 목록 복귀 시 기존 스크롤 유지)
+  const [savedListScrollTop, setSavedListScrollTop] = useState(0);
+  const [isReturningFromEditor, setIsReturningFromEditor] = useState(false);
 
   // 다이어리 이름 상태 (로컬스토리지 연동, 기본값: 'Diary')
   const [diaryName, setDiaryName] = useState(() => {
@@ -563,11 +572,38 @@ function DiaryMainApp() {
     setCurrentView('editor');
   };
 
-  // 특정 일기 선택
+  // 특정 일기 선택 (목록에서 진입한 경우 스크롤 복원 플래그 설정)
   const handleSelectDiary = (diary) => {
-    setPreviousView(currentView === 'editor' ? (previousView || 'calendar') : currentView);
+    const prev = currentView === 'editor' ? (previousView || 'calendar') : currentView;
+    setPreviousView(prev);
+    if (prev === 'list') {
+      setIsReturningFromEditor(true);
+    }
     setSelectedDiary(diary);
     setCurrentView('editor');
+  };
+
+  // 연력(Yearly Calendar) 모달 열기
+  const handleOpenYearView = (year) => {
+    setYearViewYear(year || new Date().getFullYear());
+    setIsYearViewOpen(true);
+  };
+
+  // 연력 모달에서 특정 월 선택 시 달력 화면으로 이동
+  const handleSelectYearMonth = (year, monthIdx) => {
+    const targetDate = new Date(year, monthIdx, 1);
+    setCalendarViewingDate(targetDate);
+    setCurrentView('calendar');
+    setIsYearViewOpen(false);
+  };
+
+  // 오늘 날짜로 이동 (상단 헤더 오늘 버튼 클릭)
+  const handleGoToToday = () => {
+    const now = new Date();
+    setCalendarViewingDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    if (currentView === 'editor') {
+      setCurrentView('calendar');
+    }
   };
 
   // 일기 삭제 (로컬 상태 반영 + 로그인 시 Firestore 삭제)
@@ -702,6 +738,7 @@ function DiaryMainApp() {
                 setPreviousView(view);
               }}
               onNewDiary={() => handleNewDiary(getTodayDateStr())}
+              onGoToToday={handleGoToToday}
               diaryName={diaryName}
               setDiaryName={handleUpdateDiaryName}
               user={user}
@@ -722,6 +759,7 @@ function DiaryMainApp() {
                   selectedDate={activeEditorDiary?.date}
                   onMonthChange={setCalendarViewingDate}
                   initialDate={calendarViewingDate}
+                  onOpenYearView={handleOpenYearView}
                 />
               )}
 
@@ -735,6 +773,11 @@ function DiaryMainApp() {
                   selectedDate={activeEditorDiary?.date}
                   calendarViewingDate={calendarViewingDate}
                   isActive={currentView === 'list'}
+                  savedScrollTop={savedListScrollTop}
+                  isReturningFromEditor={isReturningFromEditor}
+                  onSaveScrollTop={setSavedListScrollTop}
+                  onRestoreScrollComplete={() => setIsReturningFromEditor(false)}
+                  onOpenYearView={handleOpenYearView}
                 />
               )}
             </div>
@@ -824,6 +867,19 @@ function DiaryMainApp() {
             </div>
           </div>
         )}
+        {/* (3) 연간 달력 (Yearly Calendar) 전체 화면 모달 (달력/목록 공통) */}
+        <YearlyCalendarModal
+          isOpen={isYearViewOpen}
+          onClose={() => setIsYearViewOpen(false)}
+          initialYear={yearViewYear}
+          diaries={diaries}
+          onSelectMonth={handleSelectYearMonth}
+          onSelectDiary={(d) => {
+            handleSelectDiary(d);
+            setIsYearViewOpen(false);
+          }}
+          onGoToToday={handleGoToToday}
+        />
       </div>
     );
   }

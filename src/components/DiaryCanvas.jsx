@@ -1842,11 +1842,16 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
           ref={canvasContainerRef}
           onClick={(e) => {
             if (wasTransformingRef.current) return;
-            // 빈 속지 배경 또는 캔버스를 직접 클릭했을 때만 선택 해제 (스크롤 합성 클릭이나 글상자 내부 클릭 시 해제 방지)
+            // 빈 속지 배경 또는 캔버스를 직접 클릭했을 때
             const isDirectPaperClick = e.target === canvasContainerRef.current || e.target?.tagName === 'CANVAS';
             if (isDirectPaperClick && activeToolMode !== 'pen') {
-              setSelectedTextId(null);
-              setSelectedStickerId(null);
+              if (activeToolMode === 'text' && !selectedTextId) {
+                // 모바일 최초 진입 등 T 모드에서 선택된 글상자가 없을 때 빈 공간 클릭 시 맨 상단에 글상자 생성 및 포커스
+                handleAddTextBlock();
+              } else {
+                setSelectedTextId(null);
+                setSelectedStickerId(null);
+              }
             }
           }}
           onTouchStart={(e) => {

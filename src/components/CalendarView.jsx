@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import YearlyCalendarModal from './YearlyCalendarModal';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -12,7 +13,8 @@ export default function CalendarView({
   onNewDiaryForDate, 
   selectedDate,
   onMonthChange,
-  initialDate
+  initialDate,
+  onOpenYearView
 }) {
   // 실제 오늘 날짜 기준
   const todayRef = new Date();
@@ -368,8 +370,12 @@ export default function CalendarView({
             <button
               type="button"
               onClick={() => {
-                setYearViewYear(year);
-                setIsYearViewOpen(true);
+                if (onOpenYearView) {
+                  onOpenYearView(year);
+                } else {
+                  setYearViewYear(year);
+                  setIsYearViewOpen(true);
+                }
               }}
               className="text-right group cursor-pointer hover:opacity-75 transition-opacity select-none focus:outline-none"
               title="1년 연력(전체 달력) 보기"
@@ -536,146 +542,23 @@ export default function CalendarView({
         </div>
       </div>
 
-      {/* 
-        ================================================================
-        [1년 단위 연간 달력 (Yearly Calendar)]
-        - 전체 화면 100dvh 모달
-        - 달력 화면과 좌우 마진(px-6) 완벽 일치
-        - 상단: ← (뒤로가기), 2026 (중앙 연도 및 좌우 화살표), 오늘 (44px 원형 버튼)
-        - 좌우 터치/마우스 스와이프로 이전 해 / 다음 해 전환
-        - 12개월(01~12) 3열 x 4행 그리드로 한 페이지에 100% 핏
-        - 일기 있는 날: 날짜 숫자 표기 없이 10px 사이즈 2px stroke 원(O) 표시
-        - 오늘(일기 없는 날): 블랙 채움 원형 + 흰색 숫자
-        - 월 클릭 시 또는 날짜 클릭 시 입력창이 아닌 해당 달력으로 즉시 이동
-        ================================================================
-      */}
-      {isYearViewOpen && (
-        <div 
-          className="fixed inset-0 z-50 flex flex-col justify-between bg-[#fafafa] text-black px-6 pb-6 select-none overflow-hidden h-[100dvh] animate-fadeIn"
-          onTouchStart={handleYearTouchStart}
-          onTouchMove={handleYearTouchMove}
-          onTouchEnd={handleYearTouchEnd}
-          onTouchCancel={handleYearTouchEnd}
-          onMouseDown={handleYearMouseDown}
-          onMouseUp={handleYearMouseUp}
-        >
-          {/* 상단 헤더: ← (뒤로가기), 2026 (중앙 연도), 오늘 (우측 44px 원형 오늘 버튼) */}
-          <div className="w-full flex items-center justify-between pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsYearViewOpen(false)}
-              className="p-2 -ml-2 rounded-full hover:bg-black/5 text-black transition active:scale-95 cursor-pointer"
-              title="달력으로 돌아가기"
-            >
-              <ArrowLeft size={24} strokeWidth={2.5} />
-            </button>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setYearViewYear(prev => prev - 1)}
-                className="p-1 rounded-full hover:bg-black/5 text-stone-400 hover:text-black transition cursor-pointer"
-                title="이전 해"
-              >
-                <ChevronLeft size={20} strokeWidth={2.5} />
-              </button>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-black tracking-tight select-none">
-                {yearViewYear}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setYearViewYear(prev => prev + 1)}
-                className="p-1 rounded-full hover:bg-black/5 text-stone-400 hover:text-black transition cursor-pointer"
-                title="다음 해"
-              >
-                <ChevronRight size={20} strokeWidth={2.5} />
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                const now = new Date();
-                setYearViewYear(now.getFullYear());
-                setCurrentDate(new Date(now.getFullYear(), now.getMonth(), 1));
-                setIsYearViewOpen(false);
-              }}
-              className="w-[44px] h-[44px] rounded-full bg-white border border-stone-300 shadow-xs flex items-center justify-center font-bold text-xs sm:text-sm text-stone-900 active:scale-95 hover:bg-stone-50 transition-all cursor-pointer select-none shrink-0"
-              title="오늘 날짜로 이동"
-            >
-              오늘
-            </button>
-          </div>
-
-          {/* 12개월 3열 x 4행 그리드: 한 페이지에 100% 핏 */}
-          <div className="flex-1 w-full grid grid-cols-3 gap-x-4 sm:gap-x-6 gap-y-2 sm:gap-y-3 my-auto overflow-hidden">
-            {yearMonths.map((m) => (
-              <div 
-                key={m.monthIdx}
-                onClick={() => {
-                  setCurrentDate(new Date(yearViewYear, m.monthIdx, 1));
-                  setIsYearViewOpen(false);
-                }}
-                className="flex flex-col justify-start cursor-pointer group"
-                title={`${m.monthIdx + 1}월 달력으로 이동`}
-              >
-                {/* 월 번호 (01, 02, ...) + 아래 가로 라인 */}
-                <div className="select-none">
-                  <div className="text-sm sm:text-base font-black text-black group-hover:opacity-75 transition-opacity">
-                    {String(m.monthIdx + 1).padStart(2, '0')}
-                  </div>
-                  <div className="w-full h-[1.5px] bg-black mt-0.5 mb-1" />
-                </div>
-
-                {/* 7열 날짜 그리드 (S M T W T F S 순서, 요일 라벨 없이 날짜 직결) */}
-                <div className="grid grid-cols-7 gap-x-0.5 gap-y-0.5 text-center select-none">
-                  {m.cells.map((c, cIdx) => {
-                    if (!c) {
-                      return <div key={`empty-${cIdx}`} className="h-4 sm:h-5" />;
-                    }
-
-                    const isCellToday = 
-                      yearViewYear === todayRef.getFullYear() &&
-                      m.monthIdx === todayRef.getMonth() &&
-                      c.day === todayRef.getDate();
-                    const colDayOfWeek = cIdx % 7;
-                    const isCellWeekend = colDayOfWeek === 0 || colDayOfWeek === 6;
-                    const hasDiary = !!c.diary;
-
-                    return (
-                      <div
-                        key={c.dateStr}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // 월 클릭 시 또는 날짜 클릭 시 입력이 아닌 해당 달력 보여줌
-                          setCurrentDate(new Date(yearViewYear, m.monthIdx, 1));
-                          setIsYearViewOpen(false);
-                        }}
-                        className="h-4 sm:h-5 flex items-center justify-center cursor-pointer transition-transform active:scale-90 relative"
-                        title={`${c.dateStr} ${m.monthIdx + 1}월 달력 보기`}
-                      >
-                        {hasDiary ? (
-                          <span 
-                            className="w-[10px] h-[10px] rounded-full border-[2px] border-black block select-none shrink-0" 
-                            title={`${c.dateStr} 일기 있음`}
-                          />
-                        ) : isCellToday ? (
-                          <span className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-black text-white flex items-center justify-center font-bold text-[9px] sm:text-[10px] leading-none shadow-xs">
-                            {c.day}
-                          </span>
-                        ) : (
-                          <span className={`text-[9px] sm:text-[10px] font-bold leading-none ${isCellWeekend ? 'text-[#ff6b00]' : 'text-black'}`}>
-                            {c.day}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* 1년 단위 연간 달력 (Yearly Calendar) 모달 */}
+      {!onOpenYearView && (
+        <YearlyCalendarModal
+          isOpen={isYearViewOpen}
+          onClose={() => setIsYearViewOpen(false)}
+          initialYear={yearViewYear}
+          diaries={diaries}
+          onSelectMonth={(y, mIdx) => {
+            setCurrentDate(new Date(y, mIdx, 1));
+            setIsYearViewOpen(false);
+          }}
+          onSelectDiary={(d) => {
+            onSelectDiary(d);
+            setIsYearViewOpen(false);
+          }}
+          onGoToToday={handleGoToToday}
+        />
       )}
     </div>
   );

@@ -539,7 +539,12 @@ export default function ListView({
   selectedDiaryId, 
   selectedDate,
   calendarViewingDate,
-  isActive
+  isActive,
+  savedScrollTop = 0,
+  isReturningFromEditor = false,
+  onSaveScrollTop,
+  onRestoreScrollComplete,
+  onOpenYearView
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [openSwipeCardId, setOpenSwipeCardId] = useState(null);
@@ -578,9 +583,27 @@ export default function ListView({
 
   const monthKeys = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
 
-  // 목록 탭 이동 시, 보고 있던 달력 월의 리스트가 상단에 보이도록 스크롤 이동
+  // 스크롤 위치 관리:
+  // 1) 다이어리 작성/확인 후 목록으로 복귀 시: 직전 스크롤 위치를 그대로 복원
+  // 2) 탭 전환 또는 달력 월 변경 시: 보고 있던 달력 월의 리스트가 상단에 보이도록 스크롤
   useEffect(() => {
     if (!isActive) return;
+
+    const container = listContainerRef.current;
+    if (!container) return;
+
+    if (isReturningFromEditor) {
+      if (typeof savedScrollTop === 'number') {
+        container.scrollTop = savedScrollTop;
+      }
+      const timer = setTimeout(() => {
+        if (listContainerRef.current && typeof savedScrollTop === 'number') {
+          listContainerRef.current.scrollTop = savedScrollTop;
+        }
+        onRestoreScrollComplete?.();
+      }, 30);
+      return () => clearTimeout(timer);
+    }
 
     const targetDate = calendarViewingDate || new Date();
     const targetYear = targetDate.getFullYear();
@@ -588,30 +611,26 @@ export default function ListView({
     const targetKey = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
 
     const timer = setTimeout(() => {
-      const container = listContainerRef.current;
-      if (!container) return;
+      const c = listContainerRef.current;
+      if (!c) return;
 
       const targetEl = document.getElementById(`month-group-${targetKey}`);
       if (targetEl) {
-        // sticky 검색창 높이(약 65px)를 고려하여 해당 월 헤더 상단으로 스크롤
-        const targetTop = Math.max(0, targetEl.offsetTop - 65);
-        container.scrollTo({ top: targetTop, behavior: 'smooth' });
+        c.scrollTo({ top: targetEl.offsetTop, behavior: 'smooth' });
       } else {
-        // 해당 월의 일기가 없을 경우, 가장 가까운 과거 월(또는 최상단)로 이동
         const availableKeys = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
         if (availableKeys.length > 0) {
           const closestKey = availableKeys.find(k => k <= targetKey) || availableKeys[availableKeys.length - 1];
           const closestEl = document.getElementById(`month-group-${closestKey}`);
           if (closestEl) {
-            const targetTop = Math.max(0, closestEl.offsetTop - 65);
-            container.scrollTo({ top: targetTop, behavior: 'smooth' });
+            c.scrollTo({ top: closestEl.offsetTop, behavior: 'smooth' });
           }
         }
       }
     }, 80);
 
     return () => clearTimeout(timer);
-  }, [isActive, calendarViewingDate]);
+  }, [isActive, calendarViewingDate, isReturningFromEditor, savedScrollTop]);
 
   // 검색 옆 [오늘] 버튼 클릭 시 오늘 월 위치로 스크롤 이동
   const handleGoToTodayMonth = () => {
@@ -664,12 +683,16 @@ export default function ListView({
         }
       }}
       onScroll={(e) => {
+        const currentScrollTop = e.currentTarget.scrollTop;
+        if (onSaveScrollTop) {
+          onSaveScrollTop(currentScrollTop);
+        }
         // 스크롤 시 열려 있는 스와이프 삭제 카드가 있으면 제자리로 복귀
         if (openSwipeCardId) {
           setOpenSwipeCardId(null);
         }
         // 사용자가 터치로 직접 스크롤을 30px 이상 의미있게 내렸을 때 키보드 내림 처리
-        if (isUserTouchingRef.current && e.currentTarget.scrollTop > 30) {
+        if (isUserTouchingRef.current && currentScrollTop > 30) {
           if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
             document.activeElement.blur();
           }
@@ -685,39 +708,27 @@ export default function ListView({
       }`}
     >
       
-      {/* 1. 상단 둥근 알약형 검색창 + 44px 원형 오늘 버튼 (컨텐츠 스크롤 시 목록 탭 라인에 고정: sticky top-0) */}
-      <div className="sticky top-0 z-20 bg-[#fafafa] pt-2 pb-2.5 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-stone-400" size={17} />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="기억하고 싶은 순간, 단어, 날짜 검색..."
-              className="w-full pl-11 pr-11 py-2.5 bg-white border border-stone-200/90 rounded-full text-xs sm:text-sm text-stone-800 placeholder-stone-400/80 focus:outline-hidden focus:ring-1 focus:ring-black shadow-2xs transition"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-stone-200/80 text-stone-600 hover:bg-stone-300 active:scale-95 transition flex items-center justify-center cursor-pointer"
-                title="검색어 지우기"
-              >
-                <X size={13} strokeWidth={2.5} />
-              </button>
-            )}
-          </div>
-
-          {/* 44px 원형 오늘 버튼 */}
-          <button
-            type="button"
-            onClick={handleGoToTodayMonth}
-            className="w-[44px] h-[44px] rounded-full bg-white border border-stone-300 shadow-xs flex items-center justify-center font-bold text-xs sm:text-sm text-stone-900 active:scale-95 hover:bg-stone-50 transition-all cursor-pointer select-none shrink-0"
-            title="오늘 날짜 목록으로 이동"
-          >
-            오늘
-          </button>
+      {/* 1. 상단 둥근 알약형 검색창 */}
+      <div className="py-2.5 shrink-0">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-stone-400" size={17} />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="기억하고 싶은 순간, 단어, 날짜 검색..."
+            className="w-full pl-11 pr-11 py-2.5 bg-white border border-stone-200/90 rounded-full text-xs sm:text-sm text-stone-800 placeholder-stone-400/80 focus:outline-hidden focus:ring-1 focus:ring-black shadow-2xs transition"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-stone-200/80 text-stone-600 hover:bg-stone-300 active:scale-95 transition flex items-center justify-center cursor-pointer"
+              title="검색어 지우기"
+            >
+              <X size={13} strokeWidth={2.5} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -747,27 +758,33 @@ export default function ListView({
             const monthName = MONTH_NAMES_EN[Math.max(0, Math.min(11, (group.month || 1) - 1))] || 'November';
 
             return (
-              <div key={key} id={`month-group-${key}`}>
-                {/* 월 헤더: 해당 월의 실제 번호와 연도 표기 (카드 날짜/날씨와 수직 정렬을 맞추기 위해 px-4 sm:px-5 적용) */}
-                <div className="pt-2 pb-3 shrink-0 px-4 sm:px-5">
+              <div key={key} id={`month-group-${key}`} className="relative">
+                {/* 8. 목록 월, 년도 영문 표기 sticky로 달력 목록 아래 표기 되고, 새로운 달로 넘어갈 경우 교체 스크롤되도록 수정 */}
+                <div className="sticky top-0 z-10 bg-[#fafafa]/95 backdrop-blur-xs pt-2.5 pb-2 -mx-6 px-10 sm:px-11 border-b border-stone-200/40">
                   <div className="flex items-end justify-between">
-                    <div className="text-5xl sm:text-6xl font-black text-black leading-none tracking-tight">
+                    <div className="text-5xl sm:text-6xl font-black text-black leading-none tracking-tight select-none">
                       {group.month}
                     </div>
 
-                    <div className="text-right pb-1">
-                      <div className="text-sm font-bold text-black leading-tight">
+                    {/* 달력과 동일하게 2026 영문표기 클릭 시, 연력 보이도록 수정 */}
+                    <button
+                      type="button"
+                      onClick={() => onOpenYearView?.(group.year)}
+                      className="text-right pb-1 group cursor-pointer hover:opacity-75 transition-opacity select-none focus:outline-none"
+                      title={`${group.year}년 연력(전체 달력) 보기`}
+                    >
+                      <div className="text-sm font-bold text-black leading-tight group-hover:underline">
                         {group.year}
                       </div>
-                      <div className="text-xs sm:text-sm font-bold text-black leading-tight">
+                      <div className="text-xs sm:text-sm font-bold text-black leading-tight group-hover:underline">
                         {monthName}
                       </div>
-                    </div>
+                    </button>
                   </div>
                 </div>
 
                 {/* 해당 월의 카드 목록 */}
-                <div className="space-y-4">
+                <div className="space-y-4 pt-3">
                   {group.items.map((diary) => (
                     <DiaryCard
                       key={diary.id}

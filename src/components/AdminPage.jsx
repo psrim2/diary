@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ADMIN_EMAIL,
   loginWithGoogle,
@@ -10,11 +10,14 @@ import {
   updateDecorationAsset,
 } from '../firebase';
 
-const CATEGORIES = [
-  { id: 'gif', label: '움직이는 GIF (gif)' },
+const BASE_CATEGORIES = [
   { id: 'sticker', label: '스티커 (sticker)' },
+  { id: 'character', label: '캐릭터 (character)' },
+  { id: 'emotion', label: '감정 (emotion)' },
+  { id: 'daily', label: '일상 (daily)' },
   { id: 'weather', label: '날씨 (weather)' },
   { id: 'tape', label: '마스킹테이프 (tape)' },
+  { id: 'food', label: '음식 (food)' },
 ];
 
 function formatDate(item) {
@@ -40,6 +43,19 @@ export default function AdminPage() {
   const [decorations, setDecorations] = useState([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [filterCategory, setFilterCategory] = useState('all');
+
+  // 등록된 에셋에서 파생된 전체 카테고리 목록 (가로 스크롤 대응)
+  const allCategories = useMemo(() => {
+    const existingIds = new Set(BASE_CATEGORIES.map(c => c.id));
+    const dynamicCats = [];
+    decorations.forEach(d => {
+      if (d.category && !existingIds.has(d.category) && d.category !== 'gif') {
+        existingIds.add(d.category);
+        dynamicCats.push({ id: d.category, label: `${d.category} (${d.category})` });
+      }
+    });
+    return [...BASE_CATEGORIES, ...dynamicCats];
+  }, [decorations]);
 
   // [적용하기 / 취소]를 위한 스테이징(대기) 상태
   // 1) 새로 추가할 파일 대기 목록: [{ tempId, file, previewUrl, category, name }]
@@ -471,7 +487,7 @@ export default function AdminPage() {
               onChange={(e) => setUploadCategory(e.target.value)}
               className="border px-3 py-1.5 text-sm"
             >
-              {CATEGORIES.map((cat) => (
+              {allCategories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.label}
                 </option>
@@ -519,18 +535,18 @@ export default function AdminPage() {
             )
           </h2>
 
-          {/* 카테고리 필터 탭 */}
-          <div className="admin-category-filter flex flex-wrap gap-1">
+          {/* 카테고리 필터 탭 (가로 스크롤 지원) */}
+          <div className="admin-category-filter flex overflow-x-auto no-scrollbar whitespace-nowrap gap-1 pb-1 max-w-full">
             <button
               type="button"
               onClick={() => setFilterCategory('all')}
-              className={`px-3 py-1 border text-xs ${
-                filterCategory === 'all' ? 'bg-black text-white' : 'bg-white'
+              className={`shrink-0 px-3 py-1 border text-xs cursor-pointer ${
+                filterCategory === 'all' ? 'bg-black text-white font-bold' : 'bg-white text-stone-700'
               }`}
             >
               전체 ({decorations.length + pendingAdds.length})
             </button>
-            {CATEGORIES.map((cat) => {
+            {allCategories.map((cat) => {
               const count =
                 decorations.filter(
                   (d) =>
@@ -542,10 +558,10 @@ export default function AdminPage() {
                   key={cat.id}
                   type="button"
                   onClick={() => setFilterCategory(cat.id)}
-                  className={`px-3 py-1 border text-xs ${
+                  className={`shrink-0 px-3 py-1 border text-xs cursor-pointer ${
                     filterCategory === cat.id
-                      ? 'bg-black text-white'
-                      : 'bg-white'
+                      ? 'bg-black text-white font-bold'
+                      : 'bg-white text-stone-700 hover:bg-stone-50'
                   }`}
                 >
                   {cat.label} ({count})
@@ -599,7 +615,7 @@ export default function AdminPage() {
                     }
                     className="border px-2 py-1 text-xs w-full bg-white"
                   >
-                    {CATEGORIES.map((cat) => (
+                    {allCategories.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.label}
                       </option>
@@ -676,7 +692,7 @@ export default function AdminPage() {
                       }
                       className="border px-2 py-1 text-xs w-full mb-1"
                     >
-                      {CATEGORIES.map((cat) => (
+                      {allCategories.map((cat) => (
                         <option key={cat.id} value={cat.id}>
                           {cat.label}
                         </option>
