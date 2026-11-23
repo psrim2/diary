@@ -374,7 +374,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
             <img
               src={mood}
               alt=""
-              className="w-9 h-9 object-contain select-none"
+              className="w-9 h-9 object-contain select-none overflow-visible p-0.5"
             />
           ) : (
             <span className="text-2xl select-none filter drop-shadow-2xs">

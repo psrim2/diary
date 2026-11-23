@@ -1610,7 +1610,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                 <button
                   type="button"
                   onClick={() => setIsWeatherOpen(!isWeatherOpen)}
-                  className="w-10 h-10 bg-transparent border-0 p-0 active:scale-95 transition flex items-center justify-center"
+                  className="w-10 h-10 bg-transparent border-0 p-0 active:scale-95 transition flex items-center justify-center overflow-visible"
                   title="날씨 / 대표 스티커 선택"
                 >
                 {weather ? (
@@ -1618,7 +1618,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     <img
                       src={typeof weather === 'string' ? weather : weather?.imageUrl || ''}
                       alt="대표 아이콘"
-                      className="w-10 h-10 object-contain block select-none"
+                      className="w-10 h-10 object-contain block select-none overflow-visible p-0.5"
                     />
                   ) : (
                     <span className="text-3xl leading-none select-none">

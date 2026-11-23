@@ -517,7 +517,7 @@ export default function CalendarView({
                     </div>
 
                     {/* 일기 작성 스티커 / dot 슬롯 - 36px 고정 높이 슬롯으로 날짜 숫자의 상하 출렁임 원천 차단 */}
-                    <div className="w-full h-[36px] flex items-center justify-center mt-0.5 shrink-0 overflow-hidden">
+                    <div className="w-full h-[36px] flex items-center justify-center mt-0.5 shrink-0 overflow-visible">
                       {hasDiary ? (
                         isStickerImage ? (
                           <img

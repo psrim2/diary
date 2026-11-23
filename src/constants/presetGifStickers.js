@@ -12,7 +12,7 @@ export const PRESET_GIF_STICKERS = [
     category: 'gif',
     isGif: true,
     imageUrl: encodeSvg(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -12 130 126">
         <style>
           @keyframes heartbeat {
             0%, 100% { transform: scale(1); }
@@ -21,7 +21,7 @@ export const PRESET_GIF_STICKERS = [
             42% { transform: scale(1.15); }
             70% { transform: scale(1); }
           }
-          .heart { transform-origin: center; animation: heartbeat 1.2s ease-in-out infinite; }
+          .heart { transform-origin: 50px 48px; animation: heartbeat 1.2s ease-in-out infinite; }
         </style>
         <path class="heart" d="M50,88 C20,65 5,45 5,28 C5,13 16,3 30,3 C38,3 45,7 50,15 C55,7 62,3 70,3 C84,3 95,13 95,28 C95,45 80,65 50,88 Z" fill="#ff4d6d" stroke="#c9184a" stroke-width="2" />
       </svg>
@@ -33,13 +33,13 @@ export const PRESET_GIF_STICKERS = [
     category: 'gif',
     isGif: true,
     imageUrl: encodeSvg(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-20 -20 140 140">
         <style>
           @keyframes twinkle {
             0%, 100% { transform: scale(0.85) rotate(0deg); opacity: 0.85; }
             50% { transform: scale(1.18) rotate(180deg); opacity: 1; filter: drop-shadow(0 0 6px #facc15); }
           }
-          .star { transform-origin: center; animation: twinkle 1.8s ease-in-out infinite; }
+          .star { transform-origin: 50px 50px; animation: twinkle 1.8s ease-in-out infinite; }
         </style>
         <path class="star" d="M50 2 L58 35 L95 50 L58 65 L50 98 L42 65 L5 50 L42 35 Z" fill="#facc15" stroke="#eab308" stroke-width="2"/>
       </svg>
@@ -51,7 +51,7 @@ export const PRESET_GIF_STICKERS = [
     category: 'gif',
     isGif: true,
     imageUrl: encodeSvg(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -8 116 116">
         <style>
           @keyframes paw {
             0%, 100% { transform: rotate(0deg); }
@@ -81,7 +81,7 @@ export const PRESET_GIF_STICKERS = [
     category: 'gif',
     isGif: true,
     imageUrl: encodeSvg(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-5 -5 110 115">
         <style>
           @keyframes drop1 {
             0% { transform: translateY(0); opacity: 0; }
@@ -110,7 +110,7 @@ export const PRESET_GIF_STICKERS = [
     category: 'gif',
     isGif: true,
     imageUrl: encodeSvg(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-5 -20 110 120">
         <style>
           @keyframes steam {
             0% { transform: translateY(0) scaleX(1); opacity: 0; }
@@ -137,7 +137,7 @@ export const PRESET_GIF_STICKERS = [
     category: 'gif',
     isGif: true,
     imageUrl: encodeSvg(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -12 124 124">
         <style>
           @keyframes s1 { 0%, 100% { transform: scale(0.2); opacity: 0.1; } 50% { transform: scale(1.1); opacity: 1; } }
           @keyframes s2 { 0%, 100% { transform: scale(1.1); opacity: 1; } 50% { transform: scale(0.2); opacity: 0.1; } }
@@ -157,7 +157,7 @@ export const PRESET_GIF_STICKERS = [
     category: 'gif',
     isGif: true,
     imageUrl: encodeSvg(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -8 120 116">
         <style>
           @keyframes flame {
             0%, 100% { transform: scale(1) rotate(-3deg); }
@@ -178,7 +178,7 @@ export const PRESET_GIF_STICKERS = [
     category: 'gif',
     isGif: true,
     imageUrl: encodeSvg(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -8 124 116">
         <style>
           @keyframes sway {
             0%, 100% { transform: rotate(-15deg); }
@@ -200,7 +200,7 @@ export const PRESET_GIF_STICKERS = [
     category: 'gif',
     isGif: true,
     imageUrl: encodeSvg(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-10 -10 120 120">
         <style>
           @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
           .rays { transform-origin: 50px 50px; animation: spin 10s linear infinite; }
@@ -228,7 +228,7 @@ export const PRESET_GIF_STICKERS = [
     category: 'gif',
     isGif: true,
     imageUrl: encodeSvg(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -12 124 124">
         <style>
           @keyframes glow { 0%, 100% { opacity: 0.85; filter: drop-shadow(0 0 2px #e0e7ff); } 50% { opacity: 1; filter: drop-shadow(0 0 8px #818cf8); } }
           .moon { animation: glow 2.5s ease-in-out infinite; }
