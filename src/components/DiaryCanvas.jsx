@@ -126,7 +126,8 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
   // 모달 상태
   const [isWeatherOpen, setIsWeatherOpen] = useState(false);
-  const [repCategoryTab, setRepCategoryTab] = useState('weather'); // 날짜 옆에는 날씨 먼저 표시 (하단 툴과 차별화)
+  const [repCategoryTab, setRepCategoryTab] = useState('weather'); // 날씨 / 스티커 1차 분류
+  const [repStickerSubCategory, setRepStickerSubCategory] = useState('sticker'); // 스티커 선택 시 하위 카테고리 (MY, 스티커, 캐릭터 등)
   const [isPaperModalOpen, setIsPaperModalOpen] = useState(false);
   const [isStickerPaletteOpen, setIsStickerPaletteOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -135,12 +136,76 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
   // Firestore decorations 목록 (날짜 옆 대표 아이콘 선택용)
   const [decorations, setDecorations] = useState([]);
 
+  // 로컬 개인화 스티커 보관 (MY 카테고리)
+  const [myStickers, setMyStickers] = useState(() => {
+    try {
+      const raw = localStorage.getItem('analog_my_stickers');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // 날씨/대표 스티커 모달 열릴 때 최신 myStickers 갱신
+  useEffect(() => {
+    if (isWeatherOpen) {
+      try {
+        const raw = localStorage.getItem('analog_my_stickers');
+        if (raw) setMyStickers(JSON.parse(raw));
+      } catch {}
+    }
+  }, [isWeatherOpen]);
+
   useEffect(() => {
     const unsubscribe = subscribeToDecorations((items) => {
       setDecorations(items);
     });
     return () => unsubscribe();
   }, []);
+
+  // 대표 스티커 선택용 하위 카테고리 목록 (StickerPalette와 동일하게 가로 스크롤 노출)
+  const repStickerCategories = useMemo(() => {
+    const base = [
+      { id: 'my', label: 'MY' },
+      { id: 'sticker', label: '스티커' },
+      { id: 'character', label: '캐릭터' },
+      { id: 'emotion', label: '감정' },
+      { id: 'daily', label: '일상' },
+      { id: 'tape', label: '마스킹테이프' },
+      { id: 'food', label: '음식' },
+    ];
+    const existing = new Set(base.map((b) => b.id));
+    existing.add('weather');
+    existing.add('gif');
+    const dynamicCats = [];
+    (decorations || []).forEach((d) => {
+      if (d.category && !existing.has(d.category)) {
+        existing.add(d.category);
+        dynamicCats.push({ id: d.category, label: d.category });
+      }
+    });
+    return [...base, ...dynamicCats];
+  }, [decorations]);
+
+  // 선택된 대표 스티커 하위 카테고리별 에셋 필터링
+  const filteredRepStickers = useMemo(() => {
+    if (repStickerSubCategory === 'my') {
+      const cloudMy = decorations.filter((d) => d.category === 'my' || d.isPersonal);
+      const map = new Map();
+      myStickers.forEach((s) => map.set(s.id, s));
+      cloudMy.forEach((s) => {
+        if (!map.has(s.id)) map.set(s.id, s);
+      });
+      return Array.from(map.values());
+    } else if (repStickerSubCategory === 'sticker') {
+      const cloud = decorations.filter(
+        (d) => d.category === 'sticker' || (!d.category && !d.isPersonal && d.category !== 'weather')
+      );
+      return [...PRESET_GIF_STICKERS, ...cloud];
+    } else {
+      return decorations.filter((d) => d.category === repStickerSubCategory);
+    }
+  }, [repStickerSubCategory, decorations, myStickers]);
 
   // 텍스트 블록
   const [textBlocks, setTextBlocks] = useState(initialNormalized.textBlocks);
@@ -1567,15 +1632,15 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
 
               {isWeatherOpen && (
               <div 
-                className="absolute right-0 top-full mt-2 bg-white border border-stone-200 rounded-2xl shadow-xl overflow-hidden z-50 w-64 animate-fadeIn"
+                className="absolute right-0 top-full mt-2 bg-white border border-stone-200 rounded-2xl shadow-xl overflow-hidden z-50 w-72 sm:w-80 max-w-[calc(100vw-2rem)] animate-fadeIn flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* 카테고리 탭: 날씨 / 스티커 (날짜 옆에는 하단 툴과 달리 '날씨'를 먼저 표시) */}
-                <div className="flex border-b border-stone-100 bg-stone-50/60">
+                {/* 1차 분류 탭: 날씨 / 스티커 */}
+                <div className="flex border-b border-stone-100 bg-stone-50/60 shrink-0">
                   <button
                     type="button"
                     onClick={() => setRepCategoryTab('weather')}
-                    className={`flex-1 py-2 text-xs font-semibold border-b-2 transition ${
+                    className={`flex-1 py-2 text-xs font-semibold border-b-2 transition cursor-pointer ${
                       repCategoryTab === 'weather'
                         ? 'border-black font-bold text-black bg-white'
                         : 'border-transparent text-stone-400 hover:text-stone-700'
@@ -1586,7 +1651,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                   <button
                     type="button"
                     onClick={() => setRepCategoryTab('sticker')}
-                    className={`flex-1 py-2 text-xs font-semibold border-b-2 transition ${
+                    className={`flex-1 py-2 text-xs font-semibold border-b-2 transition cursor-pointer ${
                       repCategoryTab === 'sticker'
                         ? 'border-black font-bold text-black bg-white'
                         : 'border-transparent text-stone-400 hover:text-stone-700'
@@ -1595,6 +1660,26 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                     스티커
                   </button>
                 </div>
+
+                {/* 2. 스티커 탭 선택 시: 하위 카테고리 가로 스크롤 노출 (스티커 보관함과 동일) */}
+                {repCategoryTab === 'sticker' && (
+                  <div className="flex border-b border-stone-100 bg-[#f5f5f5]/60 overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap px-2.5 py-1.5 gap-1 shrink-0">
+                    {repStickerCategories.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setRepStickerSubCategory(cat.id)}
+                        className={`shrink-0 px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                          repStickerSubCategory === cat.id
+                            ? 'font-bold text-black bg-white shadow-2xs border border-stone-200/80'
+                            : 'text-stone-400 hover:text-stone-700 hover:bg-stone-200/50'
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* 선택된 탭 컨텐츠 */}
                 <div className="p-3 max-h-64 overflow-y-auto no-scrollbar">
@@ -1615,7 +1700,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                                     setWeather(item.imageUrl);
                                     setIsWeatherOpen(false);
                                   }}
-                                  className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition ${
+                                  className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition cursor-pointer ${
                                     weather === item.imageUrl ? 'bg-stone-200/90 ring-1 ring-black' : ''
                                   }`}
                                   title={item.name || item.fileName}
@@ -1643,7 +1728,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                                 setWeather(item.icon);
                                 setIsWeatherOpen(false);
                               }}
-                              className={`flex flex-col items-center justify-center p-2 rounded-xl hover:bg-stone-100 active:scale-95 transition ${
+                              className={`flex flex-col items-center justify-center p-2 rounded-xl hover:bg-stone-100 active:scale-95 transition cursor-pointer ${
                                 weather === item.icon ? 'bg-stone-200/90 ring-1 ring-black' : ''
                               }`}
                               title={item.label}
@@ -1664,7 +1749,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                               setWeather('');
                               setIsWeatherOpen(false);
                             }}
-                            className="text-[11px] text-stone-500 hover:text-red-500 font-medium py-1 px-3 rounded-lg hover:bg-stone-50 transition"
+                            className="text-[11px] text-stone-500 hover:text-red-500 font-medium py-1 px-3 rounded-lg hover:bg-stone-50 transition cursor-pointer"
                           >
                             선택 해제 (기본 + 로 변경)
                           </button>
@@ -1672,104 +1757,91 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                       )}
                     </div>
                   ) : (
-                    /* 스티커 탭 (움직이는 GIF + 커스텀 스티커 + 기본 데코 스탬프) */
+                    /* 스티커 탭: 가로 스크롤 카테고리별 스티커 그리드 */
                     <div className="space-y-3">
-                      {/* 1. 움직이는 GIF 스티커 프리셋 */}
-                      <div>
-                        <div className="text-[10px] font-bold text-stone-400 mb-1.5 px-0.5 flex items-center justify-between">
-                          <span>움직이는 GIF 스티커</span>
-                          <span className="text-[9px] px-1 bg-red-100 text-red-600 rounded font-bold">GIF</span>
+                      {filteredRepStickers.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-stone-400">
+                          {repStickerSubCategory === 'my'
+                            ? '등록된 내 스티커가 없습니다.'
+                            : '해당 카테고리에 등록된 스티커가 없습니다.'}
                         </div>
+                      ) : (
                         <div className="grid grid-cols-4 gap-2">
-                          {PRESET_GIF_STICKERS.map((item) => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => {
-                                setWeather(item.imageUrl);
-                                setIsWeatherOpen(false);
-                              }}
-                              className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition active:scale-95 ${
-                                weather === item.imageUrl ? 'bg-stone-200/90 ring-1 ring-black' : ''
-                              }`}
-                              title={item.name}
-                            >
-                              <img
-                                src={item.imageUrl}
-                                alt={item.name}
-                                className="w-8 h-8 object-contain block select-none"
-                              />
-                              <span className="text-[8px] text-stone-500 mt-0.5 truncate w-full text-center">
-                                {item.name}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+                          {filteredRepStickers.map((item) => {
+                            const isGifItem =
+                              item.category === 'gif' ||
+                              item.isGif ||
+                              item.fileName?.toLowerCase().endsWith('.gif') ||
+                              item.imageUrl?.startsWith('data:image/svg+xml');
 
-                      {/* 2. 업로드된 커스텀 스티커 및 GIF */}
-                      {decorations.filter((item) => item.category === 'sticker' || item.category === 'gif' || item.isGif).length > 0 && (
-                        <div>
-                          <div className="text-[10px] font-bold text-stone-400 mb-1.5 px-0.5">내 보관함 스티커</div>
-                          <div className="grid grid-cols-4 gap-2">
-                            {decorations
-                              .filter((item) => item.category === 'sticker' || item.category === 'gif' || item.isGif)
-                              .map((item) => (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setWeather(item.imageUrl);
-                                    setIsWeatherOpen(false);
-                                  }}
-                                  className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition ${
-                                    weather === item.imageUrl ? 'bg-stone-200/90 ring-1 ring-black' : ''
-                                  }`}
-                                  title={item.name || item.fileName}
-                                >
-                                  <img
-                                    src={item.imageUrl}
-                                    alt={item.name || '스티커'}
-                                    className="w-8 h-8 object-contain block select-none"
-                                  />
-                                </button>
-                              ))}
-                          </div>
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => {
+                                  setWeather(item.imageUrl);
+                                  setIsWeatherOpen(false);
+                                }}
+                                className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition active:scale-95 group relative cursor-pointer ${
+                                  weather === item.imageUrl ? 'bg-stone-200/90 ring-1 ring-black' : ''
+                                }`}
+                                title={item.name || item.fileName || item.category}
+                              >
+                                {isGifItem && (
+                                  <span className="absolute top-1 right-1 text-[7px] px-0.5 bg-stone-900/80 text-white rounded font-bold pointer-events-none">
+                                    GIF
+                                  </span>
+                                )}
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.name || '스티커'}
+                                  className="w-8 h-8 object-contain block select-none group-hover:scale-105 transition-transform"
+                                />
+                                <span className="text-[8px] text-stone-500 mt-0.5 truncate w-full text-center">
+                                  {item.name || item.fileName}
+                                </span>
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
 
-                      {/* 3. 기본 데코 스탬프 */}
-                      <div>
-                        <div className="text-[10px] font-bold text-stone-400 mb-1.5 px-0.5">기본 데코 스탬프</div>
-                        <div className="grid grid-cols-4 gap-2">
-                          {[
-                            { icon: '☕️', label: '커피' },
-                            { icon: '🌿', label: '나뭇잎' },
-                            { icon: '✨', label: '반짝임' },
-                            { icon: '💖', label: '하트' },
-                            { icon: '⭐', label: '별' },
-                            { icon: '🌷', label: '꽃' },
-                            { icon: '🍀', label: '클로버' },
-                            { icon: '🐾', label: '발자국' },
-                          ].map((item) => (
-                            <button
-                              key={item.icon}
-                              type="button"
-                              onClick={() => {
-                                setWeather(item.icon);
-                                setIsWeatherOpen(false);
-                              }}
-                              className={`flex flex-col items-center justify-center p-2 rounded-xl hover:bg-stone-100 active:scale-95 transition ${
-                                weather === item.icon ? 'bg-stone-200/90 ring-1 ring-black' : ''
-                              }`}
-                              title={item.label}
-                            >
-                              <span className="text-2xl leading-none select-none">{item.icon}</span>
-                              <span className="text-[9px] text-stone-500 mt-1 font-medium">{item.label}</span>
-                            </button>
-                          ))}
+                      {/* 스티커 카테고리일 때 추가로 기본 데코 스탬프도 하단에 제공 */}
+                      {repStickerSubCategory === 'sticker' && (
+                        <div>
+                          <div className="text-[10px] font-bold text-stone-400 mb-1.5 px-0.5 pt-2 border-t border-stone-100">
+                            기본 데코 스탬프
+                          </div>
+                          <div className="grid grid-cols-4 gap-2">
+                            {[
+                              { icon: '☕️', label: '커피' },
+                              { icon: '🌿', label: '나뭇잎' },
+                              { icon: '✨', label: '반짝임' },
+                              { icon: '💖', label: '하트' },
+                              { icon: '⭐', label: '별' },
+                              { icon: '🌷', label: '꽃' },
+                              { icon: '🍀', label: '클로버' },
+                              { icon: '🐾', label: '발자국' },
+                            ].map((item) => (
+                              <button
+                                key={item.icon}
+                                type="button"
+                                onClick={() => {
+                                  setWeather(item.icon);
+                                  setIsWeatherOpen(false);
+                                }}
+                                className={`flex flex-col items-center justify-center p-2 rounded-xl hover:bg-stone-100 active:scale-95 transition cursor-pointer ${
+                                  weather === item.icon ? 'bg-stone-200/90 ring-1 ring-black' : ''
+                                }`}
+                                title={item.label}
+                              >
+                                <span className="text-2xl leading-none select-none">{item.icon}</span>
+                                <span className="text-[9px] text-stone-500 mt-1 font-medium">{item.label}</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* 선택 해제 버튼 */}
                       {weather && (
@@ -1780,7 +1852,7 @@ export default function DiaryCanvas({ diary, diaryName, onSave, onDelete, onBack
                               setWeather('');
                               setIsWeatherOpen(false);
                             }}
-                            className="text-[11px] text-stone-500 hover:text-red-500 font-medium py-1 px-3 rounded-lg hover:bg-stone-50 transition"
+                            className="text-[11px] text-stone-500 hover:text-red-500 font-medium py-1 px-3 rounded-lg hover:bg-stone-50 transition cursor-pointer"
                           >
                             선택 해제 (기본 + 로 변경)
                           </button>

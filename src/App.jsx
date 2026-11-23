@@ -583,18 +583,32 @@ function DiaryMainApp() {
     setCurrentView('editor');
   };
 
+  // 연력(Yearly Calendar) 모달 열기 출처 ('calendar' 또는 'list')
+  const [yearViewSource, setYearViewSource] = useState('calendar');
+
   // 연력(Yearly Calendar) 모달 열기
-  const handleOpenYearView = (year) => {
+  const handleOpenYearView = (year, source = 'calendar') => {
     setYearViewYear(year || new Date().getFullYear());
+    setYearViewSource(source);
     setIsYearViewOpen(true);
   };
 
-  // 연력 모달에서 특정 월 선택 시 달력 화면으로 이동
+  // 연력 모달에서 특정 월 선택 시 이동:
+  // - 목록에서 연력을 열었다면 목록 뷰를 유지하고 해당 월 목록으로 이동
+  // - 달력에서 연력을 열었다면 달력 뷰로 이동
   const handleSelectYearMonth = (year, monthIdx) => {
     const targetDate = new Date(year, monthIdx, 1);
     setCalendarViewingDate(targetDate);
-    setCurrentView('calendar');
     setIsYearViewOpen(false);
+
+    if (yearViewSource === 'list') {
+      setCurrentView('list');
+      setPreviousView('list');
+      setIsReturningFromEditor(false);
+    } else {
+      setCurrentView('calendar');
+      setPreviousView('calendar');
+    }
   };
 
   // 오늘 날짜로 이동 (상단 헤더 오늘 버튼 클릭)
@@ -759,7 +773,7 @@ function DiaryMainApp() {
                   selectedDate={activeEditorDiary?.date}
                   onMonthChange={setCalendarViewingDate}
                   initialDate={calendarViewingDate}
-                  onOpenYearView={handleOpenYearView}
+                  onOpenYearView={(y) => handleOpenYearView(y, 'calendar')}
                 />
               )}
 
@@ -777,7 +791,7 @@ function DiaryMainApp() {
                   isReturningFromEditor={isReturningFromEditor}
                   onSaveScrollTop={setSavedListScrollTop}
                   onRestoreScrollComplete={() => setIsReturningFromEditor(false)}
-                  onOpenYearView={handleOpenYearView}
+                  onOpenYearView={(y) => handleOpenYearView(y, 'list')}
                 />
               )}
             </div>
@@ -801,6 +815,9 @@ function DiaryMainApp() {
               }
             }}
             onBack={() => {
+              if (previousView === 'list') {
+                setIsReturningFromEditor(true);
+              }
               setCurrentView(previousView || 'calendar');
               setSelectedDiary(null);
             }}

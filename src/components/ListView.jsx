@@ -583,28 +583,47 @@ export default function ListView({
 
   const monthKeys = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
 
+  // 스크롤 복원 진행 중 플래그 (월 자동 스크롤과 충돌 방지)
+  const isRestoringScrollRef = useRef(false);
+
   // 스크롤 위치 관리:
   // 1) 다이어리 작성/확인 후 목록으로 복귀 시: 직전 스크롤 위치를 그대로 복원
   useEffect(() => {
     if (!isActive || !isReturningFromEditor) return;
 
+    isRestoringScrollRef.current = true;
     const container = listContainerRef.current;
-    if (!container) return;
+    const restorePos = typeof savedScrollTop === 'number' ? savedScrollTop : 0;
 
-    if (typeof savedScrollTop === 'number') {
-      container.scrollTop = savedScrollTop;
+    if (container) {
+      container.scrollTop = restorePos;
     }
+
+    // 모바일 렌더링 타이밍 보장을 위해 rAF 및 지연 재적용
+    const rafId = requestAnimationFrame(() => {
+      if (listContainerRef.current) {
+        listContainerRef.current.scrollTop = restorePos;
+      }
+    });
+
     const timer = setTimeout(() => {
-      if (listContainerRef.current && typeof savedScrollTop === 'number') {
-        listContainerRef.current.scrollTop = savedScrollTop;
+      if (listContainerRef.current) {
+        listContainerRef.current.scrollTop = restorePos;
       }
       onRestoreScrollComplete?.();
-    }, 40);
+      setTimeout(() => {
+        isRestoringScrollRef.current = false;
+      }, 100);
+    }, 60);
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timer);
+    };
   }, [isActive, isReturningFromEditor, savedScrollTop, onRestoreScrollComplete]);
 
-  // 2) 탭 전환 또는 달력 월 변경 시: 보고 있던 달력 월의 리스트가 상단에 보이도록 스크롤 (1회만 수행, 사용자 스크롤 방해 방지)
+  // 2) 달력 -> 목록 탭 전환 시 또는 연력에서 월 선택 시에만 해당 월 위치로 1회 스크롤
+  // (에디터 복귀 시에는 절대 실행되지 않음!)
   const lastScrolledTargetRef = useRef(null);
 
   useEffect(() => {
@@ -612,18 +631,26 @@ export default function ListView({
       lastScrolledTargetRef.current = null;
       return;
     }
-    if (isReturningFromEditor) return;
+
+    // 에디터에서 복귀하는 중이거나 복귀 완료 직후 세션에서는 월 자동 스크롤 절대 금지
+    if (isReturningFromEditor || isRestoringScrollRef.current) {
+      lastScrolledTargetRef.current = 'DONT_SCROLL';
+      return;
+    }
+
+    if (lastScrolledTargetRef.current === 'DONT_SCROLL') return;
 
     const targetDate = calendarViewingDate || new Date();
     const targetYear = targetDate.getFullYear();
     const targetMonth = targetDate.getMonth() + 1;
     const targetKey = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
 
-    // 이미 이 월로 스크롤한 적이 있다면 스크롤 재실행하지 않음 (스크롤 시 상단으로 튕기는 현상 완벽 방지)
+    // 이미 이 월로 스크롤한 적이 있다면 스크롤 재실행하지 않음
     if (lastScrolledTargetRef.current === targetKey) return;
     lastScrolledTargetRef.current = targetKey;
 
     const timer = setTimeout(() => {
+      if (isReturningFromEditor || isRestoringScrollRef.current) return;
       const c = listContainerRef.current;
       if (!c) return;
 
@@ -631,9 +658,20 @@ export default function ListView({
       if (targetEl) {
         c.scrollTo({ top: targetEl.offsetTop, behavior: 'smooth' });
       } else {
-        const availableKeys = Object.keys(groupedByMonth).sort((a, b) => b.localeCompare(a));
+        // 클릭한 달의 일기가 없는 경우: 클릭한 달과 가장 가까운 달 중 일기가 있는 달의 목록으로 이동
+        const availableKeys = Object.keys(groupedByMonth);
         if (availableKeys.length > 0) {
-          const closestKey = availableKeys.find(k => k <= targetKey) || availableKeys[availableKeys.length - 1];
+          let closestKey = availableKeys[0];
+          let minDiff = Infinity;
+          const targetTotal = targetYear * 12 + targetMonth;
+          availableKeys.forEach((k) => {
+            const [ky, km] = k.split('-').map(Number);
+            const diff = Math.abs((ky * 12 + km) - targetTotal);
+            if (diff < minDiff) {
+              minDiff = diff;
+              closestKey = k;
+            }
+          });
           const closestEl = document.getElementById(`month-group-${closestKey}`);
           if (closestEl) {
             c.scrollTo({ top: closestEl.offsetTop, behavior: 'smooth' });
@@ -652,15 +690,6 @@ export default function ListView({
     }
     onSelectDiary(diary);
   };
-
-  // 컴포넌트 비활성화/언마운트 시 현재 스크롤 위치 보존
-  useEffect(() => {
-    return () => {
-      if (listContainerRef.current) {
-        onSaveScrollTop?.(listContainerRef.current.scrollTop);
-      }
-    };
-  }, [onSaveScrollTop]);
 
   // 검색 옆 [오늘] 버튼 클릭 시 오늘 월 위치로 스크롤 이동
   const handleGoToTodayMonth = () => {
