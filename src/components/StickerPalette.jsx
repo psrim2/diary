@@ -208,7 +208,7 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
           </div>
 
           <div className="flex items-center space-x-2">
-            {/* 직접 GIF / 이미지 추가 버튼 */}
+            {/* 직접 GIF / 이미지 추가 input (MY 카테고리 전용) */}
             <input
               type="file"
               ref={fileInputRef}
@@ -216,22 +216,25 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
               onChange={handleDirectUpload}
               className="hidden"
             />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="flex items-center space-x-1 px-2.5 py-1 text-xs bg-stone-900 hover:bg-black text-white rounded-lg font-medium active:scale-95 transition shadow-2xs disabled:opacity-50 cursor-pointer"
-              title="내 기기에서 직접 스티커/GIF를 추가하여 MY 카테고리에 등록"
-            >
-              {isUploading ? (
-                <span>등록 중...</span>
-              ) : (
-                <>
-                  <Plus size={13} strokeWidth={2.5} />
-                  <span>내 스티커 등록</span>
-                </>
-              )}
-            </button>
+            {/* 내 스티커 등록은 MY 카테고리에서만 노출 (나머지는 어드민에서 관리) */}
+            {selectedCategory === 'my' && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="flex items-center space-x-1 px-2.5 py-1 text-xs bg-stone-900 hover:bg-black text-white rounded-lg font-medium active:scale-95 transition shadow-2xs disabled:opacity-50 cursor-pointer"
+                title="내 기기에서 직접 스티커/GIF를 추가하여 MY 카테고리에 등록"
+              >
+                {isUploading ? (
+                  <span>등록 중...</span>
+                ) : (
+                  <>
+                    <Plus size={13} strokeWidth={2.5} />
+                    <span>내 스티커 등록</span>
+                  </>
+                )}
+              </button>
+            )}
 
             <button
               type="button"
@@ -299,13 +302,19 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
                   ? '등록된 내 스티커가 없습니다.'
                   : `등록된 ${allCategories.find((c) => c.id === selectedCategory)?.label || ''} 에셋이 없습니다.`}
               </p>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="text-xs text-stone-700 underline font-semibold mt-1 cursor-pointer"
-              >
-                + 내 기기에서 직접 스티커 추가하기
-              </button>
+              {selectedCategory === 'my' ? (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs text-stone-800 underline font-semibold mt-1 cursor-pointer hover:text-black"
+                >
+                  + 내 기기에서 직접 스티커 추가하기
+                </button>
+              ) : (
+                <p className="text-[11px] text-stone-400 mt-0.5">
+                  해당 카테고리는 관리자 페이지에서 에셋을 등록하고 관리합니다.
+                </p>
+              )}
             </div>
           ) : (
             <>
@@ -315,6 +324,23 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
                 </p>
               )}
               <div className="grid grid-cols-4 gap-2.5">
+                {/* MY 카테고리일 때 첫 번째 슬롯에 직관적인 + 추가 버튼 노출 */}
+                {selectedCategory === 'my' && !isDeleteMode && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="w-full p-2 border-2 border-dashed border-stone-300 hover:border-black rounded-xl bg-stone-50 hover:bg-white flex flex-col items-center justify-center space-y-1.5 transition active:scale-95 group cursor-pointer"
+                    title="내 기기에서 새 스티커 추가"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-stone-200/80 flex items-center justify-center text-stone-600 group-hover:bg-black group-hover:text-white transition-colors">
+                      <Plus size={18} strokeWidth={2.5} />
+                    </div>
+                    <span className="text-[10px] text-stone-600 font-bold truncate w-full text-center">
+                      스티커 추가
+                    </span>
+                  </button>
+                )}
                 {filteredItems.map((item) => {
                   const isGifItem =
                     item.category === 'gif' ||

@@ -342,10 +342,10 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
         </div>
       </div>
 
-      {/* [앞면: 박스 묶음 전체 슬라이딩] */}
+      {/* [앞면: 박스 묶음 전체 슬라이딩 (배경 삭제 버튼 z-0 위에 위치하되 sticky 헤더 z-30 아래로 슬라이드되도록 z-[1] 적용)] */}
       <div
         style={{ transform: `translateX(${translateX}px)` }}
-        className={`relative z-10 bg-white rounded-3xl p-4 sm:p-5 shadow-xs cursor-pointer transition-all touch-pan-y ${
+        className={`relative z-[1] bg-white rounded-3xl p-4 sm:p-5 shadow-xs cursor-pointer transition-all touch-pan-y ${
           isSwiping ? '' : 'duration-200 ease-out'
         } ${
           isSelected
@@ -585,30 +585,43 @@ export default function ListView({
 
   // 스크롤 위치 관리:
   // 1) 다이어리 작성/확인 후 목록으로 복귀 시: 직전 스크롤 위치를 그대로 복원
-  // 2) 탭 전환 또는 달력 월 변경 시: 보고 있던 달력 월의 리스트가 상단에 보이도록 스크롤
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !isReturningFromEditor) return;
 
     const container = listContainerRef.current;
     if (!container) return;
 
-    if (isReturningFromEditor) {
-      if (typeof savedScrollTop === 'number') {
-        container.scrollTop = savedScrollTop;
-      }
-      const timer = setTimeout(() => {
-        if (listContainerRef.current && typeof savedScrollTop === 'number') {
-          listContainerRef.current.scrollTop = savedScrollTop;
-        }
-        onRestoreScrollComplete?.();
-      }, 30);
-      return () => clearTimeout(timer);
+    if (typeof savedScrollTop === 'number') {
+      container.scrollTop = savedScrollTop;
     }
+    const timer = setTimeout(() => {
+      if (listContainerRef.current && typeof savedScrollTop === 'number') {
+        listContainerRef.current.scrollTop = savedScrollTop;
+      }
+      onRestoreScrollComplete?.();
+    }, 40);
+
+    return () => clearTimeout(timer);
+  }, [isActive, isReturningFromEditor, savedScrollTop, onRestoreScrollComplete]);
+
+  // 2) 탭 전환 또는 달력 월 변경 시: 보고 있던 달력 월의 리스트가 상단에 보이도록 스크롤 (1회만 수행, 사용자 스크롤 방해 방지)
+  const lastScrolledTargetRef = useRef(null);
+
+  useEffect(() => {
+    if (!isActive) {
+      lastScrolledTargetRef.current = null;
+      return;
+    }
+    if (isReturningFromEditor) return;
 
     const targetDate = calendarViewingDate || new Date();
     const targetYear = targetDate.getFullYear();
     const targetMonth = targetDate.getMonth() + 1;
     const targetKey = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
+
+    // 이미 이 월로 스크롤한 적이 있다면 스크롤 재실행하지 않음 (스크롤 시 상단으로 튕기는 현상 완벽 방지)
+    if (lastScrolledTargetRef.current === targetKey) return;
+    lastScrolledTargetRef.current = targetKey;
 
     const timer = setTimeout(() => {
       const c = listContainerRef.current;
@@ -630,7 +643,24 @@ export default function ListView({
     }, 80);
 
     return () => clearTimeout(timer);
-  }, [isActive, calendarViewingDate, isReturningFromEditor, savedScrollTop]);
+  }, [isActive, calendarViewingDate, isReturningFromEditor]);
+
+  // 다이어리 카드 클릭 시 현재 리스트의 스크롤 위치를 저장한 뒤 에디터로 진입
+  const handleSelectCard = (diary) => {
+    if (listContainerRef.current) {
+      onSaveScrollTop?.(listContainerRef.current.scrollTop);
+    }
+    onSelectDiary(diary);
+  };
+
+  // 컴포넌트 비활성화/언마운트 시 현재 스크롤 위치 보존
+  useEffect(() => {
+    return () => {
+      if (listContainerRef.current) {
+        onSaveScrollTop?.(listContainerRef.current.scrollTop);
+      }
+    };
+  }, [onSaveScrollTop]);
 
   // 검색 옆 [오늘] 버튼 클릭 시 오늘 월 위치로 스크롤 이동
   const handleGoToTodayMonth = () => {
@@ -683,16 +713,12 @@ export default function ListView({
         }
       }}
       onScroll={(e) => {
-        const currentScrollTop = e.currentTarget.scrollTop;
-        if (onSaveScrollTop) {
-          onSaveScrollTop(currentScrollTop);
-        }
         // 스크롤 시 열려 있는 스와이프 삭제 카드가 있으면 제자리로 복귀
         if (openSwipeCardId) {
           setOpenSwipeCardId(null);
         }
         // 사용자가 터치로 직접 스크롤을 30px 이상 의미있게 내렸을 때 키보드 내림 처리
-        if (isUserTouchingRef.current && currentScrollTop > 30) {
+        if (isUserTouchingRef.current && e.currentTarget.scrollTop > 30) {
           if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
             document.activeElement.blur();
           }
@@ -759,8 +785,8 @@ export default function ListView({
 
             return (
               <div key={key} id={`month-group-${key}`} className="relative">
-                {/* 8. 목록 월, 년도 영문 표기 sticky로 달력 목록 아래 표기 되고, 새로운 달로 넘어갈 경우 교체 스크롤되도록 수정 */}
-                <div className="sticky top-0 z-10 bg-[#fafafa]/95 backdrop-blur-xs pt-2.5 pb-2 -mx-6 px-10 sm:px-11 border-b border-stone-200/40">
+                {/* 8. 목록 월, 년도 영문 표기 sticky: z-30 및 완전 불투명 배경(#fafafa)으로 카드 스크롤 시 최상위 고정 유지 */}
+                <div className="sticky top-0 z-30 bg-[#fafafa] pt-2.5 pb-2 -mx-6 px-6 border-b border-stone-200/60 shadow-xs">
                   <div className="flex items-end justify-between">
                     <div className="text-5xl sm:text-6xl font-black text-black leading-none tracking-tight select-none">
                       {group.month}
@@ -790,7 +816,7 @@ export default function ListView({
                       key={diary.id}
                       diary={diary}
                       isSelected={selectedDiaryId === diary.id || (selectedDate && selectedDate === diary.date)}
-                      onSelect={onSelectDiary}
+                      onSelect={handleSelectCard}
                       onDelete={onDeleteDiary}
                       isSwipeOpen={openSwipeCardId === diary.id}
                       onSwipeOpen={() => setOpenSwipeCardId(diary.id)}

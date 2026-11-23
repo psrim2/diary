@@ -365,7 +365,7 @@ export default function CalendarView({
             {month + 1}
           </div>
 
-          <div className="flex items-center gap-[10px] pb-1">
+          <div className="pb-1">
             {/* 2026 November 클릭 시 1년 단위 연력 모달 표출 */}
             <button
               type="button"
@@ -386,16 +386,6 @@ export default function CalendarView({
               <div className="text-xs sm:text-sm font-bold text-black leading-tight group-hover:underline">
                 {MONTH_NAMES_EN[month]}
               </div>
-            </button>
-
-            {/* 참고 이미지의 [오늘] 버튼과 동일하게 구현: 44px 원형 버튼 */}
-            <button
-              type="button"
-              onClick={handleGoToToday}
-              className="w-[44px] h-[44px] rounded-full bg-white border border-stone-300 shadow-xs flex items-center justify-center font-bold text-xs sm:text-sm text-stone-900 active:scale-95 hover:bg-stone-50 transition-all cursor-pointer select-none shrink-0"
-              title="오늘 날짜로 이동"
-            >
-              오늘
             </button>
           </div>
         </div>
