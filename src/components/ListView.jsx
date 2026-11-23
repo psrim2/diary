@@ -673,6 +673,14 @@ export default function ListView({
     };
   }, [isActive, isReturningFromEditor, savedScrollTop, onRestoreScrollComplete]);
 
+  // 컨테이너 내부의 임의 요소(중첩 relative 부모 포함)의 정확한 스크롤 Top 계산 헬퍼
+  const getElementScrollTopInContainer = (el, container) => {
+    if (!el || !container) return 0;
+    const elRect = el.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    return elRect.top - containerRect.top + container.scrollTop;
+  };
+
   // 특정 월로 부드럽게 스크롤 이동 헬퍼
   const scrollToMonthKey = (targetKey, targetYear, targetMonth) => {
     const c = listContainerRef.current;
@@ -680,7 +688,8 @@ export default function ListView({
 
     const targetEl = document.getElementById(`month-group-${targetKey}`);
     if (targetEl) {
-      c.scrollTo({ top: Math.max(0, targetEl.offsetTop - 10), behavior: 'smooth' });
+      const topPos = getElementScrollTopInContainer(targetEl, c);
+      c.scrollTo({ top: Math.max(0, topPos - 10), behavior: 'smooth' });
     } else {
       // 클릭한 달의 일기가 없는 경우: 클릭한 달과 가장 가까운 달 중 일기가 있는 달의 목록으로 이동
       const availableKeys = Object.keys(groupedByMonth);
@@ -698,7 +707,8 @@ export default function ListView({
         });
         const closestEl = document.getElementById(`month-group-${closestKey}`);
         if (closestEl) {
-          c.scrollTo({ top: Math.max(0, closestEl.offsetTop - 10), behavior: 'smooth' });
+          const topPos = getElementScrollTopInContainer(closestEl, c);
+          c.scrollTo({ top: Math.max(0, topPos - 10), behavior: 'smooth' });
         }
       }
     }
@@ -713,17 +723,19 @@ export default function ListView({
     const todayDateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     const todayMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-    // 1) 오늘 날짜의 일기 카드가 있는 경우 해당 카드로 직접 스크롤 (헤더 고려 오프셋)
+    // 1) 오늘 날짜의 일기 카드가 있는 경우 해당 카드로 직접 스크롤 (정확한 container 상대 좌표)
     const todayCardEl = document.getElementById(`diary-card-${todayDateStr}`);
     if (todayCardEl) {
-      c.scrollTo({ top: Math.max(0, todayCardEl.offsetTop - 65), behavior: 'smooth' });
+      const cardTop = getElementScrollTopInContainer(todayCardEl, c);
+      c.scrollTo({ top: Math.max(0, cardTop - 70), behavior: 'smooth' });
       return;
     }
 
     // 2) 오늘 일기가 없으면 이번 달 헤더로 스크롤
     const todayMonthEl = document.getElementById(`month-group-${todayMonthKey}`);
     if (todayMonthEl) {
-      c.scrollTo({ top: Math.max(0, todayMonthEl.offsetTop - 10), behavior: 'smooth' });
+      const topPos = getElementScrollTopInContainer(todayMonthEl, c);
+      c.scrollTo({ top: Math.max(0, topPos - 10), behavior: 'smooth' });
       return;
     }
 
@@ -731,7 +743,7 @@ export default function ListView({
     scrollToMonthKey(todayMonthKey, now.getFullYear(), now.getMonth() + 1);
   };
 
-  // 2) 연력에서 월 선택 시 또는 오늘 버튼 클릭 시 명시적 스크롤 트리거 처리
+  // 2) 연력에서 월 선택 시, 일기에서 복귀 시, 또는 오늘 버튼 클릭 시 명시적 스크롤 트리거 처리
   const lastScrolledTargetRef = useRef(null);
 
   useEffect(() => {
@@ -751,7 +763,9 @@ export default function ListView({
         const { dateStr, year, monthIdx } = listScrollTrigger;
         const targetCardEl = document.getElementById(`diary-card-${dateStr}`);
         if (targetCardEl) {
-          c.scrollTo({ top: Math.max(0, targetCardEl.offsetTop - 65), behavior: 'smooth' });
+          // getBoundingClientRect 기반의 정확한 절대 위치 계산 (중첩 relative 부모 offset 오류 완벽 해결)
+          const cardTop = getElementScrollTopInContainer(targetCardEl, c);
+          c.scrollTo({ top: Math.max(0, cardTop - 70), behavior: 'smooth' });
         } else {
           const targetMonth = monthIdx + 1;
           const targetKey = `${year}-${String(targetMonth).padStart(2, '0')}`;
@@ -769,7 +783,7 @@ export default function ListView({
     return () => clearTimeout(timer);
   }, [isActive, listScrollTrigger]);
 
-  // 3) 달력 -> 목록 탭 전환 시 보고 있던 달의 위치로 1회 스크롤
+  // 3) 달력 -> 목록 탭 전환 시 보고 있던 달의 위치로 1회 스크롤 (명시적 트리거가 없을 때만)
   useEffect(() => {
     if (!isActive) {
       lastScrolledTargetRef.current = null;
@@ -777,7 +791,7 @@ export default function ListView({
     }
 
     // 에디터에서 복귀하는 중이거나 복귀 완료 직후 세션에서는 탭 전환 월 자동 스크롤 금지
-    if (isReturningFromEditor || isRestoringScrollRef.current) {
+    if (isReturningFromEditor || isRestoringScrollRef.current || listScrollTrigger) {
       return;
     }
 

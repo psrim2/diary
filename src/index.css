@@ -178,66 +178,36 @@ canvas {
    - 부드러운 3D 원근감과 음영을 적용하여 실제 종이가 사각거리며 넘어가는 느낌 연출
    ================================================================ */
 .calendar-page-container {
-  perspective: 1200px;
-  transform-style: preserve-3d;
-  will-change: transform, opacity;
-}
-
-@keyframes calendarTurnEnterFromRight {
-  0% {
-    opacity: 0.9;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-@keyframes calendarTurnEnterFromLeft {
-  0% {
-    opacity: 0.9;
-  }
-  100% {
-    opacity: 1;
-  }
+  will-change: transform;
 }
 
 @keyframes calendarTurnExitToLeft {
   0% {
-    transform: translateX(0) scale(1);
+    transform: translateX(0);
     opacity: 1;
   }
   100% {
-    transform: translateX(-100%) scale(0.98);
-    opacity: 0.7;
-    box-shadow: 15px 0 35px rgba(0, 0, 0, 0.1);
+    transform: translateX(calc(-100% - 32px));
+    opacity: 1;
   }
 }
 
 @keyframes calendarTurnExitToRight {
   0% {
-    transform: translateX(0) scale(1);
+    transform: translateX(0);
     opacity: 1;
   }
   100% {
-    transform: translateX(100%) scale(0.98);
-    opacity: 0.7;
-    box-shadow: -15px 0 35px rgba(0, 0, 0, 0.1);
+    transform: translateX(calc(100% + 32px));
+    opacity: 1;
   }
 }
 
-.anim-page-enter-right {
-  animation: calendarTurnEnterFromRight 0.18s ease-out forwards;
-}
-
-.anim-page-enter-left {
-  animation: calendarTurnEnterFromLeft 0.18s ease-out forwards;
-}
-
 .anim-page-exit-left {
-  animation: calendarTurnExitToLeft 0.22s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: calendarTurnExitToLeft 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
 }
 
 .anim-page-exit-right {
-  animation: calendarTurnExitToRight 0.22s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: calendarTurnExitToRight 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
 }
 
