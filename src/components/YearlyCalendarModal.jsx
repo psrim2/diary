@@ -16,7 +16,11 @@ export default function YearlyCalendarModal({
   onGoToToday,
 }) {
   const todayRef = new Date();
-  const [currentYear, setCurrentYear] = useState(() => initialYear || todayRef.getFullYear());
+  const todayYear = todayRef.getFullYear();
+  const todayMonth = todayRef.getMonth();
+  const todayDate = todayRef.getDate();
+  const localTodayStr = `${todayYear}-${String(todayMonth + 1).padStart(2, '0')}-${String(todayDate).padStart(2, '0')}`;
+  const [currentYear, setCurrentYear] = useState(() => initialYear || todayYear);
 
   useEffect(() => {
     if (initialYear) {
@@ -210,10 +214,7 @@ export default function YearlyCalendarModal({
                   return <div key={`empty-${cIdx}`} className="h-4 sm:h-5" />;
                 }
 
-                const isCellToday = 
-                  currentYear === todayRef.getFullYear() &&
-                  m.monthIdx === todayRef.getMonth() &&
-                  c.day === todayRef.getDate();
+                const isCellToday = c.dateStr === localTodayStr;
                 const colDayOfWeek = cIdx % 7;
                 const isCellWeekend = colDayOfWeek === 0 || colDayOfWeek === 6;
                 const hasDiary = !!c.diary;
@@ -233,10 +234,17 @@ export default function YearlyCalendarModal({
                     title={`${c.dateStr} ${m.monthIdx + 1}월 달력 보기`}
                   >
                     {hasDiary ? (
-                      <span 
-                        className="w-[10px] h-[10px] rounded-full border-[2px] border-black block select-none shrink-0" 
-                        title={`${c.dateStr} 일기 있음`}
-                      />
+                      isCellToday ? (
+                        <span 
+                          className="w-[10px] h-[10px] rounded-full bg-black block select-none shrink-0" 
+                          title={`${c.dateStr} 오늘 (일기 있음)`}
+                        />
+                      ) : (
+                        <span 
+                          className="w-[10px] h-[10px] rounded-full border-[2px] border-black block select-none shrink-0" 
+                          title={`${c.dateStr} 일기 있음`}
+                        />
+                      )
                     ) : isCellToday ? (
                       <span className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-black text-white flex items-center justify-center font-bold text-[9px] sm:text-[10px] leading-none shadow-xs">
                         {c.day}
