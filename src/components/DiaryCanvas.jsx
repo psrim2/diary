@@ -159,7 +159,7 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
       {/* 속지 컨텐츠 */}
       <div className="flex-1 w-full overflow-hidden px-3.5 sm:px-6 relative">
         <div 
-          style={{ minHeight: `${paperHeightPx}px` }}
+          style={{ minHeight: '100%', height: '100%' }}
           className={`w-full relative isolate ${paperClass}`}
         >
           {/* 드로잉 스트로크 */}
@@ -573,29 +573,28 @@ export default function DiaryCanvas({
     let maxY = 0;
     (stickers || []).forEach((s) => {
       if (!s) return;
-      const approxH = (s.height || (s.imageUrl ? 240 : 60)) * (s.scale || 1);
+      const isTape = s.category === 'tape' || s.type === 'tape';
+      const approxH = (s.height || (isTape ? 32 : 60)) * (s.scale || 1);
       const bottom = ((s.y || 0) + approxH) * scaleRatio;
       if (bottom > maxY) maxY = bottom;
     });
+
     (textBlocks || []).forEach((t) => {
-      if (!t) return;
-      const text = t.text || '';
-      // 줄바꿈 및 글자수에 따른 동적 높이 계산 (줄바꿈이 길거나 텍스트 박스가 많을 때 잘림 없이 하단 스크롤 확보)
+      if (!t || !t.text || t.text.trim().length === 0) return;
+      const text = t.text;
       const lineCount = text.split('\n').reduce((acc, line) => {
         const estWrapped = Math.max(1, Math.ceil((line.length * 12) / (t.width || CANONICAL_WIDTH)));
         return acc + estWrapped;
       }, 0);
-      const approxLineH = Math.max(26, Math.round((t.fontSize || 18) * 1.5));
-      const approxHeight = Math.max(50, lineCount * approxLineH + 24) * (t.scale || 1);
-      const measuredHeight = textareaRefs.current?.[t.id]?.offsetHeight
-        ? (textareaRefs.current[t.id].offsetHeight / (scaleRatio || 1))
-        : 0;
-      const blockH = Math.max(approxHeight, measuredHeight);
-      const bottom = ((t.y || 0) + blockH) * scaleRatio;
+      const approxLineH = Math.max(24, Math.round((t.fontSize || 18) * 1.4));
+      const approxHeight = Math.max(36, lineCount * approxLineH + 16) * (t.scale || 1);
+      const bottom = ((t.y || 0) + approxHeight) * scaleRatio;
       if (bottom > maxY) maxY = bottom;
     });
-    (strokesHistory || []).forEach((stroke) => {
-      if (!stroke) return;
+
+    const activeStrokes = strokesHistory.slice(0, historyIndex + 1);
+    activeStrokes.forEach((stroke) => {
+      if (!stroke || stroke.tool === 'eraser') return;
       (stroke.points || []).forEach((pt) => {
         if (!pt) return;
         const bottom = pt.y * scaleRatio;
@@ -603,21 +602,33 @@ export default function DiaryCanvas({
       });
     });
     return maxY;
-  }, [stickers, textBlocks, strokesHistory, scaleRatio]);
+  }, [stickers, textBlocks, strokesHistory, historyIndex, scaleRatio]);
+
+  // 뷰 모드에서 실제 컨텐츠가 화면 가시 영역을 벗어나는지 여부 판별 (미초과 시 세로 스크롤 완전 방지)
+  const isContentOverflowing = useMemo(() => {
+    if (!isViewMode) return true;
+    const availableH = containerHeight > 0 ? containerHeight : 550;
+    return contentMaxBottomPx > availableH;
+  }, [isViewMode, containerHeight, contentMaxBottomPx]);
 
   // 모바일/태블릿 가상 키보드 높이 감지 (툴바가 키보드 위로 올라오도록 오프셋 계산)
   const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   // 속지 최소 높이 동적 계산:
-  // 1) 기본적으로 화면 높이보다 380px 더 길어서, 항상 하단 플로팅 툴바 위로 넉넉하게 스크롤 가능
-  // 2) 컨텐츠(손글씨, 스티커, 사진)가 아래로 내려갈수록 바닥 아래 380px 여유 공간을 두고 무한 확장되어 절대 잘리지 않음
-  // 3) 가상 키보드 활성화 시 글상자가 키보드 위로 편안하게 스크롤될 수 있도록 하단 여백 추가 확보
+  // 1) 뷰 모드에서는 컨텐츠가 넘치지 않으면 가시 높이에 맞추고, 넘칠 때만 필요한 만큼 확장
+  // 2) 편집 모드에서는 하단 플로팅 툴바 및 가상 키보드 위로 스크롤 가능하도록 여유 여백(+380px) 확보
   const paperHeightPx = useMemo(() => {
+    if (isViewMode) {
+      if (!isContentOverflowing) {
+        return containerHeight > 0 ? containerHeight : 550;
+      }
+      return Math.round(contentMaxBottomPx + 40);
+    }
     const extraBottom = keyboardOffset > 0 ? 460 : 380;
     const baseMin = (containerHeight > 0 ? containerHeight : 700) + extraBottom;
     const contentNeeded = contentMaxBottomPx > 0 ? contentMaxBottomPx + extraBottom : 0;
     return Math.round(Math.max(baseMin, contentNeeded));
-  }, [containerHeight, contentMaxBottomPx, keyboardOffset]);
+  }, [isViewMode, isContentOverflowing, containerHeight, contentMaxBottomPx, keyboardOffset]);
 
   // 이벤트 리스너 및 타이머 내 최신 상태 동기화용 refs
   const selectedTextIdRef = useRef(selectedTextId);
@@ -2423,13 +2434,18 @@ export default function DiaryCanvas({
           }
         }}
         style={{
-          WebkitOverflowScrolling: 'touch',
-          overscrollBehaviorY: 'contain',
+          WebkitOverflowScrolling: isViewMode && !isContentOverflowing ? 'auto' : 'touch',
+          overscrollBehaviorY: isViewMode && !isContentOverflowing ? 'none' : 'auto',
+          touchAction: isViewMode 
+            ? (isContentOverflowing ? 'pan-y' : 'pan-x') 
+            : (activeToolMode === 'pen' ? 'none' : 'pan-y'),
           WebkitTouchCallout: 'none',
           userSelect: 'none',
           WebkitUserSelect: 'none',
         }}
-        className="flex-1 w-full overflow-y-auto overflow-x-hidden no-scrollbar px-3.5 sm:px-6 relative select-none"
+        className={`flex-1 w-full overflow-x-hidden no-scrollbar px-3.5 sm:px-6 relative select-none ${
+          isViewMode && !isContentOverflowing ? 'overflow-y-hidden' : 'overflow-y-auto'
+        }`}
       >
         <div 
           ref={canvasContainerRef}
@@ -2481,8 +2497,11 @@ export default function DiaryCanvas({
             return false;
           }}
           style={{
-            minHeight: `${paperHeightPx}px`,
-            touchAction: !isViewMode && activeToolMode === 'pen' ? 'none' : 'pan-y',
+            minHeight: isViewMode && !isContentOverflowing ? '100%' : `${paperHeightPx}px`,
+            height: isViewMode && !isContentOverflowing ? '100%' : undefined,
+            touchAction: isViewMode 
+              ? (isContentOverflowing ? 'pan-y' : 'pan-x') 
+              : (activeToolMode === 'pen' ? 'none' : 'pan-y'),
             WebkitTouchCallout: 'none',
             userSelect: 'none',
             WebkitUserSelect: 'none',
@@ -2826,11 +2845,13 @@ export default function DiaryCanvas({
         })}
         </div>
 
-        {/* 하단 플로팅 툴바 및 가상 키보드에 가려지지 않도록 보장하는 안전 여백 스페이서 */}
-        <div 
-          style={{ height: keyboardOffset > 0 ? '360px' : undefined }}
-          className="w-full h-44 sm:h-52 shrink-0 pointer-events-none transition-[height] duration-200" 
-        />
+        {/* 하단 플로팅 툴바 및 가상 키보드에 가려지지 않도록 보장하는 안전 여백 스페이서 (편집 모드에서만 노출) */}
+        {!isViewMode && (
+          <div 
+            style={{ height: keyboardOffset > 0 ? '360px' : undefined }}
+            className="w-full h-44 sm:h-52 shrink-0 pointer-events-none transition-[height] duration-200" 
+          />
+        )}
       </div>
     </div>
 

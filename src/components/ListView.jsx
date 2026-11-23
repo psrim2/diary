@@ -22,6 +22,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
   const startYRef = useRef(0);
   const currentDeltaXRef = useRef(0);
   const isHorizontalRef = useRef(false);
+  const wasDraggingRef = useRef(false);
   const canvasRef = useRef(null);
 
   // 외부(스크롤 등)에서 스와이프 닫힘 요청 시 부드럽게 원복
@@ -238,6 +239,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
     startYRef.current = e.touches[0].clientY;
     currentDeltaXRef.current = 0;
     isHorizontalRef.current = false;
+    wasDraggingRef.current = false;
     setIsSwiping(false);
   };
 
@@ -246,41 +248,49 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
     const deltaY = e.touches[0].clientY - startYRef.current;
 
     if (!isHorizontalRef.current) {
-      if (Math.abs(deltaX) > 6 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (Math.abs(deltaX) > 8 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
         isHorizontalRef.current = true;
+        wasDraggingRef.current = true;
         setIsSwiping(true);
-      } else if (Math.abs(deltaY) > 6) {
+      } else if (Math.abs(deltaY) > 8) {
         return;
       }
     }
 
     if (isHorizontalRef.current) {
+      if (e.cancelable) e.preventDefault();
       e.stopPropagation();
-      const clampedX = Math.min(0, Math.max(-140, deltaX));
+      // 카드는 왼쪽(삭제)으로만 밀리며, -90px를 넘길 때 과도한 오버드래그 및 튕김 방지
+      let clampedX = 0;
+      if (deltaX < 0) {
+        if (deltaX >= -90) {
+          clampedX = deltaX;
+        } else {
+          clampedX = -90 + (deltaX + 90) * 0.15;
+          clampedX = Math.max(-96, clampedX);
+        }
+      }
       currentDeltaXRef.current = clampedX;
       setTranslateX(clampedX);
     }
   };
 
   const handleTouchEnd = (e) => {
-    if (!isHorizontalRef.current) {
-      if (isSwipeOpen) {
-        onSwipeClose();
-      }
-      return;
-    }
+    if (!isHorizontalRef.current) return;
     e.stopPropagation();
 
     const deltaX = currentDeltaXRef.current;
-    if (deltaX < -45) {
+    if (deltaX < -35) {
       setTranslateX(-90);
       onSwipeOpen();
+      triggerHaptic('light');
     } else {
       setTranslateX(0);
       onSwipeClose();
     }
     setIsSwiping(false);
     isHorizontalRef.current = false;
+    setTimeout(() => { wasDraggingRef.current = false; }, 180);
   };
 
   // 마우스 제스처
@@ -289,19 +299,29 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
     startYRef.current = e.clientY;
     currentDeltaXRef.current = 0;
     isHorizontalRef.current = false;
+    wasDraggingRef.current = false;
     setIsSwiping(false);
 
     const handleMouseMove = (moveEvent) => {
       const deltaX = moveEvent.clientX - startXRef.current;
       const deltaY = moveEvent.clientY - startYRef.current;
 
-      if (!isHorizontalRef.current && Math.abs(deltaX) > 5) {
+      if (!isHorizontalRef.current && Math.abs(deltaX) > 6) {
         isHorizontalRef.current = true;
+        wasDraggingRef.current = true;
         setIsSwiping(true);
       }
 
       if (isHorizontalRef.current) {
-        const clampedX = Math.min(0, Math.max(-140, deltaX));
+        let clampedX = 0;
+        if (deltaX < 0) {
+          if (deltaX >= -90) {
+            clampedX = deltaX;
+          } else {
+            clampedX = -90 + (deltaX + 90) * 0.15;
+            clampedX = Math.max(-96, clampedX);
+          }
+        }
         currentDeltaXRef.current = clampedX;
         setTranslateX(clampedX);
       }
@@ -311,15 +331,19 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
 
-      if (currentDeltaXRef.current < -45) {
-        setTranslateX(-90);
-        onSwipeOpen();
-      } else {
-        setTranslateX(0);
-        onSwipeClose();
+      if (isHorizontalRef.current) {
+        if (currentDeltaXRef.current < -35) {
+          setTranslateX(-90);
+          onSwipeOpen();
+          triggerHaptic('light');
+        } else {
+          setTranslateX(0);
+          onSwipeClose();
+        }
+        setIsSwiping(false);
+        isHorizontalRef.current = false;
+        setTimeout(() => { wasDraggingRef.current = false; }, 180);
       }
-      setIsSwiping(false);
-      isHorizontalRef.current = false;
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -353,10 +377,11 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
 
       {/* [앞면: 박스 묶음 전체 슬라이딩 (배경 삭제 버튼 z-0 위에 위치하되 sticky 헤더 z-30 아래로 슬라이드되도록 z-[1] 적용)] */}
       <div
-        style={{ transform: `translateX(${translateX}px)` }}
-        className={`relative z-[1] bg-white rounded-3xl p-4 sm:p-5 shadow-xs cursor-pointer transition-all touch-pan-y ${
-          isSwiping ? '' : 'duration-200 ease-out'
-        } ${
+        style={{
+          transform: `translateX(${translateX}px)`,
+          transition: isSwiping ? 'none' : 'transform 0.22s cubic-bezier(0.25, 1, 0.5, 1)',
+        }}
+        className={`relative z-[1] bg-white rounded-3xl p-4 sm:p-5 shadow-xs cursor-pointer touch-pan-y ${
           isSelected
             ? 'border border-stone-200/90 lg:border-2 lg:border-black lg:shadow-sm'
             : 'border border-stone-200/90'
@@ -365,8 +390,12 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onMouseDown={handleMouseDown}
-        onClick={() => {
-          if (isSwipeOpen || Math.abs(translateX) > 10) {
+        onClick={(e) => {
+          if (wasDraggingRef.current) {
+            wasDraggingRef.current = false;
+            return;
+          }
+          if (isSwipeOpen || translateX !== 0) {
             setTranslateX(0);
             onSwipeClose();
             return;
@@ -830,11 +859,11 @@ export default function ListView({
       }}
       style={{
         WebkitOverflowScrolling: filteredDiaries.length === 0 ? 'auto' : 'touch',
-        overscrollBehaviorY: filteredDiaries.length === 0 ? 'none' : 'contain',
+        overscrollBehaviorY: 'auto',
         touchAction: filteredDiaries.length === 0 ? 'none' : 'pan-y',
       }}
       className={`flex flex-col h-full bg-[#fafafa] px-6 pb-28 no-scrollbar relative ${
-        filteredDiaries.length === 0 ? 'overflow-y-hidden overscroll-none' : 'overflow-y-auto overscroll-contain'
+        filteredDiaries.length === 0 ? 'overflow-y-hidden' : 'overflow-y-auto'
       }`}
     >
       
