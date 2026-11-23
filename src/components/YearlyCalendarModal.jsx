@@ -125,7 +125,7 @@ export default function YearlyCalendarModal({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex flex-col justify-between bg-[#fafafa] text-black px-6 pb-6 select-none overflow-hidden h-[100dvh] animate-fadeIn"
+      className="fixed inset-0 z-50 flex flex-col justify-start bg-[#fafafa] text-black px-6 pb-6 select-none overflow-hidden h-[100dvh] animate-fadeIn"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -134,7 +134,7 @@ export default function YearlyCalendarModal({
       onMouseUp={handleMouseUp}
     >
       {/* 상단 헤더: ← (뒤로가기), 2026 (중앙 연도 및 좌우 화살표), 오늘 (우측 44px 원형 오늘 버튼) */}
-      <div className="w-full flex items-center justify-between pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-2 shrink-0">
+      <div className="w-full flex items-center justify-between pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-0 shrink-0">
         <button
           type="button"
           onClick={onClose}
@@ -185,8 +185,15 @@ export default function YearlyCalendarModal({
         </button>
       </div>
 
-      {/* 12개월 3열 x 4행 그리드: 한 페이지에 100% 핏 */}
-      <div className="flex-1 w-full grid grid-cols-3 gap-x-4 sm:gap-x-6 gap-y-2 sm:gap-y-3 my-auto overflow-hidden">
+      {/* 12개월 3열 x 4행 그리드: 달력 시작 위의 마진값(marginTop)을 아래 달간의 세로 gap(rowGap)과 100% 동일하게 일치 */}
+      <div 
+        style={{
+          '--month-gap': 'clamp(14px, 2.2vh, 22px)',
+          rowGap: 'var(--month-gap)',
+          marginTop: 'var(--month-gap)',
+        }}
+        className="w-full grid grid-cols-3 gap-x-4 sm:gap-x-6 overflow-hidden select-none"
+      >
         {yearMonths.map((m) => (
           <div 
             key={m.monthIdx}
@@ -233,22 +240,24 @@ export default function YearlyCalendarModal({
                     className="h-4 sm:h-5 flex items-center justify-center cursor-pointer transition-transform active:scale-90 relative"
                     title={`${c.dateStr} ${m.monthIdx + 1}월 달력 보기`}
                   >
-                    {hasDiary ? (
-                      isCellToday ? (
-                        <span 
-                          className="w-[10px] h-[10px] rounded-full bg-black block select-none shrink-0" 
-                          title={`${c.dateStr} 오늘 (일기 있음)`}
-                        />
-                      ) : (
-                        <span 
-                          className="w-[10px] h-[10px] rounded-full border-[2px] border-black block select-none shrink-0" 
-                          title={`${c.dateStr} 일기 있음`}
-                        />
-                      )
-                    ) : isCellToday ? (
-                      <span className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-black text-white flex items-center justify-center font-bold text-[9px] sm:text-[10px] leading-none shadow-xs">
-                        {c.day}
+                    {isCellToday ? (
+                      <span 
+                        className="w-4 h-4 sm:w-4.5 sm:h-4.5 rounded-full bg-stone-200 flex items-center justify-center select-none shrink-0"
+                        title={`${c.dateStr} 오늘${hasDiary ? ' (일기 있음)' : ''}`}
+                      >
+                        {hasDiary ? (
+                          <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-black block select-none shrink-0" />
+                        ) : (
+                          <span className="font-bold text-[9px] sm:text-[10px] leading-none text-black select-none">
+                            {c.day}
+                          </span>
+                        )}
                       </span>
+                    ) : hasDiary ? (
+                      <span 
+                        className="w-[10px] h-[10px] rounded-full border-[2px] border-black block select-none shrink-0" 
+                        title={`${c.dateStr} 일기 있음`}
+                      />
                     ) : (
                       <span className={`text-[9px] sm:text-[10px] font-bold leading-none ${isCellWeekend ? 'text-[#ff6b00]' : 'text-black'}`}>
                         {c.day}
