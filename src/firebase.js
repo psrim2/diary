@@ -457,6 +457,11 @@ export function normalizeSvgContent(svgString) {
     svg = svg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
   }
 
+  // 아이폰 Safari/WebKit을 72 DPI 저해상도 소프트웨어 래스터라이저로 강제 다운그레이드시키는
+  // feDisplacementMap, feTurbulence 필터(크레용 질감 등) 및 해당 필터 참조 속성 원천 제거
+  svg = svg.replace(/<filter\b[^>]*>[\s\S]*?(?:feTurbulence|feDisplacementMap)[\s\S]*?<\/filter>/gi, '');
+  svg = svg.replace(/\s*filter=["']url\(#[^"']*?(?:crayon|turb|displace)[^"']*?\)["']/gi, '');
+
   // viewBox 검출 및 보정
   const hasViewBox = /viewBox\s*=\s*["'][^"']+["']/i.test(svg);
   if (!hasViewBox) {

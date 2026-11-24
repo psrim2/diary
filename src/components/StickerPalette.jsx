@@ -8,6 +8,7 @@ import {
   fileToDataUrl,
 } from '../firebase';
 import { PRESET_GIF_STICKERS } from '../constants/presetGifStickers';
+import { upgradePresetSvgUrl } from '../utils/canvasLayers';
 
 // 기본 하위 카테고리 목록 (폴백용)
 const BASE_CATEGORIES = [
@@ -403,7 +404,7 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
                             decorationId: item.id,
                             type: item.category || 'sticker',
                             category: item.category || 'sticker',
-                            imageUrl: item.imageUrl,
+                            imageUrl: upgradePresetSvgUrl(item.imageUrl),
                             isGif: isGifItem,
                             label: item.name || item.fileName || item.category,
                           });
@@ -421,8 +422,9 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
                           </span>
                         )}
                         <img
-                          src={item.imageUrl}
+                          src={upgradePresetSvgUrl(item.imageUrl)}
                           alt={item.name || item.category}
+                          style={{ imageRendering: '-webkit-optimize-contrast' }}
                           className="w-12 h-12 object-contain group-hover:scale-105 transition-transform select-none pointer-events-none"
                         />
                         <span className="text-[10px] text-stone-600 truncate w-full text-center font-medium select-none">

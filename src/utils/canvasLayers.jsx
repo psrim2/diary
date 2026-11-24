@@ -167,27 +167,69 @@ export function upgradePresetSvgUrl(val) {
     } catch {}
   }
 
-  // 3. 아이폰 Safari / WebKit에서 작은 고정 width/height(24, 32 등)로 인해 저해상도 래스터화되는 현상 자동 교정
-  if (val.startsWith('data:image/svg+xml;utf8,')) {
+  // 3. 아이폰 Safari / WebKit 저해상도 래스터화 방지 및 고화질 벡터 자동 정규화
+  // (Base64 / UTF-8 모든 SVG Data URL에 대해 feDisplacementMap/feTurbulence 제거, viewBox 보장, width/height 100% 최적화)
+  if (val.startsWith('data:image/svg+xml')) {
     try {
-      let decoded = decodeURIComponent(val.replace(/^data:image\/svg\+xml;utf8,/, ''));
-      let modified = false;
-      if (!/<svg\b[^>]*\bviewBox\s*=/i.test(decoded)) {
-        const wM = decoded.match(/\bwidth\s*=\s*["']?([\d.]+)(?:px)?["']?/i);
-        const hM = decoded.match(/\bheight\s*=\s*["']?([\d.]+)(?:px)?["']?/i);
-        if (wM && hM && parseFloat(wM[1]) > 0 && parseFloat(hM[1]) > 0) {
-          decoded = decoded.replace(/<svg\b/i, `<svg viewBox="0 0 ${wM[1]} ${hM[1]}"`);
+      let decoded = '';
+      if (val.startsWith('data:image/svg+xml;utf8,')) {
+        decoded = decodeURIComponent(val.replace(/^data:image\/svg\+xml;utf8,/, ''));
+      } else if (val.startsWith('data:image/svg+xml;base64,')) {
+        const b64 = val.replace(/^data:image\/svg\+xml;base64,/, '');
+        if (typeof atob === 'function') {
+          decoded = decodeURIComponent(escape(atob(b64)));
+        } else if (typeof Buffer !== 'undefined') {
+          decoded = Buffer.from(b64, 'base64').toString('utf-8');
+        }
+      } else if (val.startsWith('data:image/svg+xml,')) {
+        decoded = decodeURIComponent(val.replace(/^data:image\/svg\+xml,/, ''));
+      }
+
+      if (decoded && decoded.includes('<svg')) {
+        let modified = false;
+
+        // A. <?xml ...?> 및 <!DOCTYPE ...> 제거
+        if (/<\?xml|<!DOCTYPE/i.test(decoded)) {
+          decoded = decoded.replace(/<\?xml[^>]*\?>/gi, '').replace(/<!DOCTYPE[^>]*>/gi, '').trim();
           modified = true;
         }
-      }
-      if (/\b(?:width|height)\s*=\s*["']\d+(?:px)?["']/i.test(decoded)) {
-        decoded = decoded
-          .replace(/(<svg\b[^>]*?)\s+width\s*=\s*["'][\d.]+(?:px)?["']/i, '$1 width="100%"')
-          .replace(/(<svg\b[^>]*?)\s+height\s*=\s*["'][\d.]+(?:px)?["']/i, '$1 height="100%"');
-        modified = true;
-      }
-      if (modified) {
-        return `data:image/svg+xml;utf8,${encodeURIComponent(decoded.trim())}`;
+
+        // B. xmlns 보장
+        if (!decoded.includes('xmlns=')) {
+          decoded = decoded.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+          modified = true;
+        }
+
+        // C. 아이폰 Safari/WebKit을 72 DPI 저해상도 소프트웨어 래스터라이저로 강제 다운그레이드시키는
+        //    feDisplacementMap, feTurbulence 필터(크레용 질감 등) 및 해당 필터 참조 속성 원천 제거
+        if (/(?:feDisplacementMap|feTurbulence|crayon-edge)/i.test(decoded)) {
+          decoded = decoded
+            .replace(/<filter\b[^>]*>[\s\S]*?(?:feTurbulence|feDisplacementMap)[\s\S]*?<\/filter>/gi, '')
+            .replace(/\s*filter=["']url\(#[^"']*?(?:crayon|turb|displace)[^"']*?\)["']/gi, '');
+          modified = true;
+        }
+
+        // D. viewBox 보장
+        if (!/<svg\b[^>]*\bviewBox\s*=/i.test(decoded)) {
+          const wM = decoded.match(/\bwidth\s*=\s*["']?([\d.]+)(?:px)?["']?/i);
+          const hM = decoded.match(/\bheight\s*=\s*["']?([\d.]+)(?:px)?["']?/i);
+          if (wM && hM && parseFloat(wM[1]) > 0 && parseFloat(hM[1]) > 0) {
+            decoded = decoded.replace(/<svg\b/i, `<svg viewBox="0 0 ${wM[1]} ${hM[1]}"`);
+            modified = true;
+          }
+        }
+
+        // E. 고정 작은 width/height나 600px 등 고정 크기를 100%로 변경하여 무한 벡터 해상도 보장
+        if (/\b(?:width|height)\s*=\s*["']\d+(?:px)?["']/i.test(decoded)) {
+          decoded = decoded
+            .replace(/(<svg\b[^>]*?)\s+width\s*=\s*["'][\d.]+(?:px)?["']/i, '$1 width="100%"')
+            .replace(/(<svg\b[^>]*?)\s+height\s*=\s*["'][\d.]+(?:px)?["']/i, '$1 height="100%"');
+          modified = true;
+        }
+
+        if (modified || val.startsWith('data:image/svg+xml;base64,')) {
+          return `data:image/svg+xml;utf8,${encodeURIComponent(decoded.trim())}`;
+        }
       }
     } catch {}
   }

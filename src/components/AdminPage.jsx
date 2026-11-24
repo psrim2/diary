@@ -15,6 +15,7 @@ import {
   updateCategoriesOrder,
   seedDefaultCategoriesIfNeeded,
 } from '../firebase';
+import { upgradePresetSvgUrl } from '../utils/canvasLayers';
 
 const BASE_CATEGORIES = [
   { id: 'sticker', label: '스티커 (sticker)' },
@@ -939,8 +940,9 @@ export default function AdminPage() {
                   <div className="text-[11px] font-bold mb-1">[추가 예정]</div>
                   <div className="h-24 flex items-center justify-center bg-white mb-2 overflow-hidden border">
                     <img
-                      src={item.previewUrl}
+                      src={upgradePresetSvgUrl(item.previewUrl)}
                       alt={item.name}
+                      style={{ imageRendering: '-webkit-optimize-contrast' }}
                       className="max-h-20 max-w-full object-contain"
                     />
                   </div>
@@ -1013,8 +1015,9 @@ export default function AdminPage() {
 
                     <div className="h-24 flex items-center justify-center bg-stone-50 mb-2 overflow-hidden">
                       <img
-                        src={item.imageUrl}
+                        src={upgradePresetSvgUrl(item.imageUrl)}
                         alt={currentName}
+                        style={{ imageRendering: '-webkit-optimize-contrast' }}
                         className="max-h-20 max-w-full object-contain"
                       />
                     </div>

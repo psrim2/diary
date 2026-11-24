@@ -143,6 +143,7 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
                 <img
                   src={upgradePresetSvgUrl(typeof weather === 'string' ? weather : weather?.imageUrl || '')}
                   alt=""
+                  style={{ imageRendering: '-webkit-optimize-contrast' }}
                   className="w-10 h-10 object-contain block p-0.5 select-none"
                 />
               ) : (
@@ -2237,6 +2238,7 @@ export default function DiaryCanvas({
                         <img
                           src={upgradePresetSvgUrl(typeof activeWeather === 'string' ? activeWeather : activeWeather?.imageUrl || '')}
                           alt="대표 아이콘"
+                          style={{ imageRendering: '-webkit-optimize-contrast' }}
                           className="w-10 h-10 object-contain block select-none overflow-visible p-0.5"
                         />
                       ) : (
@@ -2252,6 +2254,7 @@ export default function DiaryCanvas({
                       <img
                         src={upgradePresetSvgUrl(typeof activeWeather === 'string' ? activeWeather : activeWeather?.imageUrl || '')}
                         alt="대표 아이콘"
+                        style={{ imageRendering: '-webkit-optimize-contrast' }}
                         className="w-10 h-10 object-contain block select-none overflow-visible p-0.5"
                       />
                     ) : (
@@ -2342,7 +2345,7 @@ export default function DiaryCanvas({
                                   key={item.id}
                                   type="button"
                                   onClick={() => {
-                                    setWeather(item.imageUrl);
+                                    setWeather(upgradePresetSvgUrl(item.imageUrl));
                                     setIsWeatherOpen(false);
                                   }}
                                   className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition cursor-pointer ${
@@ -2351,8 +2354,9 @@ export default function DiaryCanvas({
                                   title={item.name || item.fileName}
                                 >
                                   <img
-                                    src={item.imageUrl}
+                                    src={upgradePresetSvgUrl(item.imageUrl)}
                                     alt={item.name || '날씨'}
+                                    style={{ imageRendering: '-webkit-optimize-contrast' }}
                                     className="w-8 h-8 object-contain block select-none"
                                   />
                                 </button>
@@ -2424,7 +2428,7 @@ export default function DiaryCanvas({
                                 key={item.id}
                                 type="button"
                                 onClick={() => {
-                                  setWeather(item.imageUrl);
+                                  setWeather(upgradePresetSvgUrl(item.imageUrl));
                                   setIsWeatherOpen(false);
                                 }}
                                 className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition active:scale-95 group relative cursor-pointer ${
@@ -2438,8 +2442,9 @@ export default function DiaryCanvas({
                                   </span>
                                 )}
                                 <img
-                                  src={item.imageUrl}
+                                  src={upgradePresetSvgUrl(item.imageUrl)}
                                   alt={item.name || '스티커'}
+                                  style={{ imageRendering: '-webkit-optimize-contrast' }}
                                   className="w-8 h-8 object-contain block select-none group-hover:scale-105 transition-transform"
                                 />
                                 <span className="text-[8px] text-stone-500 mt-0.5 truncate w-full text-center">
