@@ -382,7 +382,7 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
                     item.category === 'gif' ||
                     item.isGif ||
                     item.fileName?.toLowerCase().endsWith('.gif') ||
-                    item.imageUrl?.startsWith('data:image/svg+xml');
+                    (typeof item.imageUrl === 'string' && (item.imageUrl.includes('@keyframes') || item.imageUrl.includes('heartbeat') || item.imageUrl.includes('twinkle')));
 
                   return (
                     <div

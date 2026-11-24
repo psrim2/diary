@@ -252,6 +252,7 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
                   zIndex: stickerZIndex,
                   transform: `rotate(${stickerRotation}deg) scale(${stickerScale})`,
                   transformOrigin: 'center center',
+                  transformBox: 'fill-box',
                 }}
                 className="absolute select-none p-1 pointer-events-none"
               >
@@ -260,6 +261,9 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
                     src={resolvedImg}
                     alt=""
                     draggable={false}
+                    style={{
+                      imageRendering: '-webkit-optimize-contrast',
+                    }}
                     className={
                       sticker.category === 'tape' || sticker.type === 'tape'
                         ? 'w-28 h-auto object-contain block'
@@ -2413,7 +2417,7 @@ export default function DiaryCanvas({
                               item.category === 'gif' ||
                               item.isGif ||
                               item.fileName?.toLowerCase().endsWith('.gif') ||
-                              item.imageUrl?.startsWith('data:image/svg+xml');
+                              (typeof item.imageUrl === 'string' && (item.imageUrl.includes('@keyframes') || item.imageUrl.includes('heartbeat') || item.imageUrl.includes('twinkle')));
 
                             return (
                               <button
@@ -2894,6 +2898,7 @@ export default function DiaryCanvas({
                 zIndex: stickerZIndex,
                 transform: `rotate(${stickerRotation}deg) scale(${stickerScale})`,
                 transformOrigin: 'center center',
+                transformBox: 'fill-box',
                 touchAction: 'none',
                 pointerEvents: isViewMode ? 'none' : 'auto',
               }}
@@ -2968,7 +2973,11 @@ export default function DiaryCanvas({
                           updateSticker(sticker.id, { height: canonicalImgH });
                         }
                       }}
-                      style={{ width: `${scaledPixelW}px`, height: 'auto' }}
+                      style={{
+                        width: `${scaledPixelW}px`,
+                        height: 'auto',
+                        imageRendering: '-webkit-optimize-contrast',
+                      }}
                       className="object-contain select-none pointer-events-none block"
                     />
                   );

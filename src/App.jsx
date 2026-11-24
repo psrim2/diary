@@ -18,6 +18,9 @@ import {
   syncLocalDiariesToCloud,
   subscribeToUserSettings,
   saveDiaryNameToCloud,
+  fetchUserDiariesOnce,
+  reconnectFirebaseNetwork,
+  fetchDecorationsOnce,
 } from './firebase';
 
 // 이전 기본 샘플 더미 데이터 ID (초기 무데이터 상태를 위해 자동 필터링)
@@ -165,6 +168,52 @@ export default function App() {
   );
 }
 
+const SYNC_CHANNEL_NAME = 'analog_diary_sync_channel';
+function broadcastSyncEvent(msg) {
+  try {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      const bc = new BroadcastChannel(SYNC_CHANNEL_NAME);
+      bc.postMessage(msg);
+      bc.close();
+    }
+  } catch {}
+}
+
+function sanitizeCloudDiaries(rawList) {
+  const sanitized = (rawList || [])
+    .filter((d) => d && typeof d === 'object' && !LEGACY_SAMPLE_IDS.has(String(d?.id)))
+    .map((d) => {
+      const rawStickers = Array.isArray(d?.stickers)
+        ? d.stickers
+        : (d?.stickers && typeof d.stickers === 'object' ? Object.values(d.stickers) : []);
+      const rehydratedStickers = rawStickers.map((st) => {
+        if (st && (!st.imageUrl || st.imageUrl === '')) {
+          const resolved = resolveStickerImage(st);
+          if (resolved) return { ...st, imageUrl: upgradePresetSvgUrl(resolved) };
+        }
+        if (st?.imageUrl) {
+          return { ...st, imageUrl: upgradePresetSvgUrl(st.imageUrl) };
+        }
+        return st;
+      });
+      const upgradedWeather = upgradePresetSvgUrl(d?.weather);
+      const upgradedMood = upgradePresetSvgUrl(d?.thumbnailMood || d?.weather);
+      return {
+        ...d,
+        weather: upgradedWeather,
+        thumbnailMood: upgradedMood,
+        textBlocks: Array.isArray(d?.textBlocks)
+          ? d.textBlocks
+          : (d?.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
+        stickers: rehydratedStickers,
+        strokes: Array.isArray(d?.strokes)
+          ? d.strokes
+          : (d?.strokes && typeof d.strokes === 'object' ? Object.values(d.strokes) : []),
+      };
+    });
+  return deduplicateDiariesByDate(sanitized);
+}
+
 function DiaryMainApp() {
   // 로컬스토리지에서 일기 불러오기 (기본값: 아무 데이터도 없는 빈 배열 [] & 날짜별 중복 자동 정리 & 방어적 파싱)
   const [diaries, setDiaries] = useState(() => {
@@ -178,38 +227,7 @@ function DiaryMainApp() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const validDiaries = parsed
-            .filter((d) => d && typeof d === 'object' && !LEGACY_SAMPLE_IDS.has(String(d?.id)))
-            .map((d) => {
-              const rawStickers = Array.isArray(d.stickers)
-                ? d.stickers
-                : (d.stickers && typeof d.stickers === 'object' ? Object.values(d.stickers) : []);
-              const rehydratedStickers = rawStickers.map((st) => {
-                if (st && (!st.imageUrl || st.imageUrl === '')) {
-                  const resolved = resolveStickerImage(st);
-                  if (resolved) return { ...st, imageUrl: upgradePresetSvgUrl(resolved) };
-                }
-                if (st?.imageUrl) {
-                  return { ...st, imageUrl: upgradePresetSvgUrl(st.imageUrl) };
-                }
-                return st;
-              });
-              const upgradedWeather = upgradePresetSvgUrl(d.weather);
-              const upgradedMood = upgradePresetSvgUrl(d.thumbnailMood || d.weather);
-              return {
-                ...d,
-                weather: upgradedWeather,
-                thumbnailMood: upgradedMood,
-                textBlocks: Array.isArray(d.textBlocks)
-                  ? d.textBlocks
-                  : (d.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
-                stickers: rehydratedStickers,
-                strokes: Array.isArray(d.strokes)
-                  ? d.strokes
-                  : (d.strokes && typeof d.strokes === 'object' ? Object.values(d.strokes) : []),
-              };
-            });
-          return deduplicateDiariesByDate(validDiaries);
+          return sanitizeCloudDiaries(parsed);
         }
       } catch (e) {
         console.error('Failed to parse diaries', e);
@@ -400,36 +418,7 @@ function DiaryMainApp() {
       user.uid,
       async (cloudDiaries) => {
         if (syncSafetyTimer) clearTimeout(syncSafetyTimer);
-        const sanitizedCloud = (cloudDiaries || []).map((d) => {
-          const rawStickers = Array.isArray(d?.stickers)
-            ? d.stickers
-            : (d?.stickers && typeof d.stickers === 'object' ? Object.values(d.stickers) : []);
-          const rehydratedStickers = rawStickers.map((st) => {
-            if (st && (!st.imageUrl || st.imageUrl === '')) {
-              const resolved = resolveStickerImage(st);
-              if (resolved) return { ...st, imageUrl: upgradePresetSvgUrl(resolved) };
-            }
-            if (st?.imageUrl) {
-              return { ...st, imageUrl: upgradePresetSvgUrl(st.imageUrl) };
-            }
-            return st;
-          });
-          const upgradedWeather = upgradePresetSvgUrl(d?.weather);
-          const upgradedMood = upgradePresetSvgUrl(d?.thumbnailMood || d?.weather);
-          return {
-            ...d,
-            weather: upgradedWeather,
-            thumbnailMood: upgradedMood,
-            textBlocks: Array.isArray(d?.textBlocks)
-              ? d.textBlocks
-              : (d?.textBlocks && typeof d.textBlocks === 'object' ? Object.values(d.textBlocks) : []),
-            stickers: rehydratedStickers,
-            strokes: Array.isArray(d?.strokes)
-              ? d.strokes
-              : (d?.strokes && typeof d.strokes === 'object' ? Object.values(d.strokes) : []),
-          };
-        });
-        const deduped = deduplicateDiariesByDate(sanitizedCloud);
+        const deduped = sanitizeCloudDiaries(cloudDiaries);
         setDiaries(deduped);
         setIsSyncing(false);
 
@@ -483,6 +472,72 @@ function DiaryMainApp() {
       if (syncSafetyTimer) clearTimeout(syncSafetyTimer);
       unsubscribeDiaries();
       unsubscribeSettings();
+    };
+  }, [user?.uid]);
+
+  // 브라우저 탭/창 간 0ms 즉각 동기화 (BroadcastChannel)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
+    const bc = new BroadcastChannel(SYNC_CHANNEL_NAME);
+    bc.onmessage = (event) => {
+      const data = event?.data;
+      if (!data) return;
+      if (data.type === 'save' && data.diary) {
+        setDiaries((prev) => {
+          const filtered = prev.filter((d) => d.id !== data.diary.id && d.date !== data.diary.date);
+          return deduplicateDiariesByDate([data.diary, ...filtered]);
+        });
+      } else if (data.type === 'delete' && data.id) {
+        setDiaries((prev) => prev.filter((d) => d.id !== data.id));
+      }
+    };
+    return () => {
+      try {
+        bc.close();
+      } catch {}
+    };
+  }, []);
+
+  // 모바일 절전 복귀(PWA, iOS Safari 백그라운드 복귀) 및 화면 포커스 시 즉시 초고속 동기화
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const forceSync = async () => {
+      try {
+        reconnectFirebaseNetwork();
+        const freshDiaries = await fetchUserDiariesOnce(user.uid);
+        if (freshDiaries && freshDiaries.length >= 0) {
+          const deduped = sanitizeCloudDiaries(freshDiaries);
+          setDiaries(deduped);
+        }
+        // 스티커 에셋 최신화 (삭제된 스티커 묘비 등 반영)
+        fetchDecorationsOnce().catch(() => {});
+      } catch (e) {
+        console.warn('[Sync] Foreground sync error:', e);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        forceSync();
+      }
+    };
+
+    const handleOnline = () => forceSync();
+    const handleFocus = () => forceSync();
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('focus', handleFocus);
+
+    // 15초 주기 백그라운드 헬스체크
+    const interval = setInterval(forceSync, 15000);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
     };
   }, [user?.uid]);
 
@@ -708,6 +763,7 @@ function DiaryMainApp() {
       } catch (e) {}
       return updated;
     });
+    broadcastSyncEvent({ type: 'delete', id });
 
     if (selectedDiary?.id === id) {
       const remainingDate = selectedDiary.date || getTodayDateStr();
@@ -768,6 +824,7 @@ function DiaryMainApp() {
       } catch (e) {}
       return updated;
     });
+    broadcastSyncEvent({ type: 'save', diary: finalDiaryToSave });
 
     if (user) {
       try {

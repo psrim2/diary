@@ -55,6 +55,29 @@ export function getKnownStickersMap(forceRefresh = false) {
     }
   } catch {}
 
+  // 3. 어드민/클라우드 등록 스티커 캐시 (analog_diary_decorations_cache)
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const rawDeco = localStorage.getItem('analog_diary_decorations_cache');
+      if (rawDeco) {
+        const list = JSON.parse(rawDeco);
+        if (Array.isArray(list)) {
+          list.forEach((item) => {
+            if (!item || !item.imageUrl) return;
+            if (item.id) map.set(item.id, item.imageUrl);
+            if (item.name) map.set(item.name, item.imageUrl);
+            if (item.fileName) map.set(item.fileName, item.imageUrl);
+            if (item.label) map.set(item.label, item.imageUrl);
+            if (item.name && typeof item.name === 'string') {
+              const clean = item.name.replace(/\.[^/.]+$/, '').trim();
+              if (clean) map.set(clean, item.imageUrl);
+            }
+          });
+        }
+      }
+    }
+  } catch {}
+
   cachedStickersMap = map;
   lastStickerCacheTimestamp = now;
   return map;
@@ -141,6 +164,31 @@ export function upgradePresetSvgUrl(val) {
         );
       }
       return `data:image/svg+xml;utf8,${encodeURIComponent(decoded.trim())}`;
+    } catch {}
+  }
+
+  // 3. 아이폰 Safari / WebKit에서 작은 고정 width/height(24, 32 등)로 인해 저해상도 래스터화되는 현상 자동 교정
+  if (val.startsWith('data:image/svg+xml;utf8,')) {
+    try {
+      let decoded = decodeURIComponent(val.replace(/^data:image\/svg\+xml;utf8,/, ''));
+      let modified = false;
+      if (!/<svg\b[^>]*\bviewBox\s*=/i.test(decoded)) {
+        const wM = decoded.match(/\bwidth\s*=\s*["']?([\d.]+)(?:px)?["']?/i);
+        const hM = decoded.match(/\bheight\s*=\s*["']?([\d.]+)(?:px)?["']?/i);
+        if (wM && hM && parseFloat(wM[1]) > 0 && parseFloat(hM[1]) > 0) {
+          decoded = decoded.replace(/<svg\b/i, `<svg viewBox="0 0 ${wM[1]} ${hM[1]}"`);
+          modified = true;
+        }
+      }
+      if (/\b(?:width|height)\s*=\s*["']\d+(?:px)?["']/i.test(decoded)) {
+        decoded = decoded
+          .replace(/(<svg\b[^>]*?)\s+width\s*=\s*["'][\d.]+(?:px)?["']/i, '$1 width="100%"')
+          .replace(/(<svg\b[^>]*?)\s+height\s*=\s*["'][\d.]+(?:px)?["']/i, '$1 height="100%"');
+        modified = true;
+      }
+      if (modified) {
+        return `data:image/svg+xml;utf8,${encodeURIComponent(decoded.trim())}`;
+      }
     } catch {}
   }
 

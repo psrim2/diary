@@ -529,6 +529,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
                     zIndex: typeof sticker.layerOrder === 'number' ? sticker.layerOrder : idx + 1,
                     transform: `rotate(${sticker.rotation || 0}deg) scale(${sticker.scale || 1})`,
                     transformOrigin: 'center center',
+                    transformBox: 'fill-box',
                   }}
                   className="select-none pointer-events-none p-1"
                 >
@@ -540,6 +541,9 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
                           src={resolvedImg}
                           alt=""
                           draggable={false}
+                          style={{
+                            imageRendering: '-webkit-optimize-contrast',
+                          }}
                           className={
                             sticker.category === 'tape' || sticker.type === 'tape'
                               ? 'w-28 h-auto object-contain select-none block'

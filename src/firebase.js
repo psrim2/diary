@@ -21,6 +21,7 @@ import {
   onSnapshot,
   writeBatch,
   serverTimestamp,
+  enableNetwork,
 } from 'firebase/firestore';
 import {
   getStorage,
@@ -220,6 +221,45 @@ export function subscribeToUserDiaries(uid, onUpdate, onError) {
 }
 
 /**
+ * 4-1. 절전 복귀(visibilitychange, focus 등) 시 Firestore 단발성 초고속 직접 동기화
+ */
+export async function fetchUserDiariesOnce(uid) {
+  if (!isFirebaseConfigured || !db || !uid) return [];
+  try {
+    const diariesRef = collection(db, 'users', uid, 'diaries');
+    const [diariesSnap, deletedSnap] = await Promise.all([
+      getDocs(diariesRef),
+      getDocs(collection(db, 'users', uid, 'deleted_ids')).catch(() => ({ docs: [] })),
+    ]);
+
+    const deletedIds = new Set(deletedSnap.docs.map((d) => d.id));
+    const cloudDiaries = [];
+    diariesSnap.docs.forEach((docSnap) => {
+      if (LEGACY_SAMPLE_IDS.has(docSnap.id) || deletedIds.has(docSnap.id)) return;
+      cloudDiaries.push({
+        ...docSnap.data(),
+        id: docSnap.id,
+      });
+    });
+    cloudDiaries.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return cloudDiaries;
+  } catch (err) {
+    console.warn('[Firestore] 일기 단발성 고속 조회 실패:', err);
+    return [];
+  }
+}
+
+/**
+ * 4-2. 모바일 백그라운드 절전 복귀 시 끊어진 Firestore 네트워크 강제 재연결
+ */
+export async function reconnectFirebaseNetwork() {
+  if (!isFirebaseConfigured || !db) return;
+  try {
+    await enableNetwork(db).catch(() => {});
+  } catch {}
+}
+
+/**
  * 5. 단일 일기 저장 및 수정 (Firestore)
  * 경로: users/{uid}/diaries/{diary.id}
  */
@@ -399,25 +439,100 @@ function withTimeout(promise, ms, label = 'TIMEOUT') {
 }
 
 /**
+ * SVG 파일 텍스트 정규화:
+ * 1. xmlns 속성 보장
+ * 2. viewBox 보장 (width/height만 있는 경우 viewBox 자동 생성)
+ * 3. 고정 작은 width/height 제거하고 width="100%" height="100%" 로 변경하여
+ *    아이폰 Safari / WebKit에서 32x32 등 저해상도 래스터라이징되는 현상 원천 차단
+ */
+export function normalizeSvgContent(svgString) {
+  if (!svgString || typeof svgString !== 'string') return '';
+  let svg = svgString.trim();
+
+  // <?xml ...?> 태그나 <!DOCTYPE ...> 제거하여 표준 <svg> 루트 보장
+  svg = svg.replace(/<\?xml[^>]*\?>/gi, '').replace(/<!DOCTYPE[^>]*>/gi, '').trim();
+
+  // xmlns 보장
+  if (!svg.includes('xmlns=')) {
+    svg = svg.replace(/<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
+
+  // viewBox 검출 및 보정
+  const hasViewBox = /viewBox\s*=\s*["'][^"']+["']/i.test(svg);
+  if (!hasViewBox) {
+    const widthMatch = svg.match(/\bwidth\s*=\s*["']?([\d.]+)(?:px)?["']?/i);
+    const heightMatch = svg.match(/\bheight\s*=\s*["']?([\d.]+)(?:px)?["']?/i);
+    if (widthMatch && heightMatch) {
+      const w = parseFloat(widthMatch[1]);
+      const h = parseFloat(heightMatch[1]);
+      if (w > 0 && h > 0) {
+        svg = svg.replace(/<svg\b/i, `<svg viewBox="0 0 ${w} ${h}"`);
+      }
+    } else {
+      svg = svg.replace(/<svg\b/i, '<svg viewBox="0 0 100 100"');
+    }
+  }
+
+  // WebKit이 고정 작은 width/height (예: 24, 32, 48) 때문에 내부 래스터 버퍼를 작게 고정하는 것을 방지
+  // svg 태그의 고정 픽셀 width/height를 제거하거나 100%로 변경
+  svg = svg
+    .replace(/(<svg\b[^>]*?)\s+width\s*=\s*["'][\d.]+(?:px)?["']/i, '$1 width="100%"')
+    .replace(/(<svg\b[^>]*?)\s+height\s*=\s*["'][\d.]+(?:px)?["']/i, '$1 height="100%"');
+
+  return svg;
+}
+
+/**
  * 이미지 파일(GIF/SVG/PNG 등)을 Data URL로 변환
- * (움직이는 GIF는 캔버스 변환 시 프레임이 손실되므로 원본 바이너리를 100% 보존)
+ * (움직이는 GIF는 캔버스 변환 시 프레임이 손실되므로 원본 바이너리를 100% 보존,
+ *  SVG는 텍스트 파싱을 거쳐 아이폰 Retina에서도 선명한 벡터 Data URL로 생성)
  */
 export function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
+    const isSvg = file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg');
+    const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+
+    // 1) SVG 파일: 텍스트로 읽어서 벡터 정규화(viewBox 보장, 작은 width/height 제거) 후 UTF-8 SVG Data URL로 반환
+    if (isSvg) {
+      const textReader = new FileReader();
+      textReader.onload = () => {
+        try {
+          const rawText = String(textReader.result || '');
+          const normalized = normalizeSvgContent(rawText);
+          const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(normalized)}`;
+          resolve(dataUrl);
+        } catch (e) {
+          // 텍스트 파싱 실패 시 표준 base64 SVG 폴백
+          const binReader = new FileReader();
+          binReader.onload = () => {
+            let res = String(binReader.result || '');
+            if (!res.startsWith('data:image/svg+xml')) {
+              res = res.replace(/^data:[^;]*;/, 'data:image/svg+xml;');
+            }
+            resolve(res);
+          };
+          binReader.onerror = () => reject(binReader.error);
+          binReader.readAsDataURL(file);
+        }
+      };
+      textReader.onerror = () => reject(textReader.error);
+      textReader.readAsText(file);
+      return;
+    }
+
+    // 2) GIF 파일: 움직이는 애니메이션 보존을 위해 원본 바이너리 Data URL 반환
+    if (isGif) {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    // 3) 비트맵(PNG/JPG/WEBP)인 경우 스티커 최적 해상도(최대 320px)로 경량화하여 로컬스토리지 쿼터 초과 원천 방어
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result;
-      const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
-      const isSvg = file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg');
-      
-      // 움직이는 GIF는 캔버스 drawImage 거치면 정지 화상이 되므로 반드시 원본 Data URL 그대로 반환
-      // SVG도 벡터 데이터이므로 원본 그대로 반환
-      if (isGif || isSvg) {
-        resolve(dataUrl);
-        return;
-      }
-
-      // 비트맵(PNG/JPG/WEBP)인 경우 스티커 최적 해상도(최대 320px)로 경량화하여 로컬스토리지 쿼터 초과 원천 방어
       const img = new Image();
       img.onload = () => {
         const maxDim = 320;
@@ -471,7 +586,19 @@ export async function uploadDecorationAsset({ file, category, name }) {
   let storagePath = '';
 
   const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
-  const resolvedContentType = file.type || (isGif ? 'image/gif' : 'image/png');
+  const isSvg = file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg');
+  const resolvedContentType = isSvg ? 'image/svg+xml' : (isGif ? 'image/gif' : (file.type || 'image/png'));
+
+  // SVG 파일인 경우 사전에 벡터 정규화된 Blob으로 변환하여 Storage에 올림 (아이폰 Safari 고화질 보장)
+  let uploadPayload = file;
+  if (isSvg) {
+    try {
+      const rawSvg = await file.text();
+      const normalizedSvg = normalizeSvgContent(rawSvg);
+      uploadPayload = new Blob([normalizedSvg], { type: 'image/svg+xml' });
+      uploadPayload.name = file.name;
+    } catch {}
+  }
 
   // 1) Firebase Storage가 가용한 경우 1.2초 타임아웃 내에 업로드 시도
   if (storage && isStorageBucketAvailable) {
@@ -479,7 +606,7 @@ export async function uploadDecorationAsset({ file, category, name }) {
     const fileRef = storageRef(storage, candidatePath);
     try {
       await withTimeout(
-        uploadBytes(fileRef, file, {
+        uploadBytes(fileRef, uploadPayload, {
           contentType: resolvedContentType,
         }),
         1200,
@@ -501,7 +628,7 @@ export async function uploadDecorationAsset({ file, category, name }) {
     }
   }
 
-  // 2) Storage 미사용/폴백 시 SVG/PNG/GIF Data URL로 즉시 변환 (GIF 애니메이션 100% 보존)
+  // 2) Storage 미사용/폴백 시 SVG/PNG/GIF Data URL로 즉시 변환 (GIF 애니메이션 및 SVG 벡터 100% 보존)
   if (!imageUrl) {
     imageUrl = await fileToDataUrl(file);
     storagePath = '';
@@ -559,26 +686,39 @@ export async function uploadDecorationAsset({ file, category, name }) {
 
 /**
  * 11. Firestore decorations 컬렉션 실시간 구독
+ * (어드민에서 삭제된 스티커가 로컬 캐시로 인해 영구 부활하던 버그 원천 차단 및 deleted_decorations 묘비 연동)
  * @param {(items: Array<any>) => void} onUpdate
  * @param {(error: any) => void} [onError]
  */
 export function subscribeToDecorations(onUpdate, onError) {
   let cloudDocsMap = new Map();
   let userDocsMap = new Map();
+  let cachedDeletedDecoIds = new Set();
 
   const emitMerged = () => {
     const mergedMap = new Map();
-    // 1) 로컬 캐시
-    readLocalDecorations().forEach((item) => {
-      if (item?.id) mergedMap.set(item.id, item);
-    });
-    // 2) 사용자 하위 폴백 컬렉션
+
+    // 1) Firestore 응답 전이거나 오프라인일 때만 로컬 캐시를 초기 표시용으로 활용
+    if (cloudDocsMap.size === 0) {
+      readLocalDecorations().forEach((item) => {
+        if (item?.id && !cachedDeletedDecoIds.has(String(item.id))) {
+          mergedMap.set(String(item.id), item);
+        }
+      });
+    }
+
+    // 2) 사용자 하위 폴백 컬렉션 (삭제된 ID 제외)
     userDocsMap.forEach((item, id) => {
-      mergedMap.set(id, item);
+      if (!cachedDeletedDecoIds.has(String(id))) {
+        mergedMap.set(String(id), item);
+      }
     });
-    // 3) 공용 decorations 컬렉션 우선
+
+    // 3) 공용 decorations 컬렉션 (단일 진실 원천)
     cloudDocsMap.forEach((item, id) => {
-      mergedMap.set(id, item);
+      if (!cachedDeletedDecoIds.has(String(id))) {
+        mergedMap.set(String(id), item);
+      }
     });
 
     const items = Array.from(mergedMap.values());
@@ -601,29 +741,50 @@ export function subscribeToDecorations(onUpdate, onError) {
     };
   }
 
+  // 삭제된 스티커 묘비(tombstones) 실시간 구독
+  let unsubDeleted = () => {};
+  try {
+    const deletedDecoRef = collection(db, 'deleted_decorations');
+    unsubDeleted = onSnapshot(
+      deletedDecoRef,
+      (snap) => {
+        cachedDeletedDecoIds = new Set(snap.docs.map((d) => d.id));
+        // 로컬 캐시에서도 삭제된 스티커 즉각 정리
+        const currentLocal = readLocalDecorations();
+        const filteredLocal = currentLocal.filter((d) => !cachedDeletedDecoIds.has(String(d.id)));
+        if (filteredLocal.length !== currentLocal.length) {
+          writeLocalDecorations(filteredLocal);
+        }
+        emitMerged();
+      },
+      () => {}
+    );
+  } catch {}
+
   const decorationsRef = collection(db, 'decorations');
   const unsubGlobal = onSnapshot(
     decorationsRef,
     (snapshot) => {
       cloudDocsMap = new Map();
       snapshot.docs.forEach((docSnap) => {
+        if (cachedDeletedDecoIds.has(docSnap.id)) {
+          // 혹시 원격에 남아있는 삭제 묘비 문서는 정리
+          deleteDoc(doc(db, 'decorations', docSnap.id)).catch(() => {});
+          return;
+        }
         cloudDocsMap.set(docSnap.id, {
           id: docSnap.id,
           ...docSnap.data(),
         });
       });
-      // 클라우드 데이터가 있으면 로컬 캐시도 최신화
-      if (cloudDocsMap.size > 0) {
-        const mergedForCache = new Map();
-        readLocalDecorations().forEach((d) => mergedForCache.set(d.id, d));
-        cloudDocsMap.forEach((v, k) => mergedForCache.set(k, v));
-        try {
-          localStorage.setItem(
-            LOCAL_DECORATIONS_KEY,
-            JSON.stringify(Array.from(mergedForCache.values()))
-          );
-        } catch {}
-      }
+
+      // 클라우드 데이터가 수신되면, 로컬 캐시를 클라우드 최신 목록으로 '완전 동기화(교체)'
+      // (삭제된 로컬 아이템을 도로 합쳐서 되살리지 않음!)
+      const currentCloudList = Array.from(cloudDocsMap.values());
+      try {
+        localStorage.setItem(LOCAL_DECORATIONS_KEY, JSON.stringify(currentCloudList));
+      } catch {}
+
       emitMerged();
     },
     (error) => {
@@ -647,7 +808,9 @@ export function subscribeToDecorations(onUpdate, onError) {
       (snap) => {
         userDocsMap = new Map();
         snap.docs.forEach((d) => {
-          userDocsMap.set(d.id, { id: d.id, ...d.data() });
+          if (!cachedDeletedDecoIds.has(d.id)) {
+            userDocsMap.set(d.id, { id: d.id, ...d.data() });
+          }
         });
         emitMerged();
       },
@@ -661,6 +824,7 @@ export function subscribeToDecorations(onUpdate, onError) {
 
   return () => {
     localDecorationListeners.delete(emitMerged);
+    unsubDeleted();
     unsubGlobal();
     unsubUser();
     unsubAuth();
@@ -668,20 +832,72 @@ export function subscribeToDecorations(onUpdate, onError) {
 }
 
 /**
- * 12. 꾸미기 에셋 삭제 (Firestore decorations 문서 삭제 + Firebase Storage 원본 이미지 삭제)
+ * 11-1. 절전 복귀 시 decorations 최신 에셋 단발성 초고속 직접 동기화
+ */
+export async function fetchDecorationsOnce() {
+  if (!isFirebaseConfigured || !db) return [];
+  try {
+    const [snap, deletedSnap] = await Promise.all([
+      getDocs(collection(db, 'decorations')),
+      getDocs(collection(db, 'deleted_decorations')).catch(() => ({ docs: [] })),
+    ]);
+    const deletedIds = new Set(deletedSnap.docs.map((d) => d.id));
+    const items = [];
+    snap.docs.forEach((d) => {
+      if (!deletedIds.has(d.id)) {
+        items.push({ id: d.id, ...d.data() });
+      }
+    });
+    try {
+      localStorage.setItem(LOCAL_DECORATIONS_KEY, JSON.stringify(items));
+    } catch {}
+    localDecorationListeners.forEach((fn) => {
+      try { fn(); } catch {}
+    });
+    return items;
+  } catch (err) {
+    return [];
+  }
+}
+
+/**
+ * 12. 꾸미기 에셋 삭제 (Firestore decorations 문서 삭제 + deleted_decorations 묘비 등록 + Storage 원본 이미지 삭제)
  * @param {{ id: string, storagePath?: string }} decoration
  */
 export async function deleteDecorationAsset(decoration) {
   if (!decoration?.id) return;
   const idStr = String(decoration.id);
 
-  // 로컬 캐시에서 즉시 제거
+  // 1) 로컬 캐시에서 즉시 제거
   const nextLocal = readLocalDecorations().filter((d) => String(d.id) !== idStr);
   writeLocalDecorations(nextLocal);
 
+  // 로컬 analog_my_stickers 보관소에서도 삭제
+  try {
+    const rawMy = localStorage.getItem('analog_my_stickers');
+    if (rawMy) {
+      const list = JSON.parse(rawMy);
+      if (Array.isArray(list)) {
+        const cleaned = list.filter((s) => String(s.id) !== idStr && String(s.decorationId) !== idStr);
+        localStorage.setItem('analog_my_stickers', JSON.stringify(cleaned));
+      }
+    }
+  } catch {}
+
   if (!isFirebaseConfigured || !db) return;
 
-  // 1) Firestore 문서 삭제
+  // 2) 다른 모든 기기에서 해당 스티커가 부활하지 못하도록 영구 묘비(tombstone) 등록
+  try {
+    const tombstoneRef = doc(db, 'deleted_decorations', idStr);
+    await setDoc(tombstoneRef, {
+      id: idStr,
+      deletedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn('[Firestore] deleted_decorations tombstone 등록 오류:', err);
+  }
+
+  // 3) Firestore decorations 공용 컬렉션 문서 삭제
   try {
     await withTimeout(
       deleteDoc(doc(db, 'decorations', idStr)),
@@ -692,6 +908,7 @@ export async function deleteDecorationAsset(decoration) {
     console.warn('[Firestore] decorations 삭제 경고:', err);
   }
 
+  // 4) 사용자 하위 컬렉션 삭제
   if (auth?.currentUser?.uid) {
     try {
       await withTimeout(
@@ -702,7 +919,7 @@ export async function deleteDecorationAsset(decoration) {
     } catch {}
   }
 
-  // 2) Storage 파일 삭제 (경로가 있고 Storage가 활성화된 경우)
+  // 5) Storage 파일 삭제 (경로가 있고 Storage가 활성화된 경우)
   if (storage && isStorageBucketAvailable && decoration.storagePath) {
     try {
       const fileRef = storageRef(storage, decoration.storagePath);
