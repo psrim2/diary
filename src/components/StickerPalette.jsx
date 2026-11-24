@@ -1,23 +1,29 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Plus, Upload, Sparkles, X, Trash2 } from 'lucide-react';
-import { subscribeToDecorations, uploadDecorationAsset, deleteDecorationAsset, fileToDataUrl } from '../firebase';
+import {
+  subscribeToDecorations,
+  subscribeToCategories,
+  uploadDecorationAsset,
+  deleteDecorationAsset,
+  fileToDataUrl,
+} from '../firebase';
 import { PRESET_GIF_STICKERS } from '../constants/presetGifStickers';
 
-// 기본 하위 카테고리 목록
+// 기본 하위 카테고리 목록 (폴백용)
 const BASE_CATEGORIES = [
-  { id: 'my', label: 'MY' },
   { id: 'sticker', label: '스티커' },
+  { id: 'weather', label: '날씨' },
+  { id: 'tape', label: '마스킹테이프' },
   { id: 'character', label: '캐릭터' },
   { id: 'emotion', label: '감정' },
   { id: 'daily', label: '일상' },
-  { id: 'weather', label: '날씨' },
-  { id: 'tape', label: '마스킹테이프' },
   { id: 'food', label: '음식' },
 ];
 
 export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
   const [selectedCategory, setSelectedCategory] = useState('sticker');
   const [decorations, setDecorations] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleteMode, setIsDeleteMode] = useState(false);
@@ -42,10 +48,10 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
     }
   };
 
-  // Firestore decorations 컬렉션 실시간 구독
+  // Firestore decorations 및 categories 컬렉션 실시간 구독
   useEffect(() => {
     setIsLoading(true);
-    const unsubscribe = subscribeToDecorations(
+    const unsubDecorations = subscribeToDecorations(
       (items) => {
         setDecorations(items);
         setIsLoading(false);
@@ -56,21 +62,51 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
       }
     );
 
-    return () => unsubscribe();
+    const unsubCategories = subscribeToCategories(
+      (cats) => {
+        setCategories(cats);
+      },
+      (err) => {
+        console.error('[StickerPalette] categories 불러오기 오류:', err);
+      }
+    );
+
+    return () => {
+      unsubDecorations();
+      unsubCategories();
+    };
   }, []);
 
-  // 에셋에 포함된 추가 카테고리들을 감지하여 탭에 자동 추가 (가로 스크롤 지원)
+  // 동적 카테고리 탭 생성 (MY가 항상 맨 앞, 그 뒤에 구독된 카테고리들)
   const allCategories = useMemo(() => {
-    const existingIds = new Set(BASE_CATEGORIES.map(c => c.id));
-    const dynamicCats = [];
-    decorations.forEach(d => {
-      if (d.category && !existingIds.has(d.category) && d.category !== 'gif') {
-        existingIds.add(d.category);
-        dynamicCats.push({ id: d.category, label: d.category });
+    const list = [{ id: 'my', label: 'MY' }];
+    const sourceCats = categories.length > 0 ? categories : BASE_CATEGORIES;
+    const existingIds = new Set(['my']);
+
+    sourceCats.forEach((cat) => {
+      if (!existingIds.has(cat.id)) {
+        existingIds.add(cat.id);
+        list.push({ id: cat.id, label: cat.label });
       }
     });
-    return [...BASE_CATEGORIES, ...dynamicCats];
-  }, [decorations]);
+
+    // 등록된 에셋 중 카테고리 마스터에 없는 레거시 항목 추가
+    decorations.forEach((d) => {
+      if (d.category && !existingIds.has(d.category) && d.category !== 'gif') {
+        existingIds.add(d.category);
+        list.push({ id: d.category, label: d.category });
+      }
+    });
+
+    return list;
+  }, [categories, decorations]);
+
+  // 현재 선택된 카테고리가 삭제된 경우 안전하게 'sticker' 또는 첫 번째 탭으로 이동
+  useEffect(() => {
+    if (allCategories.length > 0 && !allCategories.some((c) => c.id === selectedCategory)) {
+      setSelectedCategory(allCategories[1]?.id || allCategories[0].id);
+    }
+  }, [allCategories, selectedCategory]);
 
   // 사용자 기기에서 직접 파일 선택 시: MY 카테고리로 등록
   const handleDirectUpload = async (e) => {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { GripVertical } from 'lucide-react';
 import {
   ADMIN_EMAIL,
   loginWithGoogle,
@@ -8,6 +9,11 @@ import {
   subscribeToDecorations,
   deleteDecorationAsset,
   updateDecorationAsset,
+  subscribeToCategories,
+  addCategory,
+  deleteCategory,
+  updateCategoriesOrder,
+  seedDefaultCategoriesIfNeeded,
 } from '../firebase';
 
 const BASE_CATEGORIES = [
@@ -44,18 +50,49 @@ export default function AdminPage() {
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [filterCategory, setFilterCategory] = useState('all');
 
-  // 등록된 에셋에서 파생된 전체 카테고리 목록 (가로 스크롤 대응)
+  // 카테고리 관리 상태
+  const [categories, setCategories] = useState([]);
+  const [newCatLabel, setNewCatLabel] = useState('');
+  const [newCatId, setNewCatId] = useState('');
+  const [isCatSubmitting, setIsCatSubmitting] = useState(false);
+  const [catMessage, setCatMessage] = useState('');
+  // 드래그 앤 드롭 순서 변경 상태
+  const [draggedCatIndex, setDraggedCatIndex] = useState(null);
+  const [dragOverCatIndex, setDragOverCatIndex] = useState(null);
+
+  // Firestore 카테고리 및 등록된 에셋에서 파생된 전체 카테고리 목록 (가로 스크롤 대응)
   const allCategories = useMemo(() => {
-    const existingIds = new Set(BASE_CATEGORIES.map(c => c.id));
-    const dynamicCats = [];
-    decorations.forEach(d => {
-      if (d.category && !existingIds.has(d.category) && d.category !== 'gif') {
-        existingIds.add(d.category);
-        dynamicCats.push({ id: d.category, label: `${d.category} (${d.category})` });
+    const catMap = new Map();
+    // 1) Firestore 구독된 카테고리
+    categories.forEach((c) => {
+      catMap.set(c.id, {
+        id: c.id,
+        label: `${c.label} (${c.id})`,
+        rawLabel: c.label,
+      });
+    });
+    // 2) 카테고리가 비어있을 때 BASE_CATEGORIES 폴백
+    if (catMap.size === 0) {
+      BASE_CATEGORIES.forEach((c) => {
+        catMap.set(c.id, {
+          id: c.id,
+          label: c.label,
+          rawLabel: c.label.split(' ')[0],
+        });
+      });
+    }
+    // 3) 기존 에셋 중 등록되지 않은 레거시 카테고리 보정
+    decorations.forEach((d) => {
+      if (d.category && !catMap.has(d.category) && d.category !== 'gif') {
+        catMap.set(d.category, {
+          id: d.category,
+          label: `${d.category} (${d.category})`,
+          rawLabel: d.category,
+        });
       }
     });
-    return [...BASE_CATEGORIES, ...dynamicCats];
-  }, [decorations]);
+    return Array.from(catMap.values());
+  }, [categories, decorations]);
 
   // [적용하기 / 취소]를 위한 스테이징(대기) 상태
   // 1) 새로 추가할 파일 대기 목록: [{ tempId, file, previewUrl, category, name }]
@@ -108,8 +145,22 @@ export default function AdminPage() {
       user && (user.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase();
     if (!isAuthorized) {
       setDecorations([]);
+      setCategories([]);
       return;
     }
+
+    // 기본 카테고리가 없으면 1회 시딩
+    seedDefaultCategoriesIfNeeded();
+
+    // 카테고리 실시간 구독
+    const unsubCats = subscribeToCategories(
+      (cats) => {
+        setCategories(cats);
+      },
+      (err) => {
+        console.error('[Admin] categories 조회 오류:', err);
+      }
+    );
 
     setIsLoadingList(true);
     const unsubscribe = subscribeToDecorations(
@@ -123,8 +174,151 @@ export default function AdminPage() {
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubCats();
+      unsubscribe();
+    };
   }, [user]);
+
+  // 카테고리 추가 핸들러
+  const handleAddCategory = async (e) => {
+    e?.preventDefault?.();
+    if (!newCatLabel.trim()) {
+      alert('카테고리 이름을 입력해 주세요.');
+      return;
+    }
+    setIsCatSubmitting(true);
+    setCatMessage('');
+    try {
+      const added = await addCategory({
+        id: newCatId.trim(),
+        label: newCatLabel.trim(),
+      });
+      setNewCatLabel('');
+      setNewCatId('');
+      setCatMessage(`'${added.label}' 카테고리가 추가되었습니다.`);
+      setTimeout(() => setCatMessage(''), 3000);
+    } catch (err) {
+      alert(err.message || '카테고리 추가에 실패했습니다.');
+    } finally {
+      setIsCatSubmitting(false);
+    }
+  };
+
+  // 카테고리 삭제 핸들러
+  const handleDeleteCategory = async (cat) => {
+    const count = decorations.filter((d) => d.category === cat.id).length;
+    let confirmMsg = `'${cat.label}' (${cat.id}) 카테고리를 삭제하시겠습니까?`;
+    if (count > 0) {
+      confirmMsg += `\n(주의: 해당 카테고리에 속한 에셋이 ${count}개 있습니다.)`;
+    }
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await deleteCategory(cat.id);
+      if (uploadCategory === cat.id) {
+        setUploadCategory('sticker');
+      }
+      if (filterCategory === cat.id) {
+        setFilterCategory('all');
+      }
+      setCatMessage(`'${cat.label}' 카테고리가 삭제되었습니다.`);
+      setTimeout(() => setCatMessage(''), 3000);
+    } catch (err) {
+      alert(err.message || '카테고리 삭제에 실패했습니다.');
+    }
+  };
+
+  // 카테고리 순서 재배치 함수 (fromIndex -> toIndex)
+  const reorderCategories = async (fromIndex, toIndex) => {
+    if (fromIndex === null || toIndex === null || fromIndex === toIndex) return;
+    if (
+      fromIndex < 0 ||
+      fromIndex >= categories.length ||
+      toIndex < 0 ||
+      toIndex >= categories.length
+    ) {
+      return;
+    }
+
+    const nextList = [...categories];
+    const [moved] = nextList.splice(fromIndex, 1);
+    nextList.splice(toIndex, 0, moved);
+
+    setCategories(nextList);
+    try {
+      await updateCategoriesOrder(nextList);
+      setCatMessage(`'${moved.label}' 카테고리 순서가 변경되었습니다.`);
+      setTimeout(() => setCatMessage(''), 2500);
+    } catch (err) {
+      console.error('순서 변경 실패:', err);
+    }
+  };
+
+  // 데스크톱 HTML5 Drag and Drop 핸들러
+  const handleDragStart = (e, index) => {
+    setDraggedCatIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', String(index));
+    } catch {}
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverCatIndex !== index) {
+      setDragOverCatIndex(index);
+    }
+  };
+
+  const handleDrop = (e, targetIndex) => {
+    e.preventDefault();
+    if (draggedCatIndex !== null && draggedCatIndex !== targetIndex) {
+      reorderCategories(draggedCatIndex, targetIndex);
+    }
+    setDraggedCatIndex(null);
+    setDragOverCatIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedCatIndex(null);
+    setDragOverCatIndex(null);
+  };
+
+  // 모바일 터치 드래그 앤 드롭 핸들러
+  const touchStartIndexRef = useRef(null);
+  const handleTouchStart = (index) => {
+    touchStartIndexRef.current = index;
+    setDraggedCatIndex(index);
+  };
+
+  const handleTouchMove = (e) => {
+    if (touchStartIndexRef.current === null) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const elem = document.elementFromPoint(touch.clientX, touch.clientY);
+    const catCard = elem?.closest?.('[data-cat-index]');
+    if (catCard) {
+      const idx = Number(catCard.getAttribute('data-cat-index'));
+      if (!isNaN(idx) && idx !== dragOverCatIndex) {
+        setDragOverCatIndex(idx);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (
+      touchStartIndexRef.current !== null &&
+      dragOverCatIndex !== null &&
+      touchStartIndexRef.current !== dragOverCatIndex
+    ) {
+      reorderCategories(touchStartIndexRef.current, dragOverCatIndex);
+    }
+    touchStartIndexRef.current = null;
+    setDraggedCatIndex(null);
+    setDragOverCatIndex(null);
+  };
 
   // 컴포넌트 언마운트 시에만 Object URL 정리
   const pendingAddsRef = useRef(pendingAdds);
@@ -375,8 +569,10 @@ export default function AdminPage() {
   // 로딩 화면
   if (isAuthLoading) {
     return (
-      <div className="admin-page p-6">
-        <p>인증 상태를 확인하는 중입니다...</p>
+      <div className="w-full h-full overflow-y-auto bg-stone-50">
+        <div className="admin-page p-6 min-h-full flex items-center justify-center">
+          <p>인증 상태를 확인하는 중입니다...</p>
+        </div>
       </div>
     );
   }
@@ -384,47 +580,50 @@ export default function AdminPage() {
   // 미로그인 또는 권한 없음(차단) 게이트 화면
   if (!isAuthorizedAdmin) {
     return (
-      <div className="admin-login-gate p-6 max-w-md mx-auto">
-        <h1 className="text-xl font-bold mb-4">관리자 전용 페이지 (/admin)</h1>
+      <div className="w-full h-full overflow-y-auto bg-stone-50">
+        <div className="admin-login-gate p-6 max-w-md mx-auto min-h-full flex flex-col justify-center">
+          <h1 className="text-xl font-bold mb-4">관리자 전용 페이지 (/admin)</h1>
 
-        {unauthorizedInfo && (
-          <div
-            role="alert"
-            className="admin-access-denied border border-red-400 bg-red-50 text-red-700 p-4 mb-4"
+          {unauthorizedInfo && (
+            <div
+              role="alert"
+              className="admin-access-denied border border-red-400 bg-red-50 text-red-700 p-4 mb-4"
+            >
+              <p className="font-bold">{unauthorizedInfo.message}</p>
+              <p className="text-sm mt-1">
+                로그인 시도 계정: {unauthorizedInfo.email} (자동 로그아웃 및 접근 차단됨)
+              </p>
+            </div>
+          )}
+
+          {authError && (
+            <div className="border border-red-300 bg-red-50 text-red-600 p-3 mb-4 text-sm">
+              {authError}
+            </div>
+          )}
+
+          <p className="text-sm mb-4">
+            관리자 계정으로 로그인해야 대시보드에 접근할 수 있습니다.
+          </p>
+
+          <button
+            type="button"
+            onClick={handleAdminLogin}
+            className="px-4 py-2 border border-black bg-black text-white text-sm"
           >
-            <p className="font-bold">{unauthorizedInfo.message}</p>
-            <p className="text-sm mt-1">
-              로그인 시도 계정: {unauthorizedInfo.email} (자동 로그아웃 및 접근 차단됨)
-            </p>
-          </div>
-        )}
-
-        {authError && (
-          <div className="border border-red-300 bg-red-50 text-red-600 p-3 mb-4 text-sm">
-            {authError}
-          </div>
-        )}
-
-        <p className="text-sm mb-4">
-          관리자 계정으로 로그인해야 대시보드에 접근할 수 있습니다.
-        </p>
-
-        <button
-          type="button"
-          onClick={handleAdminLogin}
-          className="px-4 py-2 border border-black bg-black text-white text-sm"
-        >
-          구글 로그인
-        </button>
+            구글 로그인
+          </button>
+        </div>
       </div>
     );
   }
 
   // 관리자 대시보드 화면 (psrim2@gmail.com 로그인 완료 시)
   return (
-    <div className="admin-dashboard p-6 max-w-4xl mx-auto">
-      {/* 상단 관리자 정보 및 로그아웃 */}
-      <header className="admin-header flex items-center justify-between border-b pb-4 mb-6">
+    <div className="w-full h-full overflow-y-auto bg-stone-50 text-stone-900">
+      <div className="admin-dashboard p-6 max-w-4xl mx-auto min-h-full pb-20">
+        {/* 상단 관리자 정보 및 로그아웃 */}
+        <header className="admin-header flex items-center justify-between border-b pb-4 mb-6">
         <div>
           <h1 className="text-xl font-bold">꾸미기 에셋 관리자 대시보드</h1>
           <p className="text-sm text-stone-600">접속 계정: {user.email}</p>
@@ -450,7 +649,17 @@ export default function AdminPage() {
             <span className="text-stone-500">대기 중인 변경사항이 없습니다.</span>
           )}
           {statusMessage && (
-            <p className="text-xs text-stone-600 mt-1">{statusMessage}</p>
+            <p
+              className={`text-xs mt-1 font-semibold ${
+                statusMessage.includes('실패') || statusMessage.includes('오류')
+                  ? 'text-red-600'
+                  : statusMessage.includes('완료')
+                  ? 'text-green-700'
+                  : 'text-stone-700'
+              }`}
+            >
+              {statusMessage}
+            </p>
           )}
         </div>
 
@@ -474,7 +683,121 @@ export default function AdminPage() {
         </div>
       </section>
 
-      {/* 1. 새 에셋 파일 선택 (선택 시 대기 목록에 추가됨 -> '적용하기' 클릭 시 최종 반영) */}
+      {/* 1. 카테고리 관리 섹션 (추가 및 삭제) */}
+      <section className="admin-category-manage-section border p-4 mb-8 bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 className="text-base font-bold">에셋 카테고리 관리</h2>
+          {catMessage && (
+            <span className="text-xs text-green-700 font-medium">
+              {catMessage}
+            </span>
+          )}
+        </div>
+
+        {/* 새 카테고리 추가 폼 */}
+        <form
+          onSubmit={handleAddCategory}
+          className="flex flex-wrap items-end gap-2 mb-4 p-3 bg-stone-50 border border-stone-200 rounded"
+        >
+          <div>
+            <label className="block text-xs font-semibold text-stone-600 mb-1">
+              카테고리 이름 (예: 동물, 캐릭터) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={newCatLabel}
+              onChange={(e) => setNewCatLabel(e.target.value)}
+              placeholder="예: 동물"
+              className="border px-2.5 py-1.5 text-sm bg-white"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-stone-600 mb-1">
+              영문 식별 ID (선택, 미입력 시 자동생성)
+            </label>
+            <input
+              type="text"
+              value={newCatId}
+              onChange={(e) => setNewCatId(e.target.value.toLowerCase())}
+              placeholder="예: animal"
+              className="border px-2.5 py-1.5 text-sm bg-white"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isCatSubmitting || !newCatLabel.trim()}
+            className="px-4 py-1.5 border border-black bg-black text-white text-sm font-medium disabled:opacity-40 cursor-pointer"
+          >
+            {isCatSubmitting ? '추가 중...' : '+ 카테고리 추가'}
+          </button>
+        </form>
+
+        {/* 등록된 카테고리 목록 & 드래그 앤 드롭 순서 변경 & 삭제 */}
+        <div>
+          <h3 className="text-xs font-semibold text-stone-500 mb-2">
+            등록된 카테고리 목록 ({categories.length}개) - 카드를 원하는 위치로 드래그하여 순서를 변경할 수 있습니다
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {categories.map((cat, index) => {
+              const assetCount = decorations.filter((d) => d.category === cat.id).length;
+              const isDragging = draggedCatIndex === index;
+              const isOver = dragOverCatIndex === index && draggedCatIndex !== index;
+
+              return (
+                <div
+                  key={cat.id}
+                  data-cat-index={index}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                  onTouchStart={() => handleTouchStart(index)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  className={`flex items-center gap-1.5 px-3 py-2 bg-stone-100 border rounded text-xs text-stone-800 transition-all select-none cursor-grab active:cursor-grabbing ${
+                    isDragging
+                      ? 'opacity-40 ring-2 ring-stone-400 border-dashed border-stone-500 scale-95'
+                      : isOver
+                      ? 'ring-2 ring-black bg-stone-200 border-black scale-105 shadow-sm'
+                      : 'border-stone-300 hover:border-stone-400 hover:bg-stone-50'
+                  }`}
+                  title="드래그하여 순서 변경"
+                >
+                  {/* 드래그 손잡이 아이콘 */}
+                  <span className="text-stone-400 hover:text-black shrink-0">
+                    <GripVertical size={13} />
+                  </span>
+
+                  {/* 순서 번호 */}
+                  <span className="text-[11px] font-bold text-stone-400 shrink-0">
+                    {index + 1}.
+                  </span>
+
+                  <span className="font-bold">{cat.label}</span>
+                  <span className="text-stone-500">({cat.id})</span>
+                  <span className="px-1.5 py-0.5 bg-white border border-stone-200 rounded-full text-[10px] text-stone-600 shrink-0">
+                    {assetCount}개
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteCategory(cat);
+                    }}
+                    className="text-stone-400 hover:text-red-600 font-bold ml-1 p-0.5 transition cursor-pointer"
+                    title={`${cat.label} 카테고리 삭제`}
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* 2. 새 에셋 파일 선택 (선택 시 대기 목록에 추가됨 -> '적용하기' 클릭 시 최종 반영) */}
       <section className="admin-upload-section border p-4 mb-8 bg-white">
         <h2 className="text-base font-bold mb-3">새 꾸미기 에셋 추가</h2>
         <div className="space-y-3">
@@ -521,6 +844,32 @@ export default function AdminPage() {
               className="text-sm"
             />
           </div>
+
+          {pendingAdds.length > 0 && (
+            <div className="mt-3 p-3 bg-stone-100 border border-stone-300 rounded flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-bold text-stone-800">
+                대기 중인 파일: {pendingAdds.length}건
+              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleCancelChanges}
+                  disabled={isApplying}
+                  className="px-3 py-1.5 border border-stone-400 bg-white text-xs text-stone-700 cursor-pointer"
+                >
+                  선택 취소
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyChanges}
+                  disabled={isApplying}
+                  className="px-4 py-1.5 border border-black bg-black text-white text-xs font-bold cursor-pointer"
+                >
+                  {isApplying ? '업로드 적용 중...' : '지금 바로 업로드 적용하기'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -742,5 +1091,6 @@ export default function AdminPage() {
         </div>
       </section>
     </div>
+  </div>
   );
 }

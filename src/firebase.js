@@ -458,10 +458,9 @@ export async function uploadDecorationAsset({ file, category, name }) {
   if (!file) {
     throw new Error('업로드할 파일을 선택해 주세요.');
   }
-  const validCategories = ['weather', 'sticker', 'tape', 'gif'];
-  if (!validCategories.includes(category)) {
-    throw new Error('유효하지 않은 카테고리입니다.');
-  }
+
+  // 동적 카테고리 지원 (미지정 시 기본값 'sticker')
+  const targetCategory = (category || '').trim() || 'sticker';
 
   const timestamp = Date.now();
   const randomSuffix = Math.random().toString(36).slice(2, 7);
@@ -476,7 +475,7 @@ export async function uploadDecorationAsset({ file, category, name }) {
 
   // 1) Firebase Storage가 가용한 경우 1.2초 타임아웃 내에 업로드 시도
   if (storage && isStorageBucketAvailable) {
-    const candidatePath = `decorations/${category}/${timestamp}_${safeFileName}`;
+    const candidatePath = `decorations/${targetCategory}/${timestamp}_${safeFileName}`;
     const fileRef = storageRef(storage, candidatePath);
     try {
       await withTimeout(
@@ -512,7 +511,7 @@ export async function uploadDecorationAsset({ file, category, name }) {
   const defaultLabel = file.name.replace(/\.[^/.]+$/, '');
   const itemRecord = {
     id: docId,
-    category, // 'weather' | 'sticker' | 'tape' | 'gif'
+    category: targetCategory,
     imageUrl,
     name: (name && name.trim()) || defaultLabel,
     fileName: file.name,
@@ -765,3 +764,250 @@ export async function updateDecorationAsset(id, fields) {
     } catch {}
   }
 }
+
+/**
+ * 14. 카테고리 관리 기능 (기본 카테고리 상수 및 로컬 캐시 + Firestore categories 컬렉션)
+ */
+export const DEFAULT_CATEGORIES = [
+  { id: 'sticker', label: '스티커', order: 1 },
+  { id: 'weather', label: '날씨', order: 2 },
+  { id: 'tape', label: '마스킹테이프', order: 3 },
+  { id: 'character', label: '캐릭터', order: 4 },
+  { id: 'emotion', label: '감정', order: 5 },
+  { id: 'daily', label: '일상', order: 6 },
+  { id: 'food', label: '음식', order: 7 },
+];
+
+const LOCAL_CATEGORIES_KEY = 'analog_diary_categories';
+const localCategoryListeners = new Set();
+
+export function readLocalCategories() {
+  if (typeof window === 'undefined') return DEFAULT_CATEGORIES;
+  try {
+    const raw = localStorage.getItem(LOCAL_CATEGORIES_KEY);
+    if (!raw) return DEFAULT_CATEGORIES;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_CATEGORIES;
+  } catch {
+    return DEFAULT_CATEGORIES;
+  }
+}
+
+export function writeLocalCategories(categories) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(LOCAL_CATEGORIES_KEY, JSON.stringify(categories));
+  } catch (err) {
+    console.warn('[LocalStorage] 카테고리 캐시 저장 실패:', err);
+  }
+  localCategoryListeners.forEach((fn) => {
+    try {
+      fn();
+    } catch {}
+  });
+}
+
+/**
+ * Firestore categories 컬렉션 실시간 구독
+ * @param {(categories: Array<{ id: string, label: string, order?: number }>) => void} onUpdate
+ * @param {(error: any) => void} [onError]
+ */
+export function subscribeToCategories(onUpdate, onError) {
+  let cloudCategories = null;
+
+  const emit = () => {
+    if (cloudCategories && cloudCategories.length > 0) {
+      onUpdate(cloudCategories);
+    } else {
+      const local = readLocalCategories();
+      onUpdate(local);
+    }
+  };
+
+  // 1) 초기 즉시 로컬 캐시 전달
+  emit();
+  localCategoryListeners.add(emit);
+
+  if (!isFirebaseConfigured || !db) {
+    return () => {
+      localCategoryListeners.delete(emit);
+    };
+  }
+
+  // 2) Firestore categories 컬렉션 실시간 구독
+  const categoriesRef = collection(db, 'categories');
+  const unsubCloud = onSnapshot(
+    categoriesRef,
+    (snapshot) => {
+      if (!snapshot.empty) {
+        const list = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        }));
+        // order 또는 생성순 정렬
+        list.sort((a, b) => {
+          const orderA = typeof a.order === 'number' ? a.order : 999;
+          const orderB = typeof b.order === 'number' ? b.order : 999;
+          if (orderA !== orderB) return orderA - orderB;
+          return (a.createdAtMs || 0) - (b.createdAtMs || 0);
+        });
+        cloudCategories = list;
+        writeLocalCategories(list);
+      } else {
+        // Firestore에 카테고리가 아직 하나도 없을 경우 기본값 전달
+        cloudCategories = null;
+      }
+      emit();
+    },
+    (error) => {
+      console.warn('[Firestore] categories 구독 경고(폴백 작동):', error?.message || error);
+      emit();
+      if (onError) onError(error);
+    }
+  );
+
+  return () => {
+    localCategoryListeners.delete(emit);
+    unsubCloud();
+  };
+}
+
+/**
+ * 카테고리가 Firestore에 비어있을 경우 기본 카테고리를 시딩
+ */
+export async function seedDefaultCategoriesIfNeeded() {
+  if (!isFirebaseConfigured || !db) return;
+  try {
+    const snap = await withTimeout(getDocs(collection(db, 'categories')), 3000, 'GET_CATEGORIES_TIMEOUT');
+    if (snap.empty) {
+      console.log('[Firestore] categories 컬렉션이 비어있어 기본 카테고리를 등록합니다.');
+      for (const cat of DEFAULT_CATEGORIES) {
+        await setDoc(doc(db, 'categories', cat.id), {
+          label: cat.label,
+          order: cat.order,
+          createdAt: serverTimestamp(),
+          createdAtMs: Date.now(),
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[Firestore] 기본 카테고리 시딩 오류/경고:', err);
+  }
+}
+
+/**
+ * 새 카테고리 추가
+ * @param {{ id: string, label: string, order?: number }} category
+ */
+export async function addCategory({ id, label, order }) {
+  const cleanLabel = (label || '').trim();
+  let cleanId = (id || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+
+  if (!cleanId) {
+    cleanId = `cat_${Date.now()}`;
+  }
+  if (!cleanLabel) {
+    throw new Error('카테고리 이름을 입력해 주세요.');
+  }
+
+  const currentLocal = readLocalCategories();
+  if (currentLocal.some((c) => c.id === cleanId)) {
+    throw new Error(`이미 존재하는 카테고리 ID (${cleanId}) 입니다.`);
+  }
+
+  const nextOrder = typeof order === 'number' ? order : currentLocal.length + 1;
+  const newCat = {
+    id: cleanId,
+    label: cleanLabel,
+    order: nextOrder,
+    createdAtMs: Date.now(),
+  };
+
+  const nextList = [...currentLocal, newCat];
+  writeLocalCategories(nextList);
+
+  if (isFirebaseConfigured && db) {
+    try {
+      await withTimeout(
+        setDoc(doc(db, 'categories', cleanId), {
+          label: cleanLabel,
+          order: nextOrder,
+          createdAt: serverTimestamp(),
+          createdAtMs: Date.now(),
+        }),
+        3000,
+        'FIRESTORE_ADD_CATEGORY_TIMEOUT'
+      );
+    } catch (err) {
+      console.warn('[Firestore] 카테고리 추가 경고:', err);
+    }
+  }
+
+  return newCat;
+}
+
+/**
+ * 카테고리 삭제
+ * @param {string} categoryId
+ */
+export async function deleteCategory(categoryId) {
+  if (!categoryId) return;
+  const targetId = String(categoryId);
+
+  const currentLocal = readLocalCategories();
+  const nextList = currentLocal.filter((c) => c.id !== targetId);
+  writeLocalCategories(nextList);
+
+  if (isFirebaseConfigured && db) {
+    try {
+      await withTimeout(
+        deleteDoc(doc(db, 'categories', targetId)),
+        3000,
+        'FIRESTORE_DELETE_CATEGORY_TIMEOUT'
+      );
+    } catch (err) {
+      console.warn('[Firestore] 카테고리 삭제 경고:', err);
+    }
+  }
+}
+
+/**
+ * 카테고리 순서 일괄 갱신
+ * @param {Array<{ id: string, label: string, order?: number }>} reorderedList
+ */
+export async function updateCategoriesOrder(reorderedList) {
+  if (!Array.isArray(reorderedList)) return [];
+
+  const updatedList = reorderedList.map((cat, idx) => ({
+    ...cat,
+    order: idx + 1,
+  }));
+
+  // 1) 로컬 캐시 즉시 업데이트
+  writeLocalCategories(updatedList);
+
+  // 2) Firestore 일괄 업데이트
+  if (isFirebaseConfigured && db) {
+    try {
+      const batch = writeBatch(db);
+      updatedList.forEach((cat) => {
+        const catRef = doc(db, 'categories', cat.id);
+        batch.set(
+          catRef,
+          {
+            label: cat.label,
+            order: cat.order,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      });
+      await withTimeout(batch.commit(), 3500, 'BATCH_UPDATE_CATEGORIES_TIMEOUT');
+    } catch (err) {
+      console.warn('[Firestore] 카테고리 순서 업데이트 경고:', err);
+    }
+  }
+
+  return updatedList;
+}
+

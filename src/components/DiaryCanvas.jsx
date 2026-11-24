@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { PEN_TOOLS, PAPER_STYLES, FONTS } from '../constants';
 import { PRESET_GIF_STICKERS } from '../constants/presetGifStickers';
-import { subscribeToDecorations } from '../firebase';
+import { subscribeToDecorations, subscribeToCategories } from '../firebase';
 import { 
   normalizeDiaryLayers, 
   buildStrokeBands, 
@@ -371,6 +371,7 @@ export default function DiaryCanvas({
 
   // Firestore decorations 목록 (날짜 옆 대표 아이콘 선택용)
   const [decorations, setDecorations] = useState([]);
+  const [categories, setCategories] = useState([]);
 
   // 로컬 개인화 스티커 보관 (MY 카테고리)
   const [myStickers, setMyStickers] = useState(() => {
@@ -393,35 +394,53 @@ export default function DiaryCanvas({
   }, [isWeatherOpen]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToDecorations((items) => {
+    const unsubDecorations = subscribeToDecorations((items) => {
       setDecorations(items);
     });
-    return () => unsubscribe();
+    const unsubCategories = subscribeToCategories((cats) => {
+      setCategories(cats);
+    });
+    return () => {
+      unsubDecorations();
+      unsubCategories();
+    };
   }, []);
 
-  // 대표 스티커 선택용 하위 카테고리 목록 (StickerPalette와 동일하게 가로 스크롤 노출)
+  // 대표 스티커 선택용 하위 카테고리 목록 (마스킹테이프(tape) 및 날씨(weather) 제외, 동적 카테고리 반영)
   const repStickerCategories = useMemo(() => {
-    const base = [
-      { id: 'my', label: 'MY' },
+    const list = [{ id: 'my', label: 'MY' }];
+    const sourceCats = categories.length > 0 ? categories : [
       { id: 'sticker', label: '스티커' },
       { id: 'character', label: '캐릭터' },
       { id: 'emotion', label: '감정' },
       { id: 'daily', label: '일상' },
-      { id: 'tape', label: '마스킹테이프' },
       { id: 'food', label: '음식' },
     ];
-    const existing = new Set(base.map((b) => b.id));
-    existing.add('weather');
-    existing.add('gif');
-    const dynamicCats = [];
+    const existing = new Set(['my', 'weather', 'tape', 'gif']);
+
+    sourceCats.forEach((c) => {
+      if (!existing.has(c.id)) {
+        existing.add(c.id);
+        list.push({ id: c.id, label: c.label });
+      }
+    });
+
     (decorations || []).forEach((d) => {
       if (d.category && !existing.has(d.category)) {
         existing.add(d.category);
-        dynamicCats.push({ id: d.category, label: d.category });
+        list.push({ id: d.category, label: d.category });
       }
     });
-    return [...base, ...dynamicCats];
-  }, [decorations]);
+
+    return list;
+  }, [categories, decorations]);
+
+  // 대표 스티커 하위 카테고리가 삭제된 경우 안전하게 폴백
+  useEffect(() => {
+    if (repStickerCategories.length > 0 && !repStickerCategories.some((c) => c.id === repStickerSubCategory)) {
+      setRepStickerSubCategory(repStickerCategories[1]?.id || repStickerCategories[0].id);
+    }
+  }, [repStickerCategories, repStickerSubCategory]);
 
   // 선택된 대표 스티커 하위 카테고리별 에셋 필터링
   const filteredRepStickers = useMemo(() => {
