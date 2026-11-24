@@ -5,14 +5,10 @@ import {
   LogIn,
   Info,
   Share2,
-  Calendar,
-  List,
-  Sparkles,
   ExternalLink,
   Check,
   User,
   Shield,
-  Smartphone,
   ChevronRight,
 } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
@@ -25,9 +21,6 @@ export default function SideMenuDrawer({
   diaryName,
   onLogin,
   onLogout,
-  currentView,
-  setCurrentView,
-  onOpenYearView,
 }) {
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
@@ -304,100 +297,13 @@ export default function SideMenuDrawer({
                 </div>
                 <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 shrink-0" />
               </button>
-            </div>
-
-            {/* 3. 기타 확장 메뉴 (다이어리 바로가기 및 관리) */}
-            <div className="space-y-1 pt-2 border-t border-stone-200/70">
-              <div className="text-[10px] font-bold text-stone-400 px-2 pb-1">다이어리 뷰 바로가기</div>
-
-              {/* 달력 뷰 */}
-              <button
-                type="button"
-                onClick={() => {
-                  triggerHaptic('light');
-                  setCurrentView('calendar');
-                  onClose();
-                }}
-                className={`w-full flex items-center justify-between p-2.5 rounded-xl transition active:scale-98 text-left cursor-pointer ${
-                  currentView === 'calendar'
-                    ? 'bg-black text-white font-bold'
-                    : 'text-stone-700 hover:bg-stone-100'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition shrink-0 ${
-                      currentView === 'calendar' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600'
-                    }`}
-                  >
-                    <Calendar size={16} />
-                  </div>
-                  <span className="text-xs font-bold">달력 뷰</span>
-                </div>
-                {currentView === 'calendar' && (
-                  <span className="text-[10px] font-medium text-stone-300 mr-1">현재</span>
-                )}
-              </button>
-
-              {/* 목록 뷰 */}
-              <button
-                type="button"
-                onClick={() => {
-                  triggerHaptic('light');
-                  setCurrentView('list');
-                  onClose();
-                }}
-                className={`w-full flex items-center justify-between p-2.5 rounded-xl transition active:scale-98 text-left cursor-pointer ${
-                  currentView === 'list'
-                    ? 'bg-black text-white font-bold'
-                    : 'text-stone-700 hover:bg-stone-100'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition shrink-0 ${
-                      currentView === 'list' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600'
-                    }`}
-                  >
-                    <List size={16} />
-                  </div>
-                  <span className="text-xs font-bold">목록 뷰</span>
-                </div>
-                {currentView === 'list' && (
-                  <span className="text-[10px] font-medium text-stone-300 mr-1">현재</span>
-                )}
-              </button>
-
-              {/* 연간 달력 (Yearly Calendar) 모달 */}
-              {onOpenYearView && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    triggerHaptic('light');
-                    onClose();
-                    onOpenYearView();
-                  }}
-                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-stone-100 transition active:scale-98 text-left text-stone-700 group cursor-pointer"
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-lg bg-stone-100 group-hover:bg-stone-200/80 text-stone-600 flex items-center justify-center transition shrink-0">
-                      <Sparkles size={16} />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold">연간 달력 (Yearly)</div>
-                      <div className="text-[10px] text-stone-400">1년 전체 한눈에 보기</div>
-                    </div>
-                  </div>
-                  <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 shrink-0" />
-                </button>
-              )}
 
               {/* 관리자 전용 메뉴 (어드민 페이지 이동) */}
               {isAdmin && (
                 <a
                   href="/admin"
                   onClick={() => triggerHaptic('light')}
-                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-amber-50 text-amber-900 transition active:scale-98 group cursor-pointer mt-1"
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-amber-50 text-amber-900 transition active:scale-98 group cursor-pointer mt-2 border-t border-stone-200/60 pt-3"
                 >
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center transition shrink-0">
@@ -426,7 +332,7 @@ export default function SideMenuDrawer({
         </div>
       </div>
 
-      {/* 4. 앱 버전 정보 상세 모달 */}
+      {/* 3. 앱 버전 정보 상세 모달 */}
       {isVersionModalOpen && (
         <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 backdrop-blur-2xs p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-xs sm:max-w-sm rounded-3xl shadow-2xl border border-stone-200 p-6 flex flex-col items-center text-center animate-scaleUp">
@@ -461,7 +367,7 @@ export default function SideMenuDrawer({
                 </div>
                 <div className="flex items-start space-x-1.5">
                   <span className="text-stone-400">•</span>
-                  <span>월별 달력 / 타임라인 목록 / 연간 달력 뷰 지원</span>
+                  <span>감성 손글씨 드로잉 및 속지 커스텀 지원</span>
                 </div>
               </div>
             </div>
@@ -480,7 +386,7 @@ export default function SideMenuDrawer({
         </div>
       )}
 
-      {/* 5. 플로팅 토스트 알림 (공유 링크 복사 등) */}
+      {/* 4. 플로팅 토스트 알림 (공유 링크 복사 등) */}
       {toastMessage && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-70 bg-stone-900/95 text-white text-xs font-medium py-2 px-4 rounded-full shadow-lg backdrop-blur-xs animate-fadeIn flex items-center space-x-2 pointer-events-none">
           <Check size={14} className="text-emerald-400 shrink-0" strokeWidth={2.5} />

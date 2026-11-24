@@ -16,7 +16,6 @@ export default function Header({
   authError,
   onLogin,
   onLogout,
-  onOpenYearView,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(diaryName);
@@ -56,9 +55,23 @@ export default function Header({
 
   return (
     <header className="px-6 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-2 shrink-0 bg-[#fafafa]">
-      {/* 1. 최상단: [타이틀 (클릭 시 수정)] + [다이어리명 바로 옆 3선(햄버거) 버튼] */}
+      {/* 1. 최상단: [맨 왼쪽 3선(☰) 메뉴 버튼] ── [타이틀 (클릭 시 수정)] */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2.5 flex-1 min-w-0">
+        <div className="flex items-center flex-1">
+          {/* 삼선버튼: 맨 왼쪽, 타이틀 시작 왼쪽에 배치 */}
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('light');
+              setIsDrawerOpen(true);
+            }}
+            className="-ml-1.5 mr-2.5 p-1.5 rounded-xl text-stone-900 hover:bg-stone-200/70 active:scale-95 transition cursor-pointer shrink-0 flex items-center justify-center"
+            title="메뉴 열기"
+            aria-label="메뉴 열기"
+          >
+            <Menu size={24} strokeWidth={2.4} />
+          </button>
+
           {isEditing ? (
             <input
               ref={inputRef}
@@ -68,36 +81,20 @@ export default function Header({
               onBlur={handleFinishEditing}
               onKeyDown={handleKeyDown}
               maxLength={24}
-              className="text-2xl sm:text-3xl font-black text-[#000000] tracking-tight leading-none bg-transparent border-0 border-b-2 border-black focus:outline-hidden focus:ring-0 p-0 w-full"
+              className="text-2xl sm:text-3xl font-black text-[#000000] tracking-tight leading-normal bg-transparent border-0 border-b-2 border-black focus:outline-hidden focus:ring-0 p-0 w-full"
             />
           ) : (
-            <div className="flex items-center space-x-2 min-w-0">
-              <div
-                onClick={() => setIsEditing(true)}
-                className="group inline-flex items-center space-x-1.5 cursor-pointer max-w-full min-w-0"
-                title="클릭하여 다이어리 이름 변경"
-              >
-                <h1 className="text-2xl sm:text-3xl font-black text-[#000000] tracking-tight leading-none select-none truncate">
-                  {diaryName}
-                </h1>
-                <span className="opacity-0 group-hover:opacity-60 transition-opacity text-stone-400 shrink-0">
-                  <Edit2 size={15} />
-                </span>
-              </div>
-
-              {/* 3선 (햄버거 메뉴) 버튼: 다이어리명 바로 옆에 위치 */}
-              <button
-                type="button"
-                onClick={() => {
-                  triggerHaptic('light');
-                  setIsDrawerOpen(true);
-                }}
-                className="p-1.5 rounded-xl text-stone-800 hover:bg-stone-200/70 active:scale-95 transition cursor-pointer shrink-0 flex items-center justify-center ml-0.5"
-                title="메뉴 열기"
-                aria-label="메뉴 열기"
-              >
-                <Menu size={22} strokeWidth={2.3} />
-              </button>
+            <div
+              onClick={() => setIsEditing(true)}
+              className="group inline-flex items-center space-x-1.5 cursor-pointer"
+              title="클릭하여 다이어리 이름 변경"
+            >
+              <h1 className="text-2xl sm:text-3xl font-black text-[#000000] tracking-tight leading-normal select-none">
+                {diaryName}
+              </h1>
+              <span className="opacity-0 group-hover:opacity-60 transition-opacity text-stone-400 shrink-0">
+                <Edit2 size={16} />
+              </span>
             </div>
           )}
         </div>
@@ -157,9 +154,6 @@ export default function Header({
         diaryName={diaryName}
         onLogin={onLogin}
         onLogout={onLogout}
-        currentView={currentView}
-        setCurrentView={setCurrentView}
-        onOpenYearView={onOpenYearView}
       />
     </header>
   );
