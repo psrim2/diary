@@ -116,24 +116,53 @@ export default function CalendarView({
   const isInteractingRef = useRef(false);
   const isHorizontalSwipeRef = useRef(false);
 
+  // 애니메이션 타이머 ref 관리 (중복 실행 및 타이머 꼬임 방지)
+  const animTimeoutRef = useRef(null);
+  const animFrameRef1 = useRef(null);
+  const animFrameRef2 = useRef(null);
+  const animFinishTimeoutRef = useRef(null);
+
+  const clearAnimationTimers = () => {
+    if (animTimeoutRef.current) clearTimeout(animTimeoutRef.current);
+    if (animFinishTimeoutRef.current) clearTimeout(animFinishTimeoutRef.current);
+    if (animFrameRef1.current) cancelAnimationFrame(animFrameRef1.current);
+    if (animFrameRef2.current) cancelAnimationFrame(animFrameRef2.current);
+  };
+
+  useEffect(() => {
+    return () => clearAnimationTimers();
+  }, []);
+
+  // 월이 변경되거나 최초 마운트 시 드래그 오프셋 및 제스처 상태를 확실하게 0으로 초기화
+  useEffect(() => {
+    clearAnimationTimers();
+    setDragOffset(0);
+    setIsAnimating(false);
+    setAnimClass('');
+    isInteractingRef.current = false;
+    currentDeltaXRef.current = 0;
+    isHorizontalSwipeRef.current = false;
+  }, [currentDate]);
+
   // 달력 계산
   const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sunday
   const lastDay = new Date(year, month + 1, 0).getDate();
 
   // 다음 달로 넘기기 (부드러운 애니메이션)
   const triggerNextMonth = () => {
+    clearAnimationTimers();
     setIsAnimating(true);
     setAnimClass('transition-all duration-200 ease-out -translate-x-full opacity-0');
     
-    setTimeout(() => {
+    animTimeoutRef.current = setTimeout(() => {
       setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
       setDragOffset(0);
       setAnimClass('translate-x-full opacity-0');
       
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+      animFrameRef1.current = requestAnimationFrame(() => {
+        animFrameRef2.current = requestAnimationFrame(() => {
           setAnimClass('transition-all duration-250 ease-out translate-x-0 opacity-100');
-          setTimeout(() => {
+          animFinishTimeoutRef.current = setTimeout(() => {
             setIsAnimating(false);
             setAnimClass('');
           }, 250);
@@ -144,18 +173,19 @@ export default function CalendarView({
 
   // 이전 달로 넘기기 (부드러운 애니메이션)
   const triggerPrevMonth = () => {
+    clearAnimationTimers();
     setIsAnimating(true);
     setAnimClass('transition-all duration-200 ease-out translate-x-full opacity-0');
     
-    setTimeout(() => {
+    animTimeoutRef.current = setTimeout(() => {
       setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
       setDragOffset(0);
       setAnimClass('-translate-x-full opacity-0');
       
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+      animFrameRef1.current = requestAnimationFrame(() => {
+        animFrameRef2.current = requestAnimationFrame(() => {
           setAnimClass('transition-all duration-250 ease-out translate-x-0 opacity-100');
-          setTimeout(() => {
+          animFinishTimeoutRef.current = setTimeout(() => {
             setIsAnimating(false);
             setAnimClass('');
           }, 250);
@@ -200,11 +230,12 @@ export default function CalendarView({
   };
 
   const handleTouchEnd = () => {
-    if (!isInteractingRef.current || isAnimating) return;
+    if (!isInteractingRef.current) return;
     isInteractingRef.current = false;
 
     const deltaX = currentDeltaXRef.current;
     currentDeltaXRef.current = 0;
+    isHorizontalSwipeRef.current = false;
 
     if (deltaX < -45) {
       // 왼쪽으로 45px 이상 스와이프 -> 다음 달
@@ -217,12 +248,20 @@ export default function CalendarView({
       setIsAnimating(true);
       setAnimClass('transition-transform duration-200 ease-out');
       setDragOffset(0);
-      setTimeout(() => {
+      animFinishTimeoutRef.current = setTimeout(() => {
         setIsAnimating(false);
         setAnimClass('');
       }, 200);
     }
+  };
+
+  const handleTouchCancel = () => {
+    isInteractingRef.current = false;
+    currentDeltaXRef.current = 0;
     isHorizontalSwipeRef.current = false;
+    setDragOffset(0);
+    setIsAnimating(false);
+    setAnimClass('');
   };
 
   // 마우스 제스처 (PC 지원)
@@ -254,6 +293,30 @@ export default function CalendarView({
     if (!isInteractingRef.current) return;
     handleTouchEnd();
   };
+
+  // 화면 밖으로 터치/마우스가 벗어나거나 앱 전환 시 오프셋이 걸려 멈추는 현상 원천 차단
+  useEffect(() => {
+    const handleGlobalEnd = () => {
+      if (isInteractingRef.current) {
+        handleTouchEnd();
+      }
+    };
+    const handleGlobalCancel = () => {
+      handleTouchCancel();
+    };
+
+    window.addEventListener('mouseup', handleGlobalEnd);
+    window.addEventListener('touchend', handleGlobalEnd);
+    window.addEventListener('touchcancel', handleGlobalCancel);
+    window.addEventListener('blur', handleGlobalCancel);
+
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalEnd);
+      window.removeEventListener('touchend', handleGlobalEnd);
+      window.removeEventListener('touchcancel', handleGlobalCancel);
+      window.removeEventListener('blur', handleGlobalCancel);
+    };
+  }, []);
 
   // 날짜 포맷
   const formatDateStr = (d) => {
@@ -350,6 +413,7 @@ export default function CalendarView({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchCancel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}

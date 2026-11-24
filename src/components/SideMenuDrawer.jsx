@@ -21,6 +21,7 @@ export default function SideMenuDrawer({
   diaryName,
   onLogin,
   onLogout,
+  onOpenAdmin,
 }) {
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
@@ -89,7 +90,8 @@ export default function SideMenuDrawer({
 
   if (!isOpen) return null;
 
-  const isAdmin = user && user.email === ADMIN_EMAIL;
+  // 오직 관리자 계정(psrim2@gmail.com)에게만 관리자 페이지 노출
+  const isAdmin = !!user && (user.email || '').trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase();
 
   return (
     <>
@@ -298,12 +300,20 @@ export default function SideMenuDrawer({
                 <ChevronRight size={14} className="text-stone-300 group-hover:text-stone-500 shrink-0" />
               </button>
 
-              {/* 관리자 전용 메뉴 (어드민 페이지 이동) */}
+              {/* 관리자 전용 메뉴 (오직 psrim2@gmail.com 계정에게만 노출 & SPA 모드로 404 없이 즉시 이동) */}
               {isAdmin && (
-                <a
-                  href="/admin"
-                  onClick={() => triggerHaptic('light')}
-                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-amber-50 text-amber-900 transition active:scale-98 group cursor-pointer mt-2 border-t border-stone-200/60 pt-3"
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('light');
+                    onClose();
+                    if (onOpenAdmin) {
+                      onOpenAdmin();
+                    } else {
+                      window.location.hash = 'admin';
+                    }
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-amber-50 text-amber-900 transition active:scale-98 group cursor-pointer mt-2 border-t border-stone-200/60 pt-3 text-left"
                 >
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center transition shrink-0">
@@ -312,13 +322,13 @@ export default function SideMenuDrawer({
                     <div>
                       <div className="text-xs font-bold flex items-center space-x-1">
                         <span>스티커 관리자 페이지</span>
-                        <ExternalLink size={11} className="text-amber-700" />
+                        <ChevronRight size={12} className="text-amber-700" />
                       </div>
                       <div className="text-[10px] text-amber-600/80">에셋 등록 및 삭제 관리</div>
                     </div>
                   </div>
                   <ChevronRight size={14} className="text-amber-400 group-hover:text-amber-600 shrink-0" />
-                </a>
+                </button>
               )}
             </div>
           </div>

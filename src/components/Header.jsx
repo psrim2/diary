@@ -16,6 +16,7 @@ export default function Header({
   authError,
   onLogin,
   onLogout,
+  onOpenAdmin,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(diaryName);
@@ -154,6 +155,7 @@ export default function Header({
         diaryName={diaryName}
         onLogin={onLogin}
         onLogout={onLogout}
+        onOpenAdmin={onOpenAdmin}
       />
     </header>
   );

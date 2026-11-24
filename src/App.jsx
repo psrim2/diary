@@ -148,22 +148,66 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
-  const [pathname, setPathname] = useState(() => window.location.pathname);
+  const checkIsAdminPath = () => {
+    if (typeof window === 'undefined') return false;
+    const p = window.location.pathname.toLowerCase();
+    const h = window.location.hash.toLowerCase();
+    const s = window.location.search.toLowerCase();
+    return (
+      p === '/admin' ||
+      p.endsWith('/admin') ||
+      p.endsWith('/admin/') ||
+      p.includes('/admin') ||
+      h === '#admin' ||
+      h.startsWith('#admin') ||
+      s.includes('admin')
+    );
+  };
+
+  const [isAdminView, setIsAdminView] = useState(checkIsAdminPath);
 
   useEffect(() => {
-    const handlePopState = () => setPathname(window.location.pathname);
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    const handleRouteCheck = () => {
+      setIsAdminView(checkIsAdminPath());
+    };
+    window.addEventListener('popstate', handleRouteCheck);
+    window.addEventListener('hashchange', handleRouteCheck);
+    return () => {
+      window.removeEventListener('popstate', handleRouteCheck);
+      window.removeEventListener('hashchange', handleRouteCheck);
+    };
   }, []);
 
-  // 주소창에 /admin을 직접 입력해 접근했을 때만 독립된 관리자 페이지 렌더링
-  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
-    return <AdminPage />;
+  const handleOpenAdmin = () => {
+    setIsAdminView(true);
+    try {
+      window.history.pushState({ view: 'admin' }, '', '#admin');
+    } catch {
+      window.location.hash = 'admin';
+    }
+  };
+
+  const handleCloseAdmin = () => {
+    setIsAdminView(false);
+    try {
+      if (window.location.hash.includes('admin')) {
+        window.history.back();
+      } else if (window.location.pathname.includes('/admin')) {
+        window.history.pushState(null, '', window.location.pathname.replace(/\/admin\/?$/, '') || '/');
+      }
+    } catch {
+      window.location.hash = '';
+    }
+  };
+
+  // 독립된 관리자 페이지 (URL 직접 입력, #admin 해시, 사이드 메뉴 바로가기 모두 지원)
+  if (isAdminView) {
+    return <AdminPage onBack={handleCloseAdmin} />;
   }
 
   return (
     <ErrorBoundary>
-      <DiaryMainApp />
+      <DiaryMainApp onOpenAdmin={handleOpenAdmin} />
     </ErrorBoundary>
   );
 }
@@ -214,7 +258,7 @@ function sanitizeCloudDiaries(rawList) {
   return deduplicateDiariesByDate(sanitized);
 }
 
-function DiaryMainApp() {
+function DiaryMainApp({ onOpenAdmin }) {
   // 로컬스토리지에서 일기 불러오기 (기본값: 아무 데이터도 없는 빈 배열 [] & 날짜별 중복 자동 정리 & 방어적 파싱)
   const [diaries, setDiaries] = useState(() => {
     let saved = null;
@@ -897,6 +941,7 @@ function DiaryMainApp() {
               onLogin={handleGoogleLogin}
               onLogout={handleRequestLogout}
               onOpenYearView={() => handleOpenYearView(calendarViewingDate.getFullYear(), currentView === 'editor' ? (previousView || 'calendar') : currentView)}
+              onOpenAdmin={onOpenAdmin}
             />
 
             {/* 메인 뷰: 캘린더 또는 목록 */}

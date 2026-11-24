@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GripVertical, Plus, Trash2, Upload } from 'lucide-react';
+import { GripVertical, Plus, Trash2, Upload, ArrowLeft } from 'lucide-react';
 import {
   ADMIN_EMAIL,
   loginWithGoogle,
@@ -36,11 +36,21 @@ function formatDate(item) {
   return d.toLocaleString('ko-KR');
 }
 
-export default function AdminPage() {
+export default function AdminPage({ onBack }) {
   const [user, setUser] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [unauthorizedInfo, setUnauthorizedInfo] = useState(null);
   const [authError, setAuthError] = useState('');
+
+  const handleGoBack = () => {
+    if (onBack) {
+      onBack();
+    } else if (typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+    } else if (typeof window !== 'undefined') {
+      window.location.href = '/';
+    }
+  };
 
   // 에셋 목록 파일 업로드용 ref
   const listFileInputRef = useRef(null);
@@ -642,6 +652,15 @@ export default function AdminPage() {
     return (
       <div className="w-full h-full overflow-y-auto bg-stone-50">
         <div className="admin-login-gate p-6 max-w-md mx-auto min-h-full flex flex-col justify-center">
+          <button
+            type="button"
+            onClick={handleGoBack}
+            className="self-start mb-6 text-sm font-semibold text-stone-600 hover:text-black flex items-center space-x-1.5 px-3 py-1.5 rounded-xl hover:bg-stone-200/70 transition cursor-pointer"
+          >
+            <ArrowLeft size={16} />
+            <span>다이어리로 돌아가기</span>
+          </button>
+
           <h1 className="text-xl font-bold mb-4">관리자 전용 페이지 (/admin)</h1>
 
           {unauthorizedInfo && (
@@ -684,18 +703,38 @@ export default function AdminPage() {
       <div className="admin-dashboard p-6 max-w-4xl mx-auto min-h-full pb-20">
         {/* 상단 관리자 정보 및 로그아웃 */}
         <header className="admin-header flex items-center justify-between border-b pb-4 mb-6">
-        <div>
-          <h1 className="text-xl font-bold">꾸미기 에셋 관리자 대시보드</h1>
-          <p className="text-sm text-stone-600">접속 계정: {user.email}</p>
-        </div>
-        <button
-          type="button"
-          onClick={handleAdminLogout}
-          className="px-3 py-1.5 border border-stone-400 text-sm"
-        >
-          로그아웃
-        </button>
-      </header>
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              onClick={handleGoBack}
+              className="p-2 -ml-1 text-stone-600 hover:text-stone-900 hover:bg-stone-200/70 rounded-xl transition cursor-pointer flex items-center justify-center"
+              title="다이어리로 돌아가기"
+              aria-label="다이어리로 돌아가기"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h1 className="text-xl font-bold">꾸미기 에셋 관리자 대시보드</h1>
+              <p className="text-sm text-stone-600">접속 계정: {user.email}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handleGoBack}
+              className="px-3.5 py-1.5 border border-stone-300 bg-white hover:bg-stone-100 text-stone-700 text-sm font-medium rounded-xl transition cursor-pointer"
+            >
+              다이어리로 이동
+            </button>
+            <button
+              type="button"
+              onClick={handleAdminLogout}
+              className="px-3.5 py-1.5 border border-stone-400 bg-stone-100 hover:bg-stone-200 text-stone-800 text-sm font-medium rounded-xl transition cursor-pointer"
+            >
+              로그아웃
+            </button>
+          </div>
+        </header>
 
       {/* [적용하기 / 취소] 액션 컨트롤 바 (상단 Sticky 고정) */}
       <section className="admin-action-bar sticky top-0 z-30 border p-4 mb-6 bg-white/95 backdrop-blur-xs shadow-sm flex flex-wrap items-center justify-between gap-3">
