@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Edit2 } from 'lucide-react';
+import { Edit2, Menu } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
+import SideMenuDrawer from './SideMenuDrawer';
 
 export default function Header({ 
   currentView, 
@@ -14,10 +15,12 @@ export default function Header({
   isSyncing,
   authError,
   onLogin,
-  onLogout
+  onLogout,
+  onOpenYearView,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(diaryName);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -53,9 +56,9 @@ export default function Header({
 
   return (
     <header className="px-6 pt-[calc(1.25rem+env(safe-area-inset-top,0px))] pb-2 shrink-0 bg-[#fafafa]">
-      {/* 1. 최상단: [타이틀 (클릭 시 수정)] ─── [+] 버튼 (저장버튼과 동일한 w-11 h-11 규격) */}
+      {/* 1. 최상단: [타이틀 (클릭 시 수정)] + [다이어리명 바로 옆 3선(햄버거) 버튼] */}
       <div className="flex items-center justify-between">
-        <div className="flex-1 mr-3">
+        <div className="flex items-center space-x-2.5 flex-1 min-w-0">
           {isEditing ? (
             <input
               ref={inputRef}
@@ -68,114 +71,96 @@ export default function Header({
               className="text-2xl sm:text-3xl font-black text-[#000000] tracking-tight leading-none bg-transparent border-0 border-b-2 border-black focus:outline-hidden focus:ring-0 p-0 w-full"
             />
           ) : (
-            <div
-              onClick={() => setIsEditing(true)}
-              className="group inline-flex items-center space-x-2 cursor-pointer"
-              title="클릭하여 다이어리 이름 변경"
-            >
-              <h1 className="text-2xl sm:text-3xl font-black text-[#000000] tracking-tight leading-none select-none">
-                {diaryName}
-              </h1>
-              <span className="opacity-0 group-hover:opacity-60 transition-opacity text-stone-400">
-                <Edit2 size={16} />
-              </span>
+            <div className="flex items-center space-x-2 min-w-0">
+              <div
+                onClick={() => setIsEditing(true)}
+                className="group inline-flex items-center space-x-1.5 cursor-pointer max-w-full min-w-0"
+                title="클릭하여 다이어리 이름 변경"
+              >
+                <h1 className="text-2xl sm:text-3xl font-black text-[#000000] tracking-tight leading-none select-none truncate">
+                  {diaryName}
+                </h1>
+                <span className="opacity-0 group-hover:opacity-60 transition-opacity text-stone-400 shrink-0">
+                  <Edit2 size={15} />
+                </span>
+              </div>
+
+              {/* 3선 (햄버거 메뉴) 버튼: 다이어리명 바로 옆에 위치 */}
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setIsDrawerOpen(true);
+                }}
+                className="p-1.5 rounded-xl text-stone-800 hover:bg-stone-200/70 active:scale-95 transition cursor-pointer shrink-0 flex items-center justify-center ml-0.5"
+                title="메뉴 열기"
+                aria-label="메뉴 열기"
+              >
+                <Menu size={22} strokeWidth={2.3} />
+              </button>
             </div>
           )}
         </div>
+      </div>
 
-        {/* 구글 로그인(원형 구글 로고) / 로그아웃(원형 구글 프로필) 버튼 */}
-        {user ? (
+      {/* 2. 탭: 달력  목록  ───── [오늘] 라운드 버튼 */}
+      <div className="flex items-center justify-between mt-3">
+        <div className="flex items-center space-x-4">
           <button
-            type="button"
-            onClick={onLogout}
-            className="mr-2.5 w-11 h-11 rounded-full p-0.5 border border-stone-200 bg-white hover:opacity-85 active:scale-95 transition shadow-2xs shrink-0 overflow-hidden flex items-center justify-center cursor-pointer"
-            title={`${user.displayName || user.email || '사용자'} (클릭 시 로그아웃)`}
+            onClick={() => {
+              triggerHaptic('light');
+              setCurrentView('calendar');
+            }}
+            className={`text-base pb-1 transition-all select-none cursor-pointer ${
+              currentView === 'calendar'
+                ? 'font-black text-black border-b-2 border-black'
+                : 'font-semibold text-stone-400 hover:text-stone-700 border-b-2 border-transparent'
+            }`}
           >
-            {user.photoURL ? (
-              <img
-                src={user.photoURL}
-                alt={user.displayName || '구글 프로필'}
-                className="w-full h-full object-cover rounded-full select-none"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="w-full h-full rounded-full bg-stone-100 text-stone-700 flex items-center justify-center font-bold text-sm select-none">
-                {(user.displayName || user.email || 'G')[0].toUpperCase()}
-              </div>
-            )}
+            달력
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onLogin}
-            className="mr-2.5 w-11 h-11 rounded-full border border-stone-200 bg-white hover:bg-stone-50 active:scale-95 transition flex items-center justify-center shadow-2xs shrink-0 cursor-pointer"
-            title="구글 계정으로 로그인"
-          >
-            <svg className="w-5 h-5 select-none" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.03h3.88c2.27-2.09 3.66-5.17 3.66-9.12z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.03c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.27v3.13C3.25 21.31 7.31 24 12 24z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.57H1.27C.46 8.19 0 10.04 0 12s.46 3.81 1.27 5.43l4.01-3.14z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.25 2.69 1.27 6.57l4.01 3.14c.95-2.83 3.6-4.96 6.72-4.96z"
-              />
-            </svg>
-          </button>
-        )}
 
-        {/* 상단 [오늘] 바로가기 버튼 (44px 원형, 기존 + 버튼 대체) */}
+          <button
+            onClick={() => {
+              triggerHaptic('light');
+              setCurrentView('list');
+            }}
+            className={`text-base pb-1 transition-all select-none cursor-pointer ${
+              currentView === 'list'
+                ? 'font-black text-black border-b-2 border-black'
+                : 'font-semibold text-stone-400 hover:text-stone-700 border-b-2 border-transparent'
+            }`}
+          >
+            목록
+          </button>
+        </div>
+
+        {/* 오늘 버튼: 달력, 목록 라인의 맨 끝(우측)에 위치, 높이는 달력/목록 높이에 맞춤 (라운드 버튼) */}
         <button
           type="button"
           onClick={() => {
             triggerHaptic('light');
             onGoToToday();
           }}
-          className="w-11 h-11 rounded-full bg-white border border-stone-300 shadow-xs flex items-center justify-center font-bold text-xs sm:text-sm text-stone-900 active:scale-95 hover:bg-stone-50 transition-all cursor-pointer select-none shrink-0"
+          className="h-7 px-3.5 rounded-full bg-white border border-stone-300 shadow-2xs hover:bg-stone-50 active:scale-95 transition-all flex items-center justify-center font-bold text-xs text-stone-800 cursor-pointer select-none shrink-0"
           title="오늘 날짜로 이동"
         >
           오늘
         </button>
       </div>
 
-      {/* 2. 탭: 달력  목록 (텍스트 밑줄 스타일) */}
-      <div className="flex items-center space-x-4 mt-3">
-        <button
-          onClick={() => {
-            triggerHaptic('light');
-            setCurrentView('calendar');
-          }}
-          className={`text-base pb-1 transition-all select-none ${
-            currentView === 'calendar'
-              ? 'font-black text-black border-b-2 border-black'
-              : 'font-semibold text-stone-400 hover:text-stone-700 border-b-2 border-transparent'
-          }`}
-        >
-          달력
-        </button>
-
-        <button
-          onClick={() => {
-            triggerHaptic('light');
-            setCurrentView('list');
-          }}
-          className={`text-base pb-1 transition-all select-none ${
-            currentView === 'list'
-              ? 'font-black text-black border-b-2 border-black'
-              : 'font-semibold text-stone-400 hover:text-stone-700 border-b-2 border-transparent'
-          }`}
-        >
-          목록
-        </button>
-      </div>
+      {/* 3선 버튼 사이드 메뉴 드로어 */}
+      <SideMenuDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        user={user}
+        diaryName={diaryName}
+        onLogin={onLogin}
+        onLogout={onLogout}
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        onOpenYearView={onOpenYearView}
+      />
     </header>
   );
 }

@@ -936,6 +936,64 @@ export async function deleteDecorationAsset(decoration) {
 }
 
 /**
+ * 12-1. 복수 꾸미기 에셋 일괄 삭제 (Firestore batch + deleted_decorations tombstone + Storage 파일 일괄 삭제)
+ * @param {Array<{ id: string, storagePath?: string }>} items
+ */
+export async function deleteMultipleDecorationAssets(items) {
+  if (!Array.isArray(items) || items.length === 0) return;
+  const idSet = new Set(items.map((it) => String(it.id)));
+
+  // 1) 로컬 캐시 즉시 일괄 제거
+  const nextLocal = readLocalDecorations().filter((d) => !idSet.has(String(d.id)));
+  writeLocalDecorations(nextLocal);
+
+  try {
+    const rawMy = localStorage.getItem('analog_my_stickers');
+    if (rawMy) {
+      const list = JSON.parse(rawMy);
+      if (Array.isArray(list)) {
+        const cleaned = list.filter(
+          (s) => !idSet.has(String(s.id)) && !idSet.has(String(s.decorationId))
+        );
+        localStorage.setItem('analog_my_stickers', JSON.stringify(cleaned));
+      }
+    }
+  } catch {}
+
+  if (!isFirebaseConfigured || !db) return;
+
+  // 2) Firestore batch 일괄 삭제 및 tombstone 등록
+  try {
+    const batch = writeBatch(db);
+    items.forEach((item) => {
+      const idStr = String(item.id);
+      batch.delete(doc(db, 'decorations', idStr));
+      batch.set(doc(db, 'deleted_decorations', idStr), {
+        id: idStr,
+        deletedAt: serverTimestamp(),
+      });
+      if (auth?.currentUser?.uid) {
+        batch.delete(doc(db, 'users', auth.currentUser.uid, 'decorations', idStr));
+      }
+    });
+    await withTimeout(batch.commit(), 5000, 'FIRESTORE_BATCH_DELETE_TIMEOUT');
+  } catch (err) {
+    console.warn('[Firestore] 일괄 삭제 경고:', err);
+  }
+
+  // 3) Storage 파일 일괄 삭제
+  if (storage && isStorageBucketAvailable) {
+    const deleteTasks = items
+      .filter((it) => it.storagePath)
+      .map((it) => {
+        const fileRef = storageRef(storage, it.storagePath);
+        return withTimeout(deleteObject(fileRef), 1500, 'STORAGE_DELETE_TIMEOUT').catch(() => {});
+      });
+    await Promise.allSettled(deleteTasks);
+  }
+}
+
+/**
  * 13. 꾸미기 에셋 메타데이터 수정 (이름, 카테고리 등)
  * @param {string} id
  * @param {{ name?: string, category?: 'weather' | 'sticker' | 'tape' }} fields

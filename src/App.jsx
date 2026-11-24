@@ -896,6 +896,7 @@ function DiaryMainApp() {
               authError={authError}
               onLogin={handleGoogleLogin}
               onLogout={handleRequestLogout}
+              onOpenYearView={() => handleOpenYearView(calendarViewingDate.getFullYear(), currentView === 'editor' ? (previousView || 'calendar') : currentView)}
             />
 
             {/* 메인 뷰: 캘린더 또는 목록 */}

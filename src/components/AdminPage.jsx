@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, Plus, Trash2, Upload } from 'lucide-react';
 import {
   ADMIN_EMAIL,
   loginWithGoogle,
@@ -8,6 +8,7 @@ import {
   uploadDecorationAsset,
   subscribeToDecorations,
   deleteDecorationAsset,
+  deleteMultipleDecorationAssets,
   updateDecorationAsset,
   subscribeToCategories,
   addCategory,
@@ -41,10 +42,8 @@ export default function AdminPage() {
   const [unauthorizedInfo, setUnauthorizedInfo] = useState(null);
   const [authError, setAuthError] = useState('');
 
-  // 업로드 입력 폼 상태
-  const [uploadCategory, setUploadCategory] = useState('sticker');
-  const [assetName, setAssetName] = useState('');
-  const fileInputRef = useRef(null);
+  // 에셋 목록 파일 업로드용 ref
+  const listFileInputRef = useRef(null);
 
   // Firestore에서 불러온 원본 에셋 목록
   const [decorations, setDecorations] = useState([]);
@@ -363,28 +362,89 @@ export default function AdminPage() {
     }
   };
 
-  // 파일 선택 시: 추가 대기 목록(pendingAdds)에 스테이징
-  const handleFileChange = (e) => {
+  // 에셋 목록에서 바로 파일 선택 시 핸들러 (현재 선택된 카테고리로 즉시 자동 업로드)
+  const handleListFileChange = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    const customName = assetName.trim();
-    const newStagedItems = files.map((file, idx) => {
-      const defaultName = file.name.replace(/\.[^/.]+$/, '');
-      return {
-        tempId: `pending-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
-        file,
-        previewUrl: URL.createObjectURL(file),
-        category: uploadCategory,
-        name: files.length === 1 && customName ? customName : defaultName,
-      };
-    });
+    // 현재 선택된 카테고리 탭 (all이면 첫 번째 카테고리 또는 'sticker')
+    const targetCategory =
+      filterCategory !== 'all'
+        ? filterCategory
+        : categories[0]?.id || 'sticker';
 
-    setPendingAdds((prev) => [...newStagedItems, ...prev]);
-    setAssetName('');
-    setStatusMessage('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    setIsApplying(true);
+    setStatusMessage(`에셋 ${files.length}개 업로드 중... (0/${files.length})`);
+    let uploadedCount = 0;
+
+    try {
+      await Promise.all(
+        files.map(async (file) => {
+          const defaultName = file.name.replace(/\.[^/.]+$/, '');
+          await uploadDecorationAsset({
+            file,
+            category: targetCategory,
+            name: defaultName,
+          });
+          uploadedCount += 1;
+          setStatusMessage(`에셋 ${files.length}개 업로드 중... (${uploadedCount}/${files.length})`);
+        })
+      );
+      setStatusMessage(`에셋 ${files.length}개 업로드가 완료되었습니다.`);
+      setTimeout(() => setStatusMessage(''), 3000);
+    } catch (err) {
+      console.error('[Admin] 목록 즉시 업로드 실패:', err);
+      setStatusMessage(`업로드 실패: ${err.message || '오류가 발생했습니다.'}`);
+    } finally {
+      setIsApplying(false);
+      if (listFileInputRef.current) {
+        listFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // 에셋 목록 전체 삭제 핸들러 (현재 표시된 카테고리 또는 전체 에셋 일괄 영구 삭제)
+  const handleDeleteAllFiltered = async () => {
+    if (filteredDecorations.length === 0) {
+      alert('삭제할 등록된 에셋이 없습니다.');
+      return;
+    }
+
+    const isFiltered = filterCategory !== 'all';
+    const catName =
+      allCategories.find((c) => c.id === filterCategory)?.label || filterCategory;
+    const confirmMessage = isFiltered
+      ? `'${catName}' 카테고리에 등록된 에셋 ${filteredDecorations.length}개를 모두 삭제하시겠습니까?\n이 작업은 Firestore 및 저장소에서 영구 삭제되며 복구할 수 없습니다.`
+      : `현재 등록된 전체 에셋 ${filteredDecorations.length}개를 모두 삭제하시겠습니까?\n이 작업은 Firestore 및 저장소에서 영구 삭제되며 복구할 수 없습니다.`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    setIsApplying(true);
+    setStatusMessage(`에셋 ${filteredDecorations.length}개 전체 삭제 중...`);
+
+    try {
+      await deleteMultipleDecorationAssets(filteredDecorations);
+
+      // 대기 중인 수정/삭제 목록에서 제거된 id 정리
+      const deletedIds = new Set(filteredDecorations.map((d) => d.id));
+      setPendingDeleteIds((prev) => {
+        const next = new Set(prev);
+        deletedIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      setPendingUpdates((prev) => {
+        const next = { ...prev };
+        deletedIds.forEach((id) => delete next[id]);
+        return next;
+      });
+
+      setStatusMessage(`에셋 ${filteredDecorations.length}개가 모두 삭제되었습니다.`);
+      setTimeout(() => setStatusMessage(''), 3000);
+    } catch (err) {
+      console.error('[Admin] 전체 삭제 오류:', err);
+      setStatusMessage(`삭제 실패: ${err.message || '오류가 발생했습니다.'}`);
+    } finally {
+      setIsApplying(false);
     }
   };
 
@@ -459,9 +519,8 @@ export default function AdminPage() {
     setPendingAdds([]);
     setPendingDeleteIds(new Set());
     setPendingUpdates({});
-    setAssetName('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    if (listFileInputRef.current) {
+      listFileInputRef.current.value = '';
     }
     setStatusMessage('변경사항이 취소되었습니다.');
   };
@@ -638,8 +697,8 @@ export default function AdminPage() {
         </button>
       </header>
 
-      {/* [적용하기 / 취소] 액션 컨트롤 바 */}
-      <section className="admin-action-bar border p-4 mb-6 bg-white flex flex-wrap items-center justify-between gap-3">
+      {/* [적용하기 / 취소] 액션 컨트롤 바 (상단 Sticky 고정) */}
+      <section className="admin-action-bar sticky top-0 z-30 border p-4 mb-6 bg-white/95 backdrop-blur-xs shadow-sm flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm">
           {hasPendingChanges ? (
             <span className="font-bold">
@@ -798,85 +857,20 @@ export default function AdminPage() {
         </div>
       </section>
 
-      {/* 2. 새 에셋 파일 선택 (선택 시 대기 목록에 추가됨 -> '적용하기' 클릭 시 최종 반영) */}
-      <section className="admin-upload-section border p-4 mb-8 bg-white">
-        <h2 className="text-base font-bold mb-3">새 꾸미기 에셋 추가</h2>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              기본 카테고리 선택
-            </label>
-            <select
-              value={uploadCategory}
-              onChange={(e) => setUploadCategory(e.target.value)}
-              className="border px-3 py-1.5 text-sm"
-            >
-              {allCategories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              에셋 이름 (선택사항, 미입력 시 파일명 사용)
-            </label>
-            <input
-              type="text"
-              value={assetName}
-              onChange={(e) => setAssetName(e.target.value)}
-              placeholder="예: 맑은 날, 하트 스티커, 체크 마스킹테이프"
-              className="border px-3 py-1.5 text-sm w-full max-w-sm"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              이미지 파일 선택 (선택 즉시 아래 대기열에 추가되며, [적용하기]를 누르면 업로드됩니다)
-            </label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/gif,image/png,image/jpeg,image/webp,image/svg+xml,image/*"
-              multiple
-              onChange={handleFileChange}
-              className="text-sm"
-            />
-          </div>
-
-          {pendingAdds.length > 0 && (
-            <div className="mt-3 p-3 bg-stone-100 border border-stone-300 rounded flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-bold text-stone-800">
-                대기 중인 파일: {pendingAdds.length}건
-              </span>
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={handleCancelChanges}
-                  disabled={isApplying}
-                  className="px-3 py-1.5 border border-stone-400 bg-white text-xs text-stone-700 cursor-pointer"
-                >
-                  선택 취소
-                </button>
-                <button
-                  type="button"
-                  onClick={handleApplyChanges}
-                  disabled={isApplying}
-                  className="px-4 py-1.5 border border-black bg-black text-white text-xs font-bold cursor-pointer"
-                >
-                  {isApplying ? '업로드 적용 중...' : '지금 바로 업로드 적용하기'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* 2. 카테고리별 에셋 조회 / 대기열 확인 / 삭제 및 수정 섹션 */}
+      {/* 2. 에셋 목록 섹션 */}
       <section className="admin-list-section border p-4 bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        {/* 숨겨진 목록 전용 파일 인풋 */}
+        <input
+          ref={listFileInputRef}
+          type="file"
+          accept="image/gif,image/png,image/jpeg,image/webp,image/svg+xml,image/*"
+          multiple
+          onChange={handleListFileChange}
+          className="hidden"
+        />
+
+        {/* 에셋 목록 상단 헤더 */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <h2 className="text-base font-bold">
             에셋 목록 (등록됨 {filteredDecorations.length}개
             {filteredPendingAdds.length > 0
@@ -884,49 +878,98 @@ export default function AdminPage() {
               : ''}
             )
           </h2>
+        </div>
 
-          {/* 카테고리 필터 탭 (가로 스크롤 지원) */}
-          <div className="admin-category-filter flex overflow-x-auto no-scrollbar whitespace-nowrap gap-1 pb-1 max-w-full">
+        {/* (1) 카테고리 필터 탭 (상위 개념) */}
+        <div className="admin-category-filter flex overflow-x-auto no-scrollbar whitespace-nowrap gap-1 pb-2 border-b max-w-full">
+          <button
+            type="button"
+            onClick={() => setFilterCategory('all')}
+            className={`shrink-0 px-3 py-1 border text-xs cursor-pointer ${
+              filterCategory === 'all'
+                ? 'bg-black text-white font-bold'
+                : 'bg-white text-stone-700'
+            }`}
+          >
+            전체 ({decorations.length + pendingAdds.length})
+          </button>
+          {allCategories.map((cat) => {
+            const count =
+              decorations.filter(
+                (d) =>
+                  (pendingUpdates[d.id]?.category || d.category) === cat.id
+              ).length +
+              pendingAdds.filter((p) => p.category === cat.id).length;
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setFilterCategory(cat.id)}
+                className={`shrink-0 px-3 py-1 border text-xs cursor-pointer ${
+                  filterCategory === cat.id
+                    ? 'bg-black text-white font-bold'
+                    : 'bg-white text-stone-700 hover:bg-stone-50'
+                }`}
+              >
+                {cat.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* (2) 카테고리와 아이템 목록 사이의 서브 컨트롤 바 (하위 개념) */}
+        <div className="admin-list-sub-toolbar flex flex-wrap items-center justify-between gap-2 py-3 mb-4 border-b bg-stone-50/60 px-2 rounded">
+          <div className="text-xs text-stone-600 font-medium">
+            현재 카테고리:{' '}
+            <span className="font-bold text-black">
+              {filterCategory === 'all'
+                ? '전체'
+                : allCategories.find((c) => c.id === filterCategory)?.label || filterCategory}
+            </span>
+            <span className="text-stone-400 ml-1.5">
+              ({filteredDecorations.length}개 등록됨)
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-2">
             <button
               type="button"
-              onClick={() => setFilterCategory('all')}
-              className={`shrink-0 px-3 py-1 border text-xs cursor-pointer ${
-                filterCategory === 'all' ? 'bg-black text-white font-bold' : 'bg-white text-stone-700'
-              }`}
+              onClick={() => listFileInputRef.current?.click()}
+              disabled={isApplying}
+              className="flex items-center px-3 py-1.5 border border-black bg-black text-white text-xs font-bold hover:bg-stone-800 transition cursor-pointer disabled:opacity-40"
+              title={
+                filterCategory !== 'all'
+                  ? `'${allCategories.find((c) => c.id === filterCategory)?.label || filterCategory}' 카테고리로 바로 업로드`
+                  : '에셋 파일 바로 업로드'
+              }
             >
-              전체 ({decorations.length + pendingAdds.length})
+              <Upload size={13} className="mr-1.5" />
+              + 파일 바로 업로드
             </button>
-            {allCategories.map((cat) => {
-              const count =
-                decorations.filter(
-                  (d) =>
-                    (pendingUpdates[d.id]?.category || d.category) === cat.id
-                ).length +
-                pendingAdds.filter((p) => p.category === cat.id).length;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setFilterCategory(cat.id)}
-                  className={`shrink-0 px-3 py-1 border text-xs cursor-pointer ${
-                    filterCategory === cat.id
-                      ? 'bg-black text-white font-bold'
-                      : 'bg-white text-stone-700 hover:bg-stone-50'
-                  }`}
-                >
-                  {cat.label} ({count})
-                </button>
-              );
-            })}
+
+            <button
+              type="button"
+              onClick={handleDeleteAllFiltered}
+              disabled={isApplying || filteredDecorations.length === 0}
+              className="flex items-center px-3 py-1.5 border border-red-500 text-red-600 bg-white hover:bg-red-50 text-xs font-bold transition cursor-pointer disabled:opacity-30 disabled:hover:bg-white"
+              title={
+                filterCategory !== 'all'
+                  ? `'${allCategories.find((c) => c.id === filterCategory)?.label || filterCategory}' 카테고리 에셋 전체 삭제`
+                  : '현재 등록된 전체 에셋 삭제'
+              }
+            >
+              <Trash2 size={13} className="mr-1.5" />
+              아이템 전체 지우기 ({filteredDecorations.length}개)
+            </button>
           </div>
         </div>
 
+        {/* (3) 아이템 목록 (그리드) */}
         {isLoadingList ? (
           <p className="text-sm py-4">목록을 불러오는 중입니다...</p>
-        ) : filteredPendingAdds.length === 0 &&
-          filteredDecorations.length === 0 ? (
-          <p className="text-sm text-stone-500 py-4">
-            해당 카테고리에 등록된 에셋이 없습니다.
+        ) : filteredPendingAdds.length === 0 && filteredDecorations.length === 0 ? (
+          <p className="text-sm text-stone-500 py-8 text-center bg-stone-50 border border-dashed rounded">
+            해당 카테고리에 등록된 에셋이 없습니다. 위의 [+ 파일 바로 업로드] 버튼을 눌러 등록해 주세요.
           </p>
         ) : (
           <ul className="admin-asset-grid grid grid-cols-2 sm:grid-cols-4 gap-4">
