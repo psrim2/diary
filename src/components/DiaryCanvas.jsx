@@ -1425,6 +1425,18 @@ export default function DiaryCanvas({
     if (selectedStickerId === id) setSelectedStickerId(null);
   };
 
+  // 스티커 선택 시 최상단 레이어로 우선순위 승격 (layerOrder 최고값 부여 및 배열 최후미로 이동)
+  const bringStickerToFront = (id) => {
+    layerOrderCounterRef.current += 1;
+    const newOrder = layerOrderCounterRef.current;
+    setStickers((prev) => {
+      const target = prev.find((s) => s.id === id);
+      if (!target) return prev;
+      const others = prev.filter((s) => s.id !== id);
+      return [...others, { ...target, layerOrder: newOrder }];
+    });
+  };
+
   // 드래그 이동 (마우스 및 모바일 터치 지원 - 글상자 및 스티커 상하좌우 이동)
   const handleItemDragStart = (e, type, id, currentX, currentY) => {
     e.stopPropagation();
@@ -1460,6 +1472,7 @@ export default function DiaryCanvas({
       setSelectedStickerId(null);
       setActiveToolMode('text');
     } else {
+      bringStickerToFront(id);
       setSelectedStickerId(id);
       setSelectedTextId(null);
       setActiveToolMode('sticker');
@@ -2978,6 +2991,7 @@ export default function DiaryCanvas({
               onClick={(e) => {
                 if (isViewMode) return;
                 e.stopPropagation();
+                bringStickerToFront(sticker.id);
                 setSelectedStickerId(sticker.id);
                 setSelectedTextId(null);
                 setActiveToolMode('sticker');
@@ -2992,15 +3006,15 @@ export default function DiaryCanvas({
                 touchAction: 'none',
                 pointerEvents: isViewMode ? 'none' : 'auto',
               }}
-              className={`absolute select-none touch-none p-1 ${
+              className={`absolute select-none touch-none p-0 ${
                 !isViewMode ? 'cursor-move' : ''
               } ${
                 isSelected && !isViewMode
-                  ? 'ring-1.5 ring-dashed ring-stone-800 rounded-lg bg-white/20'
+                  ? 'ring-1 ring-dashed ring-stone-800 rounded-xs'
                   : ''
               }`}
             >
-              {/* 선택된 스티커 모서리 직접 조작 핸들 (삭제 / 회전 / 크기조절) */}
+              {/* 선택된 스티커 모서리 직접 조작 핸들 (삭제 / 회전 / 크기조절) - 스티커 사이즈에 타이트하게 밀착 */}
               {isSelected && !isViewMode && (
                 <>
                   {/* 좌측 상단: 삭제 버튼 */}
@@ -3012,33 +3026,33 @@ export default function DiaryCanvas({
                       e.stopPropagation();
                       deleteSticker(sticker.id);
                     }}
-                    style={{ transform: `scale(${invScale})` }}
-                    className="absolute -top-3 -left-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center z-30 active:scale-95 hover:bg-stone-50"
+                    style={{ transform: `scale(${invScale})`, transformOrigin: 'center center' }}
+                    className="absolute -top-2 -left-2 w-5 h-5 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center z-30 active:scale-95 hover:bg-stone-50"
                     title="스티커 삭제"
                   >
-                    <X size={12} strokeWidth={2.5} />
+                    <X size={10} strokeWidth={2.6} />
                   </button>
 
                   {/* 우측 상단: 직접 회전(Rotate) 드래그 핸들 */}
                   <div
                     onPointerDown={(e) => handleTransformStart(e, 'rotate', 'sticker', sticker)}
                     onTouchStart={(e) => handleTransformStart(e, 'rotate', 'sticker', sticker)}
-                    style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -top-3 -right-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-grab active:cursor-grabbing z-30 touch-none hover:bg-stone-50"
+                    style={{ transform: `scale(${invScale})`, transformOrigin: 'center center', touchAction: 'none' }}
+                    className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-grab active:cursor-grabbing z-30 touch-none hover:bg-stone-50"
                     title="드래그하여 회전"
                   >
-                    <RotateCw size={12} strokeWidth={2.5} />
+                    <RotateCw size={10} strokeWidth={2.4} />
                   </div>
 
                   {/* 우측 하단: 직접 크기조절(Resize) 드래그 핸들 */}
                   <div
                     onPointerDown={(e) => handleTransformStart(e, 'resize', 'sticker', sticker)}
                     onTouchStart={(e) => handleTransformStart(e, 'resize', 'sticker', sticker)}
-                    style={{ transform: `scale(${invScale})`, touchAction: 'none' }}
-                    className="absolute -bottom-3 -right-3 w-6 h-6 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-nwse-resize z-30 touch-none active:scale-110 hover:bg-stone-50"
+                    style={{ transform: `scale(${invScale})`, transformOrigin: 'center center', touchAction: 'none' }}
+                    className="absolute -bottom-2 -right-2 w-5 h-5 rounded-full bg-white text-stone-900 border border-stone-300 shadow-xs flex items-center justify-center cursor-nwse-resize z-30 touch-none active:scale-110 hover:bg-stone-50"
                     title="드래그하여 크기 조절"
                   >
-                    <Maximize2 size={11} strokeWidth={2.5} />
+                    <Maximize2 size={10} strokeWidth={2.4} />
                   </div>
                 </>
               )}

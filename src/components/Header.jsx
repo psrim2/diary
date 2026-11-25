@@ -135,7 +135,7 @@ export default function Header({
           </button>
         </div>
 
-        {/* 우측 버튼 그룹: [썸네일 토글 (목록 뷰일 때)] + [오늘] 버튼 */}
+        {/* 우측 버튼 그룹: [썸네일 격자 보기 토글 아이콘 버튼 (목록 뷰일 때)] + [오늘] 버튼 */}
         <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
           {currentView === 'list' && (
             <button
@@ -144,16 +144,16 @@ export default function Header({
                 triggerHaptic('light');
                 onToggleThumbnailView?.();
               }}
-              className={`h-7 px-2.5 rounded-full border text-xs font-bold transition-all flex items-center gap-1 cursor-pointer select-none shrink-0 active:scale-95 ${
+              className={`w-7 h-7 rounded-full border transition-all flex items-center justify-center cursor-pointer select-none shrink-0 active:scale-95 ${
                 isThumbnailView
                   ? 'bg-black text-white border-black shadow-xs'
-                  : 'bg-white text-stone-600 border-stone-300 hover:bg-stone-50 shadow-2xs'
+                  : 'bg-white text-stone-700 border-stone-300 hover:bg-stone-50 shadow-2xs'
               }`}
               title={isThumbnailView ? '일반 목록으로 보기' : '썸네일 격자로 보기'}
+              aria-label="썸네일 격자 보기 토글"
               aria-pressed={isThumbnailView}
             >
-              <LayoutGrid size={13} strokeWidth={2.4} />
-              <span>썸네일</span>
+              <LayoutGrid size={14} strokeWidth={2.3} />
             </button>
           )}
 

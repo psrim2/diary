@@ -44,6 +44,9 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
   const dateObj = new Date(year, month, day);
   const dayNum = String(isNaN(day) ? 17 : day).padStart(2, '0');
   const dayEn = DAY_NAMES_EN[isNaN(dateObj.getDay()) ? 0 : dateObj.getDay()] || 'WED';
+  const now = new Date();
+  const localTodayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const isToday = diary?.date === localTodayStr;
   const rawMood = upgradePresetSvgUrl(diary?.thumbnailMood || diary?.weather || '');
   let mood = '';
   if (typeof rawMood === 'string' || typeof rawMood === 'number') {
@@ -407,8 +410,18 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
       >
         {/* 박스 상단 헤더: [15 SUN] ──────── [대표 스티커] */}
         <div className="flex items-center justify-between pb-3">
-          <div className="text-xl sm:text-2xl font-black text-black tracking-tight leading-none">
-            {dayNum} {dayEn}
+          <div className="flex items-center">
+            <div className="relative inline-flex items-center">
+              <span className="text-xl sm:text-2xl font-black text-black tracking-tight leading-none">
+                {dayNum}
+              </span>
+              {isToday && (
+                <span className="absolute -top-0.5 -right-2 w-1.5 h-1.5 rounded-full bg-black block select-none pointer-events-none" />
+              )}
+            </div>
+            <span className="text-xl sm:text-2xl font-black text-black tracking-tight leading-none ml-2">
+              {dayEn}
+            </span>
           </div>
           {isMoodImage ? (
             <img
@@ -609,6 +622,9 @@ function ThumbnailItem({ diary, onSelect, isSelected }) {
   const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
   const holiday = getKoreanHoliday(diary?.date);
   const isHolidayOrWeekend = isWeekend || !!holiday;
+  const now = new Date();
+  const localTodayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const isToday = diary?.date === localTodayStr;
 
   const rawMood = upgradePresetSvgUrl(diary?.thumbnailMood || diary?.weather || '');
   let stickerVal = '';
@@ -648,20 +664,23 @@ function ThumbnailItem({ diary, onSelect, isSelected }) {
     <div
       id={`diary-card-${diary.date}`}
       onClick={() => onSelect(diary)}
-      className={`bg-white border rounded-2xl p-2.5 sm:p-3 flex flex-col items-center justify-between cursor-pointer active:scale-95 transition-all shadow-2xs hover:shadow-xs aspect-square w-full select-none ${
-        isSelected ? 'border-black ring-1 ring-black' : 'border-stone-200/90 hover:border-stone-400'
-      }`}
+      className="bg-white border border-stone-200/90 hover:border-stone-400 rounded-2xl p-2.5 sm:p-3 flex flex-col items-center justify-between cursor-pointer active:scale-95 transition-all shadow-2xs hover:shadow-xs aspect-square w-full select-none"
       title={`${diary.date} 일기 보기`}
     >
       {/* 상단: 날짜 (숫자 + 요일 + 휴일명 슬롯 고정 높이) */}
       <div className="flex flex-col items-center leading-none mt-0.5 shrink-0">
-        <span
-          className={`text-base sm:text-lg font-black tracking-tight ${
-            isHolidayOrWeekend ? 'text-[#ff6b00]' : 'text-black'
-          }`}
-        >
-          {dayNum}
-        </span>
+        <div className="relative inline-flex items-center">
+          <span
+            className={`text-base sm:text-lg font-black tracking-tight ${
+              isHolidayOrWeekend ? 'text-[#ff6b00]' : 'text-black'
+            }`}
+          >
+            {dayNum}
+          </span>
+          {isToday && (
+            <span className="absolute -top-0.5 -right-2 w-1.5 h-1.5 rounded-full bg-black block select-none pointer-events-none" />
+          )}
+        </div>
         <span className="text-[10px] sm:text-[11px] font-bold text-stone-400 mt-0.5 tracking-wider">
           {dayEn}
         </span>
