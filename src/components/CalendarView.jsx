@@ -24,17 +24,31 @@ export default function CalendarView({
     () => initialDate ? new Date(initialDate.getFullYear(), initialDate.getMonth(), 1) : new Date(todayRef.getFullYear(), todayRef.getMonth(), 1)
   );
 
-  useEffect(() => {
-    if (initialDate) {
-      setCurrentDate(new Date(initialDate.getFullYear(), initialDate.getMonth(), 1));
-    }
-  }, [initialDate?.getFullYear(), initialDate?.getMonth()]);
+  // 내부 스와이프/네비게이션으로 월 변경 시 부모와의 무한 루프 및 이전 월 깜박임(stale prop) 방지 ref
+  const internalMonthUpdateRef = useRef(false);
 
   useEffect(() => {
-    if (onMonthChange) {
-      onMonthChange(currentDate);
+    if (initialDate) {
+      const initY = initialDate.getFullYear();
+      const initM = initialDate.getMonth();
+      const currY = currentDate.getFullYear();
+      const currM = currentDate.getMonth();
+
+      // 이미 동일한 연/월이면 상태를 재설정하지 않음 (깜박임 원천 차단)
+      if (currY === initY && currM === initM) {
+        internalMonthUpdateRef.current = false;
+        return;
+      }
+
+      // 내부에서 방금 변경한 경우 부모가 보낸 이전 월 prop 무시
+      if (internalMonthUpdateRef.current) {
+        internalMonthUpdateRef.current = false;
+        return;
+      }
+
+      setCurrentDate(new Date(initY, initM, 1));
     }
-  }, [currentDate, onMonthChange]);
+  }, [initialDate?.getFullYear(), initialDate?.getMonth()]);
 
   // 1년 단위 연력(Yearly Calendar) 모달 열림 상태 & 조회 연도
   const [isYearViewOpen, setIsYearViewOpen] = useState(false);
@@ -134,12 +148,9 @@ export default function CalendarView({
     return () => clearAnimationTimers();
   }, []);
 
-  // 월이 변경되거나 최초 마운트 시 드래그 오프셋 및 제스처 상태를 확실하게 0으로 초기화
+  // 월이 변경되거나 최초 마운트 시 드래그 오프셋 및 제스처 상태 초기화
   useEffect(() => {
-    clearAnimationTimers();
     setDragOffset(0);
-    setIsAnimating(false);
-    setAnimClass('');
     isInteractingRef.current = false;
     currentDeltaXRef.current = 0;
     isHorizontalSwipeRef.current = false;
@@ -149,50 +160,39 @@ export default function CalendarView({
   const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sunday
   const lastDay = new Date(year, month + 1, 0).getDate();
 
-  // 다음 달로 넘기기 (부드러운 애니메이션)
-  const triggerNextMonth = () => {
+  // 월 전환 처리 (단일 트랜잭션으로 깜박임 및 직전 달력 역전 현상 원천 차단)
+  const handleMonthTransition = (targetDate, direction) => {
+    internalMonthUpdateRef.current = true;
     clearAnimationTimers();
     setIsAnimating(true);
-    setAnimClass('transition-all duration-200 ease-out -translate-x-full opacity-0');
-    
+    setDragOffset(0);
+
+    // 부모 App에 변경 통보하여 헤더 동기화
+    onMonthChange?.(targetDate);
+
+    // 날짜 상태 즉시 갱신
+    setCurrentDate(targetDate);
+
+    // 방향에 따른 슬라이드 인 애니메이션 적용
+    const slideClass = direction === 'next' ? 'anim-month-slide-in-right' : 'anim-month-slide-in-left';
+    setAnimClass(slideClass);
+
     animTimeoutRef.current = setTimeout(() => {
-      setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
-      setDragOffset(0);
-      setAnimClass('translate-x-full opacity-0');
-      
-      animFrameRef1.current = requestAnimationFrame(() => {
-        animFrameRef2.current = requestAnimationFrame(() => {
-          setAnimClass('transition-all duration-250 ease-out translate-x-0 opacity-100');
-          animFinishTimeoutRef.current = setTimeout(() => {
-            setIsAnimating(false);
-            setAnimClass('');
-          }, 250);
-        });
-      });
-    }, 200);
+      setAnimClass('');
+      setIsAnimating(false);
+    }, 240);
   };
 
-  // 이전 달로 넘기기 (부드러운 애니메이션)
+  // 다음 달로 넘기기
+  const triggerNextMonth = () => {
+    const nextDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+    handleMonthTransition(nextDate, 'next');
+  };
+
+  // 이전 달로 넘기기
   const triggerPrevMonth = () => {
-    clearAnimationTimers();
-    setIsAnimating(true);
-    setAnimClass('transition-all duration-200 ease-out translate-x-full opacity-0');
-    
-    animTimeoutRef.current = setTimeout(() => {
-      setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
-      setDragOffset(0);
-      setAnimClass('-translate-x-full opacity-0');
-      
-      animFrameRef1.current = requestAnimationFrame(() => {
-        animFrameRef2.current = requestAnimationFrame(() => {
-          setAnimClass('transition-all duration-250 ease-out translate-x-0 opacity-100');
-          animFinishTimeoutRef.current = setTimeout(() => {
-            setIsAnimating(false);
-            setAnimClass('');
-          }, 250);
-        });
-      });
-    }, 200);
+    const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+    handleMonthTransition(prevDate, 'prev');
   };
 
   // 터치 제스처

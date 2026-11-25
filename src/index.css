@@ -252,3 +252,34 @@ canvas {
   animation: scaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* 달력 월 전환 슬라이드 애니메이션 */
+@keyframes monthSlideInRight {
+  0% {
+    transform: translateX(36px);
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes monthSlideInLeft {
+  0% {
+    transform: translateX(-36px);
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.anim-month-slide-in-right {
+  animation: monthSlideInRight 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+
+.anim-month-slide-in-left {
+  animation: monthSlideInLeft 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+

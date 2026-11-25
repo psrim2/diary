@@ -500,6 +500,16 @@ export default function DiaryCanvas({
   );
 
   const currentDiaryKeyRef = useRef(diary ? (diary.id || diary.date) : null);
+  const [syncedDiaryKey, setSyncedDiaryKey] = useState(diary ? (diary.id || diary.date) : null);
+
+  // 다이어리 prop 변경 시 렌더링 단계에서 동기적으로 드래그 및 애니메이션 오프셋 0 리셋 (1프레임 깜박임 방지)
+  const currentKey = diary ? (diary.id || diary.date) : null;
+  if (currentKey !== syncedDiaryKey) {
+    setSyncedDiaryKey(currentKey);
+    setDragX(0);
+    setExitAnimation(null);
+    setIsPageDragging(false);
+  }
 
   // 뷰 모드일 때는 props.diary의 최신 데이터를 동기적으로 직접 참조하여 1프레임 지연(lag/flicker)을 원천 차단
   const activeNormalized = useMemo(() => {
@@ -1909,14 +1919,11 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-left');
         setDragX(-window.innerWidth - 32);
         setTimeout(() => {
+          setExitAnimation(null);
+          setDragX(0);
+          setIsPageDragging(false);
           onNavigateDiary?.('next');
-          // 안전 폴백 타이머 (새 다이어리 props 수신 시 useEffect에서 즉시 0 리셋)
-          setTimeout(() => {
-            setExitAnimation(null);
-            setDragX(0);
-            setIsPageDragging(false);
-          }, 80);
-        }, 200);
+        }, 210);
       } else {
         triggerHaptic('boundary');
         showToast('가장 최근 일기입니다.');
@@ -1928,14 +1935,11 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-right');
         setDragX(window.innerWidth + 32);
         setTimeout(() => {
+          setExitAnimation(null);
+          setDragX(0);
+          setIsPageDragging(false);
           onNavigateDiary?.('prev');
-          // 안전 폴백 타이머 (새 다이어리 props 수신 시 useEffect에서 즉시 0 리셋)
-          setTimeout(() => {
-            setExitAnimation(null);
-            setDragX(0);
-            setIsPageDragging(false);
-          }, 80);
-        }, 200);
+        }, 210);
       } else {
         triggerHaptic('boundary');
         showToast('가장 첫 번째 일기입니다.');
@@ -2004,14 +2008,11 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-left');
         setDragX(-window.innerWidth - 32);
         setTimeout(() => {
+          setExitAnimation(null);
+          setDragX(0);
+          setIsPageDragging(false);
           onNavigateDiary?.('next');
-          // 안전 폴백 타이머 (새 다이어리 props 수신 시 useEffect에서 즉시 0 리셋)
-          setTimeout(() => {
-            setExitAnimation(null);
-            setDragX(0);
-            setIsPageDragging(false);
-          }, 80);
-        }, 200);
+        }, 210);
       } else {
         triggerHaptic('boundary');
         showToast('가장 최근 일기입니다.');
@@ -2023,14 +2024,11 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-right');
         setDragX(window.innerWidth + 32);
         setTimeout(() => {
+          setExitAnimation(null);
+          setDragX(0);
+          setIsPageDragging(false);
           onNavigateDiary?.('prev');
-          // 안전 폴백 타이머 (새 다이어리 props 수신 시 useEffect에서 즉시 0 리셋)
-          setTimeout(() => {
-            setExitAnimation(null);
-            setDragX(0);
-            setIsPageDragging(false);
-          }, 80);
-        }, 200);
+        }, 210);
       } else {
         triggerHaptic('boundary');
         showToast('가장 첫 번째 일기입니다.');
