@@ -524,8 +524,8 @@ export default function DiaryCanvas({
   }, [diary]);
 
   const activeDate = isViewMode ? (diary?.date || date) : date;
-  const activeWeather = isViewMode ? upgradePresetSvgUrl(diary?.weather || diary?.thumbnailMood || weather) : weather;
-  const activePaperStyle = isViewMode ? (diary?.paperStyle || paperStyle) : paperStyle;
+  const activeWeather = isViewMode ? upgradePresetSvgUrl(diary?.weather || diary?.thumbnailMood || '') : weather;
+  const activePaperStyle = isViewMode ? (diary?.paperStyle || 'lined') : paperStyle;
   const activeTextBlocks = isViewMode ? activeNormalized.textBlocks : textBlocks;
   const activeStickers = isViewMode ? activeNormalized.stickers : stickers;
   const activeStrokes = isViewMode ? activeNormalized.strokes : strokesHistory.slice(0, historyIndex + 1);
