@@ -114,7 +114,10 @@ function getDefaultToolMode() {
  */
 function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
   const normalized = useMemo(() => normalizeDiaryLayers(diary), [diary]);
-  const strokeBands = useMemo(() => buildStrokeBands(normalized.strokes), [normalized.strokes]);
+  const strokeBands = useMemo(
+    () => buildStrokeBands(normalized.strokes, normalized.textBlocks, normalized.stickers),
+    [normalized.strokes, normalized.textBlocks, normalized.stickers]
+  );
 
   const dateObj = new Date((diary?.date || '') + 'T00:00:00');
   const validDate = isNaN(dateObj) ? new Date() : dateObj;
@@ -262,6 +265,8 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
                     src={resolvedImg}
                     alt=""
                     draggable={false}
+                    decoding="sync"
+                    loading="eager"
                     style={{
                       width: `${scaledPixelW}px`,
                       height: 'auto',
@@ -323,6 +328,8 @@ export default function DiaryCanvas({
   const [dragX, setDragX] = useState(0);
   const [isPageDragging, setIsPageDragging] = useState(false);
   const [exitAnimation, setExitAnimation] = useState(null); // 'anim-page-exit-left' | 'anim-page-exit-right' | null
+  const sliderWrapperRef = useRef(null);
+  const getSlideDistance = () => (sliderWrapperRef.current?.clientWidth || window.innerWidth) + 32;
 
   // 정렬된 일기 목록에서 이전 및 다음 일기 식별 (스와이프 트랙 렌더링용)
   const sortedDiaries = useMemo(() => {
@@ -1829,10 +1836,13 @@ export default function DiaryCanvas({
       if (hasNextDiary) {
         triggerHaptic('pageTurn');
         setExitAnimation('anim-page-exit-left');
-        setDragX(-window.innerWidth - 32);
+        setDragX(-getSlideDistance());
         setTimeout(() => {
+          setExitAnimation(null);
+          setDragX(0);
+          setIsPageDragging(false);
           onNavigateDiary('next');
-        }, 220);
+        }, 230);
       } else {
         triggerHaptic('boundary');
         showToast('가장 최근 일기입니다.');
@@ -1842,10 +1852,13 @@ export default function DiaryCanvas({
       if (hasPrevDiary) {
         triggerHaptic('pageTurn');
         setExitAnimation('anim-page-exit-right');
-        setDragX(window.innerWidth + 32);
+        setDragX(getSlideDistance());
         setTimeout(() => {
+          setExitAnimation(null);
+          setDragX(0);
+          setIsPageDragging(false);
           onNavigateDiary('prev');
-        }, 220);
+        }, 230);
       } else {
         triggerHaptic('boundary');
         showToast('가장 첫 번째 일기입니다.');
@@ -1917,13 +1930,13 @@ export default function DiaryCanvas({
       if (hasNextDiary) {
         triggerHaptic('pageTurn');
         setExitAnimation('anim-page-exit-left');
-        setDragX(-window.innerWidth - 32);
+        setDragX(-getSlideDistance());
         setTimeout(() => {
           setExitAnimation(null);
           setDragX(0);
           setIsPageDragging(false);
           onNavigateDiary?.('next');
-        }, 210);
+        }, 230);
       } else {
         triggerHaptic('boundary');
         showToast('가장 최근 일기입니다.');
@@ -1933,13 +1946,13 @@ export default function DiaryCanvas({
       if (hasPrevDiary) {
         triggerHaptic('pageTurn');
         setExitAnimation('anim-page-exit-right');
-        setDragX(window.innerWidth + 32);
+        setDragX(getSlideDistance());
         setTimeout(() => {
           setExitAnimation(null);
           setDragX(0);
           setIsPageDragging(false);
           onNavigateDiary?.('prev');
-        }, 210);
+        }, 230);
       } else {
         triggerHaptic('boundary');
         showToast('가장 첫 번째 일기입니다.');
@@ -2006,13 +2019,13 @@ export default function DiaryCanvas({
       if (hasNextDiary) {
         triggerHaptic('pageTurn');
         setExitAnimation('anim-page-exit-left');
-        setDragX(-window.innerWidth - 32);
+        setDragX(-getSlideDistance());
         setTimeout(() => {
           setExitAnimation(null);
           setDragX(0);
           setIsPageDragging(false);
           onNavigateDiary?.('next');
-        }, 210);
+        }, 230);
       } else {
         triggerHaptic('boundary');
         showToast('가장 최근 일기입니다.');
@@ -2022,13 +2035,13 @@ export default function DiaryCanvas({
       if (hasPrevDiary) {
         triggerHaptic('pageTurn');
         setExitAnimation('anim-page-exit-right');
-        setDragX(window.innerWidth + 32);
+        setDragX(getSlideDistance());
         setTimeout(() => {
           setExitAnimation(null);
           setDragX(0);
           setIsPageDragging(false);
           onNavigateDiary?.('prev');
-        }, 210);
+        }, 230);
       } else {
         triggerHaptic('boundary');
         showToast('가장 첫 번째 일기입니다.');
@@ -2202,7 +2215,7 @@ export default function DiaryCanvas({
         - 스와이프 도중 이전/다음 다이어리를 양옆에 실시간으로 나란히 배치하여 연속적인 페이지 전환 연출
         ================================================================
       */}
-      <div className="w-full flex-1 flex flex-col min-h-0 relative overflow-hidden">
+      <div ref={sliderWrapperRef} className="w-full flex-1 flex flex-col min-h-0 relative overflow-hidden">
         {/* 이전 다이어리 프리뷰 (우측으로 드래그할 때 좌측에서 밀려 들어옴, 32px 간격, 그림자 제거) */}
         {isViewMode && (isPageDragging || exitAnimation === 'anim-page-exit-right') && prevDiary && (
           <div
@@ -2213,7 +2226,7 @@ export default function DiaryCanvas({
               left: 0,
               right: 0,
               transform: `translateX(calc(-100% - 32px + ${dragX}px))`,
-              transition: exitAnimation ? 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
+              transition: exitAnimation ? 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
               zIndex: 10,
             }}
           >
@@ -2227,7 +2240,7 @@ export default function DiaryCanvas({
             transform: (isPageDragging || exitAnimation) && dragX !== 0
               ? `translateX(${dragX}px)`
               : undefined,
-            transition: exitAnimation ? 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
+            transition: exitAnimation ? 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
             zIndex: 20,
           }}
           className="w-full flex-1 flex flex-col min-h-0 relative bg-[#fafafa]"
@@ -3091,6 +3104,8 @@ export default function DiaryCanvas({
                       src={resolvedImg}
                       alt={sticker.label || sticker.category || 'decoration'}
                       draggable={false}
+                      decoding="sync"
+                      loading="eager"
                       onLoad={(e) => {
                         if (isViewMode) return;
                         const naturalW = e.currentTarget.naturalWidth || 1;
@@ -3173,7 +3188,7 @@ export default function DiaryCanvas({
               left: 0,
               right: 0,
               transform: `translateX(calc(100% + 32px + ${dragX}px))`,
-              transition: exitAnimation ? 'transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
+              transition: exitAnimation ? 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
               zIndex: 10,
             }}
           >

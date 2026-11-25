@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useLayoutEffect } from 'react';
 import { PRESET_GIF_STICKERS } from '../constants/presetGifStickers';
 
 // 표준 다이어리 규격 캔버스 해상도 (모든 디바이스 공통 가상 뷰포트)
@@ -449,7 +449,7 @@ export function buildStrokeBands(activeStrokes = [], textBlocks = [], stickers =
 export function StrokeBandCanvas({ band }) {
   const bandCanvasRef = useRef(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const canvas = bandCanvasRef.current;
     if (!canvas) return;
 
