@@ -1829,20 +1829,41 @@ export default function DiaryCanvas({
     };
   }, [diaries, diary?.id, date]);
 
+  const pendingNavRef = useRef(null);
+  const exitFallbackTimerRef = useRef(null);
+
+  const finishExitSwipe = useCallback(() => {
+    if (exitFallbackTimerRef.current) {
+      clearTimeout(exitFallbackTimerRef.current);
+      exitFallbackTimerRef.current = null;
+    }
+    const dir = pendingNavRef.current;
+    if (!dir) return;
+    pendingNavRef.current = null;
+    setExitAnimation(null);
+    setDragX(0);
+    setIsPageDragging(false);
+    onNavigateDiary?.(dir);
+  }, [onNavigateDiary]);
+
+  const startExitSwipe = (direction) => {
+    if (exitFallbackTimerRef.current) clearTimeout(exitFallbackTimerRef.current);
+    pendingNavRef.current = direction;
+    triggerHaptic('pageTurn');
+    setExitAnimation(direction === 'next' ? 'anim-page-exit-left' : 'anim-page-exit-right');
+    setDragX(direction === 'next' ? -getSlideDistance() : getSlideDistance());
+    // transitionend 미발생 환경 대비 안전 폴백
+    exitFallbackTimerRef.current = setTimeout(() => {
+      finishExitSwipe();
+    }, 280);
+  };
+
   // 뷰 모드에서 좌우 스와이프로 이전/이후 일기 탐색 (3D 달력 책장 넘김 전환 및 햅틱 효과)
   const handleSwipeNavigation = (direction) => {
     if (!onNavigateDiary || exitAnimation) return;
     if (direction === 'next') {
       if (hasNextDiary) {
-        triggerHaptic('pageTurn');
-        setExitAnimation('anim-page-exit-left');
-        setDragX(-getSlideDistance());
-        setTimeout(() => {
-          setExitAnimation(null);
-          setDragX(0);
-          setIsPageDragging(false);
-          onNavigateDiary('next');
-        }, 230);
+        startExitSwipe('next');
       } else {
         triggerHaptic('boundary');
         showToast('가장 최근 일기입니다.');
@@ -1850,15 +1871,7 @@ export default function DiaryCanvas({
       }
     } else if (direction === 'prev') {
       if (hasPrevDiary) {
-        triggerHaptic('pageTurn');
-        setExitAnimation('anim-page-exit-right');
-        setDragX(getSlideDistance());
-        setTimeout(() => {
-          setExitAnimation(null);
-          setDragX(0);
-          setIsPageDragging(false);
-          onNavigateDiary('prev');
-        }, 230);
+        startExitSwipe('prev');
       } else {
         triggerHaptic('boundary');
         showToast('가장 첫 번째 일기입니다.');
@@ -1928,15 +1941,7 @@ export default function DiaryCanvas({
     const currentDx = dragX;
     if (currentDx < -50) {
       if (hasNextDiary) {
-        triggerHaptic('pageTurn');
-        setExitAnimation('anim-page-exit-left');
-        setDragX(-getSlideDistance());
-        setTimeout(() => {
-          setExitAnimation(null);
-          setDragX(0);
-          setIsPageDragging(false);
-          onNavigateDiary?.('next');
-        }, 230);
+        startExitSwipe('next');
       } else {
         triggerHaptic('boundary');
         showToast('가장 최근 일기입니다.');
@@ -1944,15 +1949,7 @@ export default function DiaryCanvas({
       }
     } else if (currentDx > 50) {
       if (hasPrevDiary) {
-        triggerHaptic('pageTurn');
-        setExitAnimation('anim-page-exit-right');
-        setDragX(getSlideDistance());
-        setTimeout(() => {
-          setExitAnimation(null);
-          setDragX(0);
-          setIsPageDragging(false);
-          onNavigateDiary?.('prev');
-        }, 230);
+        startExitSwipe('prev');
       } else {
         triggerHaptic('boundary');
         showToast('가장 첫 번째 일기입니다.');
@@ -2017,15 +2014,7 @@ export default function DiaryCanvas({
     const currentDx = dragX;
     if (currentDx < -50) {
       if (hasNextDiary) {
-        triggerHaptic('pageTurn');
-        setExitAnimation('anim-page-exit-left');
-        setDragX(-getSlideDistance());
-        setTimeout(() => {
-          setExitAnimation(null);
-          setDragX(0);
-          setIsPageDragging(false);
-          onNavigateDiary?.('next');
-        }, 230);
+        startExitSwipe('next');
       } else {
         triggerHaptic('boundary');
         showToast('가장 최근 일기입니다.');
@@ -2033,15 +2022,7 @@ export default function DiaryCanvas({
       }
     } else if (currentDx > 50) {
       if (hasPrevDiary) {
-        triggerHaptic('pageTurn');
-        setExitAnimation('anim-page-exit-right');
-        setDragX(getSlideDistance());
-        setTimeout(() => {
-          setExitAnimation(null);
-          setDragX(0);
-          setIsPageDragging(false);
-          onNavigateDiary?.('prev');
-        }, 230);
+        startExitSwipe('prev');
       } else {
         triggerHaptic('boundary');
         showToast('가장 첫 번째 일기입니다.');
@@ -2239,6 +2220,11 @@ export default function DiaryCanvas({
 
         {/* 현재 다이어리 페이지 (GPU 레이어 고정으로 잔상 및 깜박임 원천 차단) */}
         <div 
+          onTransitionEnd={(e) => {
+            if (exitAnimation && e.target === e.currentTarget && e.propertyName === 'transform') {
+              finishExitSwipe();
+            }
+          }}
           style={{
             transform: (isPageDragging || exitAnimation) && dragX !== 0
               ? `translate3d(${dragX}px, 0, 0)`
