@@ -239,7 +239,7 @@ export default function AdminPage({ onBack }) {
   // 카테고리 삭제 핸들러 (고정 카테고리 보호)
   const handleDeleteCategory = async (cat) => {
     if (FIXED_CATEGORY_IDS.has(cat.id)) {
-      alert('날씨와 표정은 기본 고정 카테고리이므로 삭제할 수 없습니다.');
+      alert('표정, 날씨, 기념일은 기본 고정 카테고리이므로 삭제할 수 없습니다.');
       return;
     }
     const count = decorations.filter((d) => d.category === cat.id).length;
@@ -815,7 +815,7 @@ export default function AdminPage({ onBack }) {
           )}
         </div>
         <p className="text-xs text-stone-500 mb-3">
-          날씨와 표정은 기본 고정 카테고리입니다. 스티커에 들어갈 하위 카테고리를 자유롭게 추가·삭제하고, 드래그하여 순서를 설정할 수 있습니다.
+          표정, 날씨, 기념일은 기본 고정 카테고리입니다. 스티커에 들어갈 하위 카테고리를 자유롭게 추가·삭제하고, 드래그하여 순서를 설정할 수 있습니다.
         </p>
 
         {/* 새 카테고리 추가 폼 */}
@@ -954,9 +954,23 @@ export default function AdminPage({ onBack }) {
           </div>
         </div>
 
-        {/* (1) 카테고리 필터 탭: 날씨(고정), 표정(고정) 'ㅣ' 부분선 표시 후 에셋 카테고리에서 설정한 순서대로 나열 (아래 카테고리에서 '전체' 삭제) */}
+        {/* (1) 카테고리 필터 탭: 표정(고정), 날씨(고정), 기념일(고정) 'ㅣ' 구분선 표시 후 에셋 카테고리 순서대로 나열 */}
         <div className="admin-category-filter flex items-center overflow-x-auto no-scrollbar whitespace-nowrap gap-1 pb-2 border-b max-w-full">
-          {/* 날씨 (고정) */}
+          {/* 표정 (고정 1) */}
+          <button
+            type="button"
+            onClick={() => setFilterCategory(filterCategory === 'emotion' ? 'all' : 'emotion')}
+            className={`shrink-0 px-3 py-1 border text-xs cursor-pointer transition ${
+              filterCategory === 'emotion'
+                ? 'bg-black text-white font-bold'
+                : 'bg-white text-stone-700 hover:bg-stone-50'
+            }`}
+            title="표정"
+          >
+            표정
+          </button>
+
+          {/* 날씨 (고정 2) */}
           <button
             type="button"
             onClick={() => setFilterCategory(filterCategory === 'weather' ? 'all' : 'weather')}
@@ -970,18 +984,18 @@ export default function AdminPage({ onBack }) {
             날씨
           </button>
 
-          {/* 표정 (고정) */}
+          {/* 기념일 (고정 3) */}
           <button
             type="button"
-            onClick={() => setFilterCategory(filterCategory === 'emotion' ? 'all' : 'emotion')}
+            onClick={() => setFilterCategory(filterCategory === 'anniversary' ? 'all' : 'anniversary')}
             className={`shrink-0 px-3 py-1 border text-xs cursor-pointer transition ${
-              filterCategory === 'emotion'
+              filterCategory === 'anniversary'
                 ? 'bg-black text-white font-bold'
                 : 'bg-white text-stone-700 hover:bg-stone-50'
             }`}
-            title="표정"
+            title="기념일"
           >
-            표정
+            기념일
           </button>
 
           {/* 'ㅣ' 부분선 (구분선) */}

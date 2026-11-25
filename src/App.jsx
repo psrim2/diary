@@ -314,6 +314,25 @@ function DiaryMainApp({ onOpenAdmin }) {
   const [isViewMode, setIsViewMode] = useState(false);
   const [pageTurnDirection, setPageTurnDirection] = useState(null);
 
+  // 목록 뷰 썸네일(격자) 보기 토글 상태 (로컬스토리지 연동)
+  const [isThumbnailView, setIsThumbnailView] = useState(() => {
+    try {
+      return localStorage.getItem('analog_diary_thumbnail_view') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleThumbnailView = () => {
+    setIsThumbnailView((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('analog_diary_thumbnail_view', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   // 다이어리 이름 상태 (로컬스토리지 연동, 기본값: 'Diary')
   const [diaryName, setDiaryName] = useState(() => {
     const saved = localStorage.getItem('analog_diary_name');
@@ -957,6 +976,8 @@ function DiaryMainApp({ onOpenAdmin }) {
               onLogout={handleRequestLogout}
               onOpenYearView={() => handleOpenYearView(calendarViewingDate.getFullYear(), currentView === 'editor' ? (previousView || 'calendar') : currentView)}
               onOpenAdmin={onOpenAdmin}
+              isThumbnailView={isThumbnailView}
+              onToggleThumbnailView={handleToggleThumbnailView}
             />
 
             {/* 메인 뷰: 캘린더 또는 목록 */}
@@ -989,6 +1010,7 @@ function DiaryMainApp({ onOpenAdmin }) {
                   onSaveScrollTop={setSavedListScrollTop}
                   onRestoreScrollComplete={() => setIsReturningFromEditor(false)}
                   onOpenYearView={(y) => handleOpenYearView(y, 'list')}
+                  isThumbnailView={isThumbnailView}
                 />
               )}
             </div>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Edit2, Menu } from 'lucide-react';
+import { Edit2, Menu, LayoutGrid } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import SideMenuDrawer from './SideMenuDrawer';
 
@@ -17,6 +17,8 @@ export default function Header({
   onLogin,
   onLogout,
   onOpenAdmin,
+  isThumbnailView,
+  onToggleThumbnailView,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(diaryName);
@@ -133,18 +135,41 @@ export default function Header({
           </button>
         </div>
 
-        {/* 오늘 버튼: 달력, 목록 라인의 맨 끝(우측)에 위치, 높이는 달력/목록 높이에 맞춤 (라운드 버튼) */}
-        <button
-          type="button"
-          onClick={() => {
-            triggerHaptic('light');
-            onGoToToday();
-          }}
-          className="h-7 px-3.5 rounded-full bg-white border border-stone-300 shadow-2xs hover:bg-stone-50 active:scale-95 transition-all flex items-center justify-center font-bold text-xs text-stone-800 cursor-pointer select-none shrink-0"
-          title="오늘 날짜로 이동"
-        >
-          오늘
-        </button>
+        {/* 우측 버튼 그룹: [썸네일 토글 (목록 뷰일 때)] + [오늘] 버튼 */}
+        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+          {currentView === 'list' && (
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('light');
+                onToggleThumbnailView?.();
+              }}
+              className={`h-7 px-2.5 rounded-full border text-xs font-bold transition-all flex items-center gap-1 cursor-pointer select-none shrink-0 active:scale-95 ${
+                isThumbnailView
+                  ? 'bg-black text-white border-black shadow-xs'
+                  : 'bg-white text-stone-600 border-stone-300 hover:bg-stone-50 shadow-2xs'
+              }`}
+              title={isThumbnailView ? '일반 목록으로 보기' : '썸네일 격자로 보기'}
+              aria-pressed={isThumbnailView}
+            >
+              <LayoutGrid size={13} strokeWidth={2.4} />
+              <span>썸네일</span>
+            </button>
+          )}
+
+          {/* 오늘 버튼: 달력, 목록 라인의 맨 끝(우측)에 위치, 높이는 달력/목록 높이에 맞춤 (라운드 버튼) */}
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('light');
+              onGoToToday();
+            }}
+            className="h-7 px-3.5 rounded-full bg-white border border-stone-300 shadow-2xs hover:bg-stone-50 active:scale-95 transition-all flex items-center justify-center font-bold text-xs text-stone-800 cursor-pointer select-none shrink-0"
+            title="오늘 날짜로 이동"
+          >
+            오늘
+          </button>
+        </div>
       </div>
 
       {/* 3선 버튼 사이드 메뉴 드로어 */}

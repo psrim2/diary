@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import YearlyCalendarModal from './YearlyCalendarModal';
 import { resolveStickerImage, upgradePresetSvgUrl } from '../utils/canvasLayers';
+import { getKoreanHoliday } from '../utils/holidays';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -502,6 +503,8 @@ export default function CalendarView({
                 const hasDiary = !!cell.diary;
                 const today = isToday(cell.day);
                 const isWeekend = colIdx === 0 || colIdx === 6;
+                const holiday = getKoreanHoliday(cell.dateStr);
+                const isHolidayOrWeekend = isWeekend || !!holiday;
 
                 // 날짜 옆 대표 스티커/날씨로 지정한 값만 달력 아이콘으로 표출 (본문 속지 스티커와 분리)
                 const rawSticker = upgradePresetSvgUrl(
@@ -557,7 +560,7 @@ export default function CalendarView({
                     }}
                     className="flex flex-col items-center justify-start cursor-pointer transition-transform active:scale-95 group h-full py-0.5"
                   >
-                    {/* 날짜 숫자 컨테이너 - 오늘과 일반 날짜 모두 동일한 높이(w-8 h-8 sm:w-9 sm:h-9)를 보장하여 날짜를 수평 일직선으로 완벽 정렬 */}
+                    {/* 1. 날짜 숫자 컨테이너 - 오늘과 일반 날짜 모두 동일한 높이(w-8 h-8 sm:w-9 sm:h-9)를 보장하여 날짜를 수평 일직선으로 완벽 정렬 */}
                     <div className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center shrink-0 relative">
                       {/* 선택된 날짜 표시: 오늘 표시 원과 동일한 크기의 스트로크(stroke) (모바일 버전에서는 미표시, 2분할 뷰 lg에서만 표시) */}
                       {cell.dateStr === selectedDate && !today && (
@@ -574,7 +577,7 @@ export default function CalendarView({
                       ) : (
                         <span
                           className={`text-base sm:text-lg font-bold leading-none ${
-                            isWeekend ? 'text-[#ff6b00]' : 'text-black'
+                            isHolidayOrWeekend ? 'text-[#ff6b00]' : 'text-black'
                           }`}
                         >
                           {cell.day}
@@ -582,15 +585,26 @@ export default function CalendarView({
                       )}
                     </div>
 
-                    {/* 일기 작성 스티커 / dot 슬롯 - 36px 고정 높이 슬롯으로 날짜 숫자의 상하 출렁임 원천 차단 */}
-                    <div className="w-full h-[36px] flex items-center justify-center mt-0.5 shrink-0 overflow-visible">
+                    {/* 2. 휴일명 슬롯 (날짜 바로 아래) - 14px 고정 슬롯으로 휴일이 없는 날도 동일한 간격 유지하여 행 전체 정렬 보장 */}
+                    <div className="w-full h-[14px] sm:h-[15px] flex items-center justify-center shrink-0 overflow-hidden leading-none my-0.5">
+                      {holiday ? (
+                        <span className="text-[9px] sm:text-[10px] font-semibold text-[#ff6b00] truncate max-w-full px-0.5 select-none text-center">
+                          {holiday.name}
+                        </span>
+                      ) : (
+                        <div className="h-[14px] sm:h-[15px]" />
+                      )}
+                    </div>
+
+                    {/* 3. 일기 작성 스티커 / dot 슬롯 - 날짜 -> 휴일명 -> 스티커 순으로 배치 */}
+                    <div className="w-full h-[32px] sm:h-[34px] flex items-center justify-center shrink-0 overflow-visible">
                       {hasDiary ? (
                         isStickerImage ? (
                           <img
                             src={stickerVal}
                             alt=""
-                            style={{ width: '80%', maxWidth: '36px', maxHeight: '36px', height: 'auto' }}
-                            className="w-[80%] max-w-[36px] max-h-[36px] h-auto object-contain select-none pointer-events-none"
+                            style={{ width: '80%', maxWidth: '32px', maxHeight: '32px', height: 'auto' }}
+                            className="w-[80%] max-w-[32px] max-h-[32px] h-auto object-contain select-none pointer-events-none"
                           />
                         ) : isShortEmojiOrSymbol ? (
                           <span className="text-base sm:text-lg leading-none filter drop-shadow-2xs select-none">

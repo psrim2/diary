@@ -95,7 +95,7 @@ function getEventClientCoords(e) {
 // 디바이스별 기본 활성 도구 모드 결정:
 // 모바일 스마트폰(< 640px) -> 타이핑('text')이 기본 Default
 // 태블릿(아이패드, 갤럭시탭 등) 및 PC -> 드로잉/손글씨('pen')가 기본 Default
-export function getDefaultToolMode() {
+function getDefaultToolMode() {
   if (typeof window === 'undefined') return 'pen';
 
   // 1. iPadOS 감지: Safari는 UA가 Macintosh이지만 maxTouchPoints > 1
@@ -364,7 +364,7 @@ export default function DiaryCanvas({
 
   // 모달 상태
   const [isWeatherOpen, setIsWeatherOpen] = useState(false);
-  const [repCategoryTab, setRepCategoryTab] = useState('weather'); // 날씨 / 스티커 1차 분류
+  const [repCategoryTab, setRepCategoryTab] = useState('emotion'); // 표정 / 날씨 / 기념일 / 스티커 1차 분류
   const [repStickerSubCategory, setRepStickerSubCategory] = useState('sticker'); // 스티커 선택 시 하위 카테고리 (MY, 스티커, 캐릭터 등)
   const [isPaperModalOpen, setIsPaperModalOpen] = useState(false);
   const [isStickerPaletteOpen, setIsStickerPaletteOpen] = useState(false);
@@ -421,7 +421,7 @@ export default function DiaryCanvas({
       { id: 'food', label: '음식' },
     ];
     const finalSource = sourceCats.length > 0 ? sourceCats : fallbackCats;
-    const existing = new Set(['my', 'weather', 'emotion', 'tape', 'gif']);
+    const existing = new Set(['my', 'weather', 'emotion', 'anniversary', 'tape', 'gif']);
 
     finalSource.forEach((c) => {
       if (!existing.has(c.id)) {
@@ -459,7 +459,7 @@ export default function DiaryCanvas({
       return Array.from(map.values());
     } else if (repStickerSubCategory === 'sticker') {
       return decorations.filter(
-        (d) => d.category === 'sticker' || (!d.category && !d.isPersonal && d.category !== 'weather' && d.category !== 'emotion')
+        (d) => d.category === 'sticker' || (!d.category && !d.isPersonal && d.category !== 'weather' && d.category !== 'emotion' && d.category !== 'anniversary')
       );
     } else {
       return decorations.filter((d) => d.category === repStickerSubCategory);
@@ -2294,8 +2294,19 @@ export default function DiaryCanvas({
                     className="absolute right-0 top-full mt-2 bg-white border border-stone-200 rounded-2xl shadow-xl overflow-hidden z-50 w-72 sm:w-80 max-w-[calc(100vw-2rem)] animate-fadeIn flex flex-col"
                     onClick={(e) => e.stopPropagation()}
                   >
-                {/* 1차 분류 탭: 날씨(고정) / 표정(고정) / 스티커 */}
+                {/* 1차 분류 탭: 표정(고정) / 날씨(고정) / 기념일(고정) / 스티커 */}
                 <div className="flex border-b border-stone-100 bg-stone-50/60 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setRepCategoryTab('emotion')}
+                    className={`flex-1 py-2 text-xs font-semibold border-b-2 transition cursor-pointer ${
+                      repCategoryTab === 'emotion'
+                        ? 'border-black font-bold text-black bg-white'
+                        : 'border-transparent text-stone-400 hover:text-stone-700'
+                    }`}
+                  >
+                    표정
+                  </button>
                   <button
                     type="button"
                     onClick={() => setRepCategoryTab('weather')}
@@ -2309,14 +2320,14 @@ export default function DiaryCanvas({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setRepCategoryTab('emotion')}
+                    onClick={() => setRepCategoryTab('anniversary')}
                     className={`flex-1 py-2 text-xs font-semibold border-b-2 transition cursor-pointer ${
-                      repCategoryTab === 'emotion'
+                      repCategoryTab === 'anniversary'
                         ? 'border-black font-bold text-black bg-white'
                         : 'border-transparent text-stone-400 hover:text-stone-700'
                     }`}
                   >
-                    표정
+                    기념일
                   </button>
                   <button
                     type="button"
@@ -2353,7 +2364,61 @@ export default function DiaryCanvas({
 
                 {/* 선택된 탭 컨텐츠 (오직 어드민에서 업로드한 에셋만 표시, 하드코딩된 삭제 불가 프리셋 제거) */}
                 <div className="p-3 max-h-64 overflow-y-auto no-scrollbar">
-                  {repCategoryTab === 'weather' ? (
+                  {repCategoryTab === 'emotion' ? (
+                    /* 표정 탭: 어드민에서 업로드한 표정 에셋 목록 */
+                    <div className="space-y-3">
+                      {decorations.filter((item) => item.category === 'emotion').length === 0 ? (
+                        <div className="py-8 text-center text-xs text-stone-400">
+                          등록된 표정 아이콘이 없습니다.<br />관리자 페이지(/admin)에서 등록해 주세요.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-4 gap-2">
+                          {decorations
+                            .filter((item) => item.category === 'emotion')
+                            .map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => {
+                                  setWeather(upgradePresetSvgUrl(item.imageUrl));
+                                  setIsWeatherOpen(false);
+                                }}
+                                className={`flex flex-col items-center justify-center p-1.5 rounded-xl hover:bg-stone-100 transition cursor-pointer ${
+                                  weather === item.imageUrl ? 'bg-stone-200/90 ring-1 ring-black' : ''
+                                }`}
+                                title={item.name || item.fileName}
+                              >
+                                <img
+                                  src={upgradePresetSvgUrl(item.imageUrl)}
+                                  alt={item.name || '표정'}
+                                  style={{ imageRendering: '-webkit-optimize-contrast' }}
+                                  className="w-8 h-8 object-contain block select-none"
+                                />
+                                <span className="text-[8px] text-stone-500 mt-0.5 truncate w-full text-center">
+                                  {item.name || item.fileName}
+                                </span>
+                              </button>
+                            ))}
+                        </div>
+                      )}
+
+                      {/* 선택 해제 버튼 */}
+                      {weather && (
+                        <div className="pt-2 border-t border-stone-100 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWeather('');
+                              setIsWeatherOpen(false);
+                            }}
+                            className="text-[11px] text-stone-500 hover:text-red-500 font-medium py-1 px-3 rounded-lg hover:bg-stone-50 transition cursor-pointer"
+                          >
+                            선택 해제 (기본 + 로 변경)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : repCategoryTab === 'weather' ? (
                     /* 날씨 탭: 어드민에서 업로드한 날씨 에셋 목록 */
                     <div className="space-y-3">
                       {decorations.filter((item) => item.category === 'weather').length === 0 ? (
@@ -2407,17 +2472,17 @@ export default function DiaryCanvas({
                         </div>
                       )}
                     </div>
-                  ) : repCategoryTab === 'emotion' ? (
-                    /* 표정 탭: 어드민에서 업로드한 표정 에셋 목록 */
+                  ) : repCategoryTab === 'anniversary' ? (
+                    /* 기념일 탭: 어드민에서 업로드한 기념일 에셋 목록 */
                     <div className="space-y-3">
-                      {decorations.filter((item) => item.category === 'emotion').length === 0 ? (
+                      {decorations.filter((item) => item.category === 'anniversary').length === 0 ? (
                         <div className="py-8 text-center text-xs text-stone-400">
-                          등록된 표정 아이콘이 없습니다.<br />관리자 페이지(/admin)에서 등록해 주세요.
+                          등록된 기념일 아이콘이 없습니다.<br />관리자 페이지(/admin)에서 등록해 주세요.
                         </div>
                       ) : (
                         <div className="grid grid-cols-4 gap-2">
                           {decorations
-                            .filter((item) => item.category === 'emotion')
+                            .filter((item) => item.category === 'anniversary')
                             .map((item) => (
                               <button
                                 key={item.id}
@@ -2433,7 +2498,7 @@ export default function DiaryCanvas({
                               >
                                 <img
                                   src={upgradePresetSvgUrl(item.imageUrl)}
-                                  alt={item.name || '표정'}
+                                  alt={item.name || '기념일'}
                                   style={{ imageRendering: '-webkit-optimize-contrast' }}
                                   className="w-8 h-8 object-contain block select-none"
                                 />

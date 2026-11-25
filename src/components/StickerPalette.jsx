@@ -75,7 +75,7 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
   const customCategories = useMemo(() => {
     const sourceCats = categories.filter((c) => !FIXED_CATEGORY_IDS.has(c.id));
     const finalCustom = sourceCats.length > 0 ? sourceCats : BASE_CATEGORIES;
-    const existing = new Set(['my', 'weather', 'emotion', 'tape', 'gif']);
+    const existing = new Set(['my', 'weather', 'emotion', 'anniversary', 'tape', 'gif']);
     const list = [];
 
     finalCustom.forEach((cat) => {
@@ -109,7 +109,7 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
 
   // 현재 선택된 카테고리가 삭제된 경우 안전하게 스티커 첫 카테고리로 폴백
   useEffect(() => {
-    const validIds = new Set(['weather', 'emotion', 'my', ...customCategories.map((c) => c.id)]);
+    const validIds = new Set(['emotion', 'weather', 'anniversary', 'my', ...customCategories.map((c) => c.id)]);
     if (validIds.size > 0 && !validIds.has(selectedCategory)) {
       setSelectedCategory(customCategories[0]?.id || 'sticker');
     }
@@ -218,10 +218,12 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
       }
     });
     filteredItems = Array.from(mergedMap.values());
-  } else if (selectedCategory === 'weather') {
-    filteredItems = decorations.filter((item) => item.category === 'weather');
   } else if (selectedCategory === 'emotion') {
     filteredItems = decorations.filter((item) => item.category === 'emotion');
+  } else if (selectedCategory === 'weather') {
+    filteredItems = decorations.filter((item) => item.category === 'weather');
+  } else if (selectedCategory === 'anniversary') {
+    filteredItems = decorations.filter((item) => item.category === 'anniversary');
   } else if (selectedCategory === 'sticker') {
     // 일반 스티커 카테고리: 순수 Firestore 업로드 에셋만 노출
     filteredItems = decorations.filter(
@@ -295,25 +297,9 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
           </div>
         </div>
 
-        {/* 2. 하위 카테고리 탭: 어드민 순서 반영 (날씨, 표정, 'ㅣ', MY, 스티커 하위 카테고리들) */}
+        {/* 2. 하위 카테고리 탭: 어드민 순서 반영 (표정, 날씨, 기념일, 'ㅣ', MY, 스티커 하위 카테고리들) */}
         <div className="flex items-center border-b border-stone-100 bg-[#f5f5f5]/60 overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap px-2.5 py-1.5 gap-1 shrink-0">
-          {/* 날씨 (고정) */}
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedCategory('weather');
-              setIsDeleteMode(false);
-            }}
-            className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-              selectedCategory === 'weather'
-                ? 'font-bold text-black bg-white shadow-2xs border border-stone-200/80'
-                : 'text-stone-400 hover:text-stone-700 hover:bg-stone-200/50'
-            }`}
-          >
-            날씨
-          </button>
-
-          {/* 표정 (고정) */}
+          {/* 표정 (고정 1) */}
           <button
             type="button"
             onClick={() => {
@@ -329,7 +315,39 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
             표정
           </button>
 
-          {/* 'ㅣ' 구분선 (어드민처럼 표정 옆 구분선) */}
+          {/* 날씨 (고정 2) */}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCategory('weather');
+              setIsDeleteMode(false);
+            }}
+            className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              selectedCategory === 'weather'
+                ? 'font-bold text-black bg-white shadow-2xs border border-stone-200/80'
+                : 'text-stone-400 hover:text-stone-700 hover:bg-stone-200/50'
+            }`}
+          >
+            날씨
+          </button>
+
+          {/* 기념일 (고정 3) */}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCategory('anniversary');
+              setIsDeleteMode(false);
+            }}
+            className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              selectedCategory === 'anniversary'
+                ? 'font-bold text-black bg-white shadow-2xs border border-stone-200/80'
+                : 'text-stone-400 hover:text-stone-700 hover:bg-stone-200/50'
+            }`}
+          >
+            기념일
+          </button>
+
+          {/* 'ㅣ' 구분선 (어드민처럼 고정 카테고리 옆 구분선) */}
           <span className="shrink-0 px-1 text-stone-300 font-bold select-none text-xs leading-none">
             |
           </span>
@@ -400,10 +418,12 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
               <p className="text-xs text-stone-400">
                 {selectedCategory === 'my'
                   ? '등록된 내 스티커가 없습니다.'
-                  : selectedCategory === 'weather'
-                  ? '등록된 날씨 아이콘이 없습니다.'
                   : selectedCategory === 'emotion'
                   ? '등록된 표정 아이콘이 없습니다.'
+                  : selectedCategory === 'weather'
+                  ? '등록된 날씨 아이콘이 없습니다.'
+                  : selectedCategory === 'anniversary'
+                  ? '등록된 기념일 아이콘이 없습니다.'
                   : `등록된 ${customCategories.find((c) => c.id === selectedCategory)?.label || ''} 에셋이 없습니다.`}
               </p>
               {selectedCategory === 'my' ? (

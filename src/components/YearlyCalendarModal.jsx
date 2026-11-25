@@ -1,5 +1,6 @@
 import React, { useRef, useMemo, useState, useEffect } from 'react';
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { getKoreanHoliday } from '../utils/holidays';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -224,6 +225,8 @@ export default function YearlyCalendarModal({
                 const isCellToday = c.dateStr === localTodayStr;
                 const colDayOfWeek = cIdx % 7;
                 const isCellWeekend = colDayOfWeek === 0 || colDayOfWeek === 6;
+                const isCellHoliday = !!getKoreanHoliday(c.dateStr);
+                const isHolidayOrWeekend = isCellWeekend || isCellHoliday;
                 const hasDiary = !!c.diary;
 
                 return (
@@ -259,7 +262,7 @@ export default function YearlyCalendarModal({
                         title={`${c.dateStr} 일기 있음`}
                       />
                     ) : (
-                      <span className={`text-[9px] sm:text-[10px] font-bold leading-none ${isCellWeekend ? 'text-[#ff6b00]' : 'text-black'}`}>
+                      <span className={`text-[9px] sm:text-[10px] font-bold leading-none ${isHolidayOrWeekend ? 'text-[#ff6b00]' : 'text-black'}`}>
                         {c.day}
                       </span>
                     )}

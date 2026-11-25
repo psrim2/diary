@@ -4,6 +4,7 @@ import { PAPER_STYLES } from '../constants';
 import { normalizeDiaryLayers, buildStrokeBands, StrokeBandCanvas, CANONICAL_WIDTH, CANONICAL_HEIGHT, resolveStickerImage, isEmojiSticker, upgradePresetSvgUrl } from '../utils/canvasLayers';
 import DatePickerModal from './DatePickerModal';
 import { triggerHaptic } from '../utils/haptics';
+import { getKoreanHoliday } from '../utils/holidays';
 
 const MONTH_NAMES_EN = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -595,6 +596,110 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
   );
 }
 
+// 썸네일 그리드 셀 컴포넌트: 날짜(상단) + 스티커(하단) 상하 배치, 스티커 없으면 점(dot)
+function ThumbnailItem({ diary, onSelect, isSelected }) {
+  const dateParts = diary?.date ? String(diary.date).split('-') : [];
+  const year = dateParts[0] && !isNaN(parseInt(dateParts[0], 10)) ? parseInt(dateParts[0], 10) : 2026;
+  const month = dateParts[1] && !isNaN(parseInt(dateParts[1], 10)) ? parseInt(dateParts[1], 10) - 1 : 10;
+  const day = dateParts[2] && !isNaN(parseInt(dateParts[2], 10)) ? parseInt(dateParts[2], 10) : 17;
+
+  const dateObj = new Date(year, month, day);
+  const dayNum = String(isNaN(day) ? 17 : day).padStart(2, '0');
+  const dayEn = DAY_NAMES_EN[isNaN(dateObj.getDay()) ? 0 : dateObj.getDay()] || 'WED';
+  const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+  const holiday = getKoreanHoliday(diary?.date);
+  const isHolidayOrWeekend = isWeekend || !!holiday;
+
+  const rawMood = upgradePresetSvgUrl(diary?.thumbnailMood || diary?.weather || '');
+  let stickerVal = '';
+  let isStickerImage = false;
+
+  if (typeof rawMood === 'string' || typeof rawMood === 'number') {
+    stickerVal = upgradePresetSvgUrl(String(rawMood));
+  } else if (rawMood && typeof rawMood === 'object') {
+    const resolvedImg = resolveStickerImage(rawMood);
+    if (resolvedImg) {
+      stickerVal = upgradePresetSvgUrl(resolvedImg);
+    } else if (rawMood.icon && typeof rawMood.icon === 'string' && rawMood.icon.length <= 4) {
+      stickerVal = rawMood.icon;
+    } else if (rawMood.content && typeof rawMood.content === 'string' && rawMood.content.length <= 4) {
+      stickerVal = rawMood.content;
+    }
+  }
+
+  isStickerImage =
+    typeof stickerVal === 'string' &&
+    (stickerVal.startsWith('data:') ||
+      stickerVal.startsWith('http://') ||
+      stickerVal.startsWith('https://') ||
+      stickerVal.startsWith('/') ||
+      stickerVal.startsWith('blob:'));
+
+  const isShortEmojiOrSymbol =
+    !isStickerImage &&
+    typeof stickerVal === 'string' &&
+    stickerVal.length > 0 &&
+    stickerVal.length <= 4 &&
+    !/^[a-zA-Z0-9_\-|\s]+$/.test(stickerVal);
+
+  const hasSticker = isStickerImage || isShortEmojiOrSymbol;
+
+  return (
+    <div
+      id={`diary-card-${diary.date}`}
+      onClick={() => onSelect(diary)}
+      className={`bg-white border rounded-2xl p-2.5 sm:p-3 flex flex-col items-center justify-between cursor-pointer active:scale-95 transition-all shadow-2xs hover:shadow-xs aspect-square w-full select-none ${
+        isSelected ? 'border-black ring-1 ring-black' : 'border-stone-200/90 hover:border-stone-400'
+      }`}
+      title={`${diary.date} 일기 보기`}
+    >
+      {/* 상단: 날짜 (숫자 + 요일 + 휴일명 슬롯 고정 높이) */}
+      <div className="flex flex-col items-center leading-none mt-0.5 shrink-0">
+        <span
+          className={`text-base sm:text-lg font-black tracking-tight ${
+            isHolidayOrWeekend ? 'text-[#ff6b00]' : 'text-black'
+          }`}
+        >
+          {dayNum}
+        </span>
+        <span className="text-[10px] sm:text-[11px] font-bold text-stone-400 mt-0.5 tracking-wider">
+          {dayEn}
+        </span>
+        {/* 휴일명 고정 슬롯 (휴일 없어도 동일 높이 유지하여 카드 높이 일치) */}
+        <div className="h-3 sm:h-3.5 flex items-center justify-center mt-0.5 overflow-hidden">
+          {holiday ? (
+            <span className="text-[8px] sm:text-[9px] font-semibold text-[#ff6b00] truncate max-w-full px-0.5 leading-none">
+              {holiday.name}
+            </span>
+          ) : (
+            <div className="h-3 sm:h-3.5" />
+          )}
+        </div>
+      </div>
+
+      {/* 하단: 날짜 옆 스티커 / 없는 경우 달력과 동일하게 점(dot) 표시 (고정 높이 슬롯) */}
+      <div className="w-full h-[38px] sm:h-[42px] flex items-center justify-center shrink-0 my-0.5 overflow-visible">
+        {hasSticker ? (
+          isStickerImage ? (
+            <img
+              src={stickerVal}
+              alt=""
+              style={{ width: '80%', maxWidth: '38px', maxHeight: '38px', height: 'auto' }}
+              className="w-[80%] max-w-[38px] max-h-[38px] h-auto object-contain select-none pointer-events-none"
+            />
+          ) : (
+            <span className="text-xl sm:text-2xl leading-none filter drop-shadow-2xs select-none">
+              {stickerVal}
+            </span>
+          )
+        ) : (
+          <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#84cc16] select-none block shadow-2xs" />
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ListView({ 
   diaries, 
   onSelectDiary, 
@@ -609,7 +714,8 @@ export default function ListView({
   isReturningFromEditor = false,
   onSaveScrollTop,
   onRestoreScrollComplete,
-  onOpenYearView
+  onOpenYearView,
+  isThumbnailView = false,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [openSwipeCardId, setOpenSwipeCardId] = useState(null);
@@ -971,28 +1077,41 @@ export default function ListView({
                   </div>
                 </div>
 
-                {/* 해당 월의 카드 목록 */}
-                <div className="space-y-4 pt-3">
-                  {group.items.map((diary) => (
-                    <div key={diary.id} id={`diary-card-${diary.date}`}>
-                      <DiaryCard
+                {/* 해당 월의 일기 목록 (썸네일 격자 보기 or 일반 카드 리스트) */}
+                {isThumbnailView ? (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5 sm:gap-3.5 pt-3">
+                    {group.items.map((diary) => (
+                      <ThumbnailItem
+                        key={diary.id}
                         diary={diary}
                         isSelected={selectedDiaryId === diary.id || (selectedDate && selectedDate === diary.date)}
                         onSelect={handleSelectCard}
-                        onDelete={onDeleteDiary}
-                        isSwipeOpen={openSwipeCardId === diary.id}
-                        onSwipeOpen={() => setOpenSwipeCardId(diary.id)}
-                        onSwipeClose={() => setOpenSwipeCardId(null)}
                       />
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-4 pt-3">
+                    {group.items.map((diary) => (
+                      <div key={diary.id} id={`diary-card-${diary.date}`}>
+                        <DiaryCard
+                          diary={diary}
+                          isSelected={selectedDiaryId === diary.id || (selectedDate && selectedDate === diary.date)}
+                          onSelect={handleSelectCard}
+                          onDelete={onDeleteDiary}
+                          isSwipeOpen={openSwipeCardId === diary.id}
+                          onSwipeOpen={() => setOpenSwipeCardId(diary.id)}
+                          onSwipeClose={() => setOpenSwipeCardId(null)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
 
           <div className="text-center text-[11px] text-stone-400 font-medium pt-2 select-none">
-            ← 카드를 좌측으로 슬라이딩하면 삭제할 수 있어요
+            {isThumbnailView ? '썸네일을 누르면 일기 상세로 이동해요' : '← 카드를 좌측으로 슬라이딩하면 삭제할 수 있어요'}
           </div>
         </div>
       )}

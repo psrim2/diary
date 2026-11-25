@@ -1049,10 +1049,11 @@ export async function updateDecorationAsset(id, fields) {
  * 14. 카테고리 관리 기능 (고정 카테고리 + 추가/삭제 가능한 스티커 하위 카테고리)
  */
 export const FIXED_CATEGORIES = [
-  { id: 'weather', label: '날씨', isFixed: true },
   { id: 'emotion', label: '표정', isFixed: true },
+  { id: 'weather', label: '날씨', isFixed: true },
+  { id: 'anniversary', label: '기념일', isFixed: true },
 ];
-export const FIXED_CATEGORY_IDS = new Set(['weather', 'emotion']);
+export const FIXED_CATEGORY_IDS = new Set(['emotion', 'weather', 'anniversary']);
 
 export const DEFAULT_CUSTOM_CATEGORIES = [
   { id: 'sticker', label: '스티커', order: 1 },
