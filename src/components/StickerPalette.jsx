@@ -6,20 +6,13 @@ import {
   uploadDecorationAsset,
   deleteDecorationAsset,
   fileToDataUrl,
+  FIXED_CATEGORY_IDS,
+  DEFAULT_CUSTOM_CATEGORIES,
 } from '../firebase';
-import { PRESET_GIF_STICKERS } from '../constants/presetGifStickers';
 import { upgradePresetSvgUrl } from '../utils/canvasLayers';
 
 // 기본 하위 카테고리 목록 (폴백용)
-const BASE_CATEGORIES = [
-  { id: 'sticker', label: '스티커' },
-  { id: 'weather', label: '날씨' },
-  { id: 'tape', label: '마스킹테이프' },
-  { id: 'character', label: '캐릭터' },
-  { id: 'emotion', label: '감정' },
-  { id: 'daily', label: '일상' },
-  { id: 'food', label: '음식' },
-];
+const BASE_CATEGORIES = DEFAULT_CUSTOM_CATEGORIES;
 
 export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
   const [selectedCategory, setSelectedCategory] = useState('sticker');
@@ -78,23 +71,24 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
     };
   }, []);
 
-  // 동적 카테고리 탭 생성 (MY가 항상 맨 앞, 그 뒤에 구독된 카테고리들)
-  const allCategories = useMemo(() => {
-    const list = [{ id: 'my', label: 'MY' }];
-    const sourceCats = categories.length > 0 ? categories : BASE_CATEGORIES;
-    const existingIds = new Set(['my']);
+  // 어드민 설정 순서를 그대로 반영하는 스티커 하위 카테고리 목록
+  const customCategories = useMemo(() => {
+    const sourceCats = categories.filter((c) => !FIXED_CATEGORY_IDS.has(c.id));
+    const finalCustom = sourceCats.length > 0 ? sourceCats : BASE_CATEGORIES;
+    const existing = new Set(['my', 'weather', 'emotion', 'tape', 'gif']);
+    const list = [];
 
-    sourceCats.forEach((cat) => {
-      if (!existingIds.has(cat.id)) {
-        existingIds.add(cat.id);
+    finalCustom.forEach((cat) => {
+      if (!existing.has(cat.id)) {
+        existing.add(cat.id);
         list.push({ id: cat.id, label: cat.label });
       }
     });
 
     // 등록된 에셋 중 카테고리 마스터에 없는 레거시 항목 추가
     decorations.forEach((d) => {
-      if (d.category && !existingIds.has(d.category) && d.category !== 'gif') {
-        existingIds.add(d.category);
+      if (d.category && !existing.has(d.category)) {
+        existing.add(d.category);
         list.push({ id: d.category, label: d.category });
       }
     });
@@ -102,12 +96,24 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
     return list;
   }, [categories, decorations]);
 
-  // 현재 선택된 카테고리가 삭제된 경우 안전하게 'sticker' 또는 첫 번째 탭으로 이동
+  // 보관함 열릴 때마다: '스티커' 카테고리의 맨 첫 카테고리 (My 다음으로 오는 카테고리)로 자동 선택
+  const prevIsOpenRef = useRef(isOpen);
   useEffect(() => {
-    if (allCategories.length > 0 && !allCategories.some((c) => c.id === selectedCategory)) {
-      setSelectedCategory(allCategories[1]?.id || allCategories[0].id);
+    if (isOpen && !prevIsOpenRef.current) {
+      const firstStickerCat = customCategories[0]?.id || 'sticker';
+      setSelectedCategory(firstStickerCat);
+      setIsDeleteMode(false);
     }
-  }, [allCategories, selectedCategory]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, customCategories]);
+
+  // 현재 선택된 카테고리가 삭제된 경우 안전하게 스티커 첫 카테고리로 폴백
+  useEffect(() => {
+    const validIds = new Set(['weather', 'emotion', 'my', ...customCategories.map((c) => c.id)]);
+    if (validIds.size > 0 && !validIds.has(selectedCategory)) {
+      setSelectedCategory(customCategories[0]?.id || 'sticker');
+    }
+  }, [customCategories, selectedCategory]);
 
   // 사용자 기기에서 직접 파일 선택 시: MY 카테고리로 등록
   const handleDirectUpload = async (e) => {
@@ -200,7 +206,7 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
 
   if (!isOpen) return null;
 
-  // 카테고리별 에셋 필터링
+  // 카테고리별 에셋 필터링 (어드민에서 관리 가능한 에셋만 노출)
   let filteredItems = [];
   if (selectedCategory === 'my') {
     const cloudMy = decorations.filter(d => d.category === 'my' || d.isPersonal);
@@ -212,12 +218,15 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
       }
     });
     filteredItems = Array.from(mergedMap.values());
+  } else if (selectedCategory === 'weather') {
+    filteredItems = decorations.filter((item) => item.category === 'weather');
+  } else if (selectedCategory === 'emotion') {
+    filteredItems = decorations.filter((item) => item.category === 'emotion');
   } else if (selectedCategory === 'sticker') {
-    // 일반 스티커 카테고리: 프리셋 GIF/애니메이션 스티커 + Firestore 스티커 에셋 결합
-    const cloudStickers = decorations.filter(
-      (item) => item.category === 'sticker' || (!item.category && !item.isPersonal)
+    // 일반 스티커 카테고리: 순수 Firestore 업로드 에셋만 노출
+    filteredItems = decorations.filter(
+      (item) => item.category === 'sticker' || (!item.category && !item.isPersonal && item.category !== 'weather' && item.category !== 'emotion')
     );
-    filteredItems = [...PRESET_GIF_STICKERS, ...cloudStickers];
   } else {
     filteredItems = decorations.filter(
       (item) => item.category === selectedCategory
@@ -286,9 +295,68 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
           </div>
         </div>
 
-        {/* 2. 하위 카테고리 탭: 가로 스크롤 지원 (카테고리 확장 시 유연하게 노출) */}
-        <div className="flex border-b border-stone-100 bg-[#f5f5f5]/60 overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap px-2.5 py-1.5 gap-1 shrink-0">
-          {allCategories.map((cat) => (
+        {/* 2. 하위 카테고리 탭: 어드민 순서 반영 (날씨, 표정, 'ㅣ', MY, 스티커 하위 카테고리들) */}
+        <div className="flex items-center border-b border-stone-100 bg-[#f5f5f5]/60 overflow-x-auto no-scrollbar scroll-smooth whitespace-nowrap px-2.5 py-1.5 gap-1 shrink-0">
+          {/* 날씨 (고정) */}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCategory('weather');
+              setIsDeleteMode(false);
+            }}
+            className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              selectedCategory === 'weather'
+                ? 'font-bold text-black bg-white shadow-2xs border border-stone-200/80'
+                : 'text-stone-400 hover:text-stone-700 hover:bg-stone-200/50'
+            }`}
+          >
+            날씨
+          </button>
+
+          {/* 표정 (고정) */}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCategory('emotion');
+              setIsDeleteMode(false);
+            }}
+            className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              selectedCategory === 'emotion'
+                ? 'font-bold text-black bg-white shadow-2xs border border-stone-200/80'
+                : 'text-stone-400 hover:text-stone-700 hover:bg-stone-200/50'
+            }`}
+          >
+            표정
+          </button>
+
+          {/* 'ㅣ' 구분선 (어드민처럼 표정 옆 구분선) */}
+          <span className="shrink-0 px-1 text-stone-300 font-bold select-none text-xs leading-none">
+            |
+          </span>
+
+          {/* MY (사용자 스티커) */}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedCategory('my');
+              setIsDeleteMode(false);
+            }}
+            className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+              selectedCategory === 'my'
+                ? 'font-bold text-black bg-white shadow-2xs border border-stone-200/80'
+                : 'text-stone-400 hover:text-stone-700 hover:bg-stone-200/50'
+            }`}
+          >
+            MY
+            {filteredItems.length > 0 && selectedCategory === 'my' && (
+              <span className="ml-1 text-[10px] px-1.5 py-0.2 bg-stone-200 text-stone-800 rounded-full font-bold">
+                {filteredItems.length}
+              </span>
+            )}
+          </button>
+
+          {/* 스티커 하위 카테고리들 (어드민 설정 순서대로 반영) */}
+          {customCategories.map((cat) => (
             <button
               key={cat.id}
               type="button"
@@ -303,11 +371,6 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
               }`}
             >
               {cat.label}
-              {cat.id === 'my' && filteredItems.length > 0 && selectedCategory === 'my' && (
-                <span className="ml-1 text-[10px] px-1.5 py-0.2 bg-stone-200 text-stone-800 rounded-full font-bold">
-                  {filteredItems.length}
-                </span>
-              )}
             </button>
           ))}
         </div>
@@ -337,7 +400,11 @@ export default function StickerPalette({ isOpen, onClose, onAddSticker }) {
               <p className="text-xs text-stone-400">
                 {selectedCategory === 'my'
                   ? '등록된 내 스티커가 없습니다.'
-                  : `등록된 ${allCategories.find((c) => c.id === selectedCategory)?.label || ''} 에셋이 없습니다.`}
+                  : selectedCategory === 'weather'
+                  ? '등록된 날씨 아이콘이 없습니다.'
+                  : selectedCategory === 'emotion'
+                  ? '등록된 표정 아이콘이 없습니다.'
+                  : `등록된 ${customCategories.find((c) => c.id === selectedCategory)?.label || ''} 에셋이 없습니다.`}
               </p>
               {selectedCategory === 'my' ? (
                 <button

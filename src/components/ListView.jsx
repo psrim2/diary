@@ -109,8 +109,9 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
         : isTape
         ? Math.min(28, typeof sticker.height === 'number' && sticker.height > 0 ? sticker.height : defaultH)
         : Math.min(56, typeof sticker.height === 'number' && sticker.height > 0 ? sticker.height : defaultH);
-      const approxHeight = baseH * (sticker.scale || 1);
-      const bottom = (sticker.y || 0) + approxHeight;
+      const scale = sticker.scale || 1;
+      // transform-origin: center center 확대이므로 실제 시각적 바닥선은 center + (baseH * scale) / 2
+      const bottom = (sticker.y || 0) + (baseH + baseH * scale) / 2;
       if (bottom > maxY) maxY = bottom;
     });
 
@@ -209,8 +210,8 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
       return 128;
     }
 
-    // 작성된 내용 바로 아래 깔끔하게 줄노트 간격(32px)에 맞추어 딱 떨어지게 마감
-    const targetH = Math.max(128, Math.ceil((maxY + 16) / 32) * 32);
+    // 작성된 내용 바로 아래 불필요한 줄노트 빈 여백 없이 깔끔하게 12px 여백 마감
+    const targetH = Math.max(120, Math.ceil((maxY + 12) / 16) * 16);
     return targetH;
   }, [normalizedLayers, diary?.date]);
 
@@ -547,6 +548,8 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
                           className={
                             sticker.category === 'tape' || sticker.type === 'tape'
                               ? 'w-28 h-auto object-contain select-none block'
+                              : sticker.isPhoto || sticker.type === 'photo'
+                              ? 'w-36 h-auto object-contain select-none block'
                               : 'w-14 h-14 object-contain select-none block'
                           }
                         />

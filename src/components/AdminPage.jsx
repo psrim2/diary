@@ -15,6 +15,9 @@ import {
   deleteCategory,
   updateCategoriesOrder,
   seedDefaultCategoriesIfNeeded,
+  FIXED_CATEGORIES,
+  FIXED_CATEGORY_IDS,
+  DEFAULT_CUSTOM_CATEGORIES,
 } from '../firebase';
 import { upgradePresetSvgUrl } from '../utils/canvasLayers';
 
@@ -70,39 +73,57 @@ export default function AdminPage({ onBack }) {
   const [draggedCatIndex, setDraggedCatIndex] = useState(null);
   const [dragOverCatIndex, setDragOverCatIndex] = useState(null);
 
-  // Firestore 카테고리 및 등록된 에셋에서 파생된 전체 카테고리 목록 (가로 스크롤 대응)
+  // 1) 추가/삭제/순서변경 가능한 스티커 하위 카테고리 목록
+  const customCategories = useMemo(() => {
+    const list = categories.filter((c) => !FIXED_CATEGORY_IDS.has(c.id));
+    if (list.length > 0) return list;
+    return DEFAULT_CUSTOM_CATEGORIES;
+  }, [categories]);
+
+  // 2) 전체 카테고리 (고정 카테고리: 날씨, 표정 + 스티커 하위 카테고리들)
   const allCategories = useMemo(() => {
-    const catMap = new Map();
-    // 1) Firestore 구독된 카테고리
-    categories.forEach((c) => {
-      catMap.set(c.id, {
+    const map = new Map();
+    // 고정 카테고리 (날씨, 표정)
+    FIXED_CATEGORIES.forEach((c) => {
+      map.set(c.id, {
         id: c.id,
         label: `${c.label} (${c.id})`,
         rawLabel: c.label,
+        isFixed: true,
       });
     });
-    // 2) 카테고리가 비어있을 때 BASE_CATEGORIES 폴백
-    if (catMap.size === 0) {
-      BASE_CATEGORIES.forEach((c) => {
-        catMap.set(c.id, {
-          id: c.id,
-          label: c.label,
-          rawLabel: c.label.split(' ')[0],
-        });
+    // 스티커 하위 카테고리 (설정한 순서대로)
+    customCategories.forEach((c) => {
+      map.set(c.id, {
+        id: c.id,
+        label: `${c.label} (${c.id})`,
+        rawLabel: c.label,
+        isFixed: false,
       });
-    }
-    // 3) 기존 에셋 중 등록되지 않은 레거시 카테고리 보정
+    });
+    // 혹시 기존 에셋 중 미등록된 레거시 카테고리 보정
     decorations.forEach((d) => {
-      if (d.category && !catMap.has(d.category) && d.category !== 'gif') {
-        catMap.set(d.category, {
+      if (d.category && !map.has(d.category) && d.category !== 'gif') {
+        map.set(d.category, {
           id: d.category,
           label: `${d.category} (${d.category})`,
           rawLabel: d.category,
+          isFixed: false,
         });
       }
     });
-    return Array.from(catMap.values());
-  }, [categories, decorations]);
+    return Array.from(map.values());
+  }, [customCategories, decorations]);
+
+  // 카테고리별 에셋 개수 계산 헬퍼
+  const getCategoryCount = (catId) => {
+    return (
+      decorations.filter(
+        (d) => (pendingUpdates[d.id]?.category || d.category) === catId
+      ).length +
+      pendingAdds.filter((p) => p.category === catId).length
+    );
+  };
 
   // [적용하기 / 취소]를 위한 스테이징(대기) 상태
   // 1) 새로 추가할 파일 대기 목록: [{ tempId, file, previewUrl, category, name }]
@@ -215,8 +236,12 @@ export default function AdminPage({ onBack }) {
     }
   };
 
-  // 카테고리 삭제 핸들러
+  // 카테고리 삭제 핸들러 (고정 카테고리 보호)
   const handleDeleteCategory = async (cat) => {
+    if (FIXED_CATEGORY_IDS.has(cat.id)) {
+      alert('날씨와 표정은 기본 고정 카테고리이므로 삭제할 수 없습니다.');
+      return;
+    }
     const count = decorations.filter((d) => d.category === cat.id).length;
     let confirmMsg = `'${cat.label}' (${cat.id}) 카테고리를 삭제하시겠습니까?`;
     if (count > 0) {
@@ -226,9 +251,6 @@ export default function AdminPage({ onBack }) {
 
     try {
       await deleteCategory(cat.id);
-      if (uploadCategory === cat.id) {
-        setUploadCategory('sticker');
-      }
       if (filterCategory === cat.id) {
         setFilterCategory('all');
       }
@@ -239,19 +261,19 @@ export default function AdminPage({ onBack }) {
     }
   };
 
-  // 카테고리 순서 재배치 함수 (fromIndex -> toIndex)
+  // 카테고리 순서 재배치 함수 (customCategories 대상 fromIndex -> toIndex)
   const reorderCategories = async (fromIndex, toIndex) => {
     if (fromIndex === null || toIndex === null || fromIndex === toIndex) return;
     if (
       fromIndex < 0 ||
-      fromIndex >= categories.length ||
+      fromIndex >= customCategories.length ||
       toIndex < 0 ||
-      toIndex >= categories.length
+      toIndex >= customCategories.length
     ) {
       return;
     }
 
-    const nextList = [...categories];
+    const nextList = [...customCategories];
     const [moved] = nextList.splice(fromIndex, 1);
     nextList.splice(toIndex, 0, moved);
 
@@ -700,7 +722,7 @@ export default function AdminPage({ onBack }) {
   // 관리자 대시보드 화면 (psrim2@gmail.com 로그인 완료 시)
   return (
     <div className="w-full h-full overflow-y-auto bg-stone-50 text-stone-900">
-      <div className="admin-dashboard p-6 max-w-4xl mx-auto min-h-full pb-20">
+      <div className="admin-dashboard p-6 max-w-[1200px] w-full mx-auto min-h-full pb-20">
         {/* 상단 관리자 정보 및 로그아웃 */}
         <header className="admin-header flex items-center justify-between border-b pb-4 mb-6">
           <div className="flex items-center space-x-3">
@@ -782,9 +804,9 @@ export default function AdminPage({ onBack }) {
         </div>
       </section>
 
-      {/* 1. 카테고리 관리 섹션 (추가 및 삭제) */}
+      {/* 1. 카테고리 관리 섹션 (추가 및 삭제 가능한 스티커 하위 카테고리) */}
       <section className="admin-category-manage-section border p-4 mb-8 bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
           <h2 className="text-base font-bold">에셋 카테고리 관리</h2>
           {catMessage && (
             <span className="text-xs text-green-700 font-medium">
@@ -792,6 +814,9 @@ export default function AdminPage({ onBack }) {
             </span>
           )}
         </div>
+        <p className="text-xs text-stone-500 mb-3">
+          날씨와 표정은 기본 고정 카테고리입니다. 스티커에 들어갈 하위 카테고리를 자유롭게 추가·삭제하고, 드래그하여 순서를 설정할 수 있습니다.
+        </p>
 
         {/* 새 카테고리 추가 폼 */}
         <form
@@ -800,7 +825,7 @@ export default function AdminPage({ onBack }) {
         >
           <div>
             <label className="block text-xs font-semibold text-stone-600 mb-1">
-              카테고리 이름 (예: 동물, 캐릭터) <span className="text-red-500">*</span>
+              카테고리 이름 (예: 동물, 일상) <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -831,13 +856,13 @@ export default function AdminPage({ onBack }) {
           </button>
         </form>
 
-        {/* 등록된 카테고리 목록 & 드래그 앤 드롭 순서 변경 & 삭제 */}
+        {/* 추가/삭제 가능한 스티커 하위 카테고리 목록 & 드래그 앤 드롭 순서 변경 */}
         <div>
           <h3 className="text-xs font-semibold text-stone-500 mb-2">
-            등록된 카테고리 목록 ({categories.length}개) - 카드를 원하는 위치로 드래그하여 순서를 변경할 수 있습니다
+            스티커 카테고리 목록 ({customCategories.length}개) - 카드를 원하는 위치로 드래그하여 노출 순서를 변경할 수 있습니다
           </h3>
           <div className="flex flex-wrap gap-2">
-            {categories.map((cat, index) => {
+            {customCategories.map((cat, index) => {
               const assetCount = decorations.filter((d) => d.category === cat.id).length;
               const isDragging = draggedCatIndex === index;
               const isOver = dragOverCatIndex === index && draggedCatIndex !== index;
@@ -908,52 +933,78 @@ export default function AdminPage({ onBack }) {
           className="hidden"
         />
 
-        {/* 에셋 목록 상단 헤더 */}
+        {/* 에셋 목록 상단 헤더: 전체 갯수만 표기 */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-          <h2 className="text-base font-bold">
-            에셋 목록 (등록됨 {filteredDecorations.length}개
-            {filteredPendingAdds.length > 0
-              ? ` / 추가 예정 ${filteredPendingAdds.length}개`
-              : ''}
-            )
-          </h2>
+          <div className="flex items-center space-x-2">
+            <h2 className="text-base font-bold">
+              에셋 목록
+            </h2>
+            <button
+              type="button"
+              onClick={() => setFilterCategory('all')}
+              className={`text-xs px-2.5 py-0.5 rounded-full border transition cursor-pointer ${
+                filterCategory === 'all'
+                  ? 'bg-black text-white font-bold border-black'
+                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200 border-stone-300'
+              }`}
+              title="클릭 시 전체 에셋 목록 보기"
+            >
+              전체 {decorations.length + pendingAdds.length}개
+            </button>
+          </div>
         </div>
 
-        {/* (1) 카테고리 필터 탭 (상위 개념) */}
-        <div className="admin-category-filter flex overflow-x-auto no-scrollbar whitespace-nowrap gap-1 pb-2 border-b max-w-full">
+        {/* (1) 카테고리 필터 탭: 날씨(고정), 표정(고정) 'ㅣ' 부분선 표시 후 에셋 카테고리에서 설정한 순서대로 나열 (아래 카테고리에서 '전체' 삭제) */}
+        <div className="admin-category-filter flex items-center overflow-x-auto no-scrollbar whitespace-nowrap gap-1 pb-2 border-b max-w-full">
+          {/* 날씨 (고정) */}
           <button
             type="button"
-            onClick={() => setFilterCategory('all')}
-            className={`shrink-0 px-3 py-1 border text-xs cursor-pointer ${
-              filterCategory === 'all'
+            onClick={() => setFilterCategory(filterCategory === 'weather' ? 'all' : 'weather')}
+            className={`shrink-0 px-3 py-1 border text-xs cursor-pointer transition ${
+              filterCategory === 'weather'
                 ? 'bg-black text-white font-bold'
-                : 'bg-white text-stone-700'
+                : 'bg-white text-stone-700 hover:bg-stone-50'
             }`}
+            title="날씨"
           >
-            전체 ({decorations.length + pendingAdds.length})
+            날씨
           </button>
-          {allCategories.map((cat) => {
-            const count =
-              decorations.filter(
-                (d) =>
-                  (pendingUpdates[d.id]?.category || d.category) === cat.id
-              ).length +
-              pendingAdds.filter((p) => p.category === cat.id).length;
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setFilterCategory(cat.id)}
-                className={`shrink-0 px-3 py-1 border text-xs cursor-pointer ${
-                  filterCategory === cat.id
-                    ? 'bg-black text-white font-bold'
-                    : 'bg-white text-stone-700 hover:bg-stone-50'
-                }`}
-              >
-                {cat.label} ({count})
-              </button>
-            );
-          })}
+
+          {/* 표정 (고정) */}
+          <button
+            type="button"
+            onClick={() => setFilterCategory(filterCategory === 'emotion' ? 'all' : 'emotion')}
+            className={`shrink-0 px-3 py-1 border text-xs cursor-pointer transition ${
+              filterCategory === 'emotion'
+                ? 'bg-black text-white font-bold'
+                : 'bg-white text-stone-700 hover:bg-stone-50'
+            }`}
+            title="표정"
+          >
+            표정
+          </button>
+
+          {/* 'ㅣ' 부분선 (구분선) */}
+          <span className="shrink-0 px-2 text-stone-300 font-bold select-none text-sm leading-none">
+            |
+          </span>
+
+          {/* 에셋 카테고리에서 설정한 순서대로 나열 */}
+          {customCategories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setFilterCategory(filterCategory === cat.id ? 'all' : cat.id)}
+              className={`shrink-0 px-3 py-1 border text-xs cursor-pointer transition ${
+                filterCategory === cat.id
+                  ? 'bg-black text-white font-bold'
+                  : 'bg-white text-stone-700 hover:bg-stone-50'
+              }`}
+              title={cat.label}
+            >
+              {cat.label}
+            </button>
+          ))}
         </div>
 
         {/* (2) 카테고리와 아이템 목록 사이의 서브 컨트롤 바 (하위 개념) */}
@@ -1011,7 +1062,7 @@ export default function AdminPage({ onBack }) {
             해당 카테고리에 등록된 에셋이 없습니다. 위의 [+ 파일 바로 업로드] 버튼을 눌러 등록해 주세요.
           </p>
         ) : (
-          <ul className="admin-asset-grid grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <ul className="admin-asset-grid grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {/* (A) 새로 추가 대기 중인 에셋 카드 */}
             {filteredPendingAdds.map((item) => (
               <li

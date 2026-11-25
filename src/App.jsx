@@ -79,6 +79,21 @@ function deduplicateDiariesByDate(diaryList) {
   );
 }
 
+// 클라우드와 로컬 일기 목록 스마트 병합 (로컬 최신 작성본 보존 및 유실 방지)
+function mergeCloudWithLocalDiaries(cloudDiaries = [], localDiaries = []) {
+  if (!Array.isArray(localDiaries) || localDiaries.length === 0) {
+    try {
+      localStorage.setItem('analog_diaries', JSON.stringify(cloudDiaries || []));
+    } catch (e) {}
+    return cloudDiaries || [];
+  }
+  const merged = deduplicateDiariesByDate([...(localDiaries || []), ...(cloudDiaries || [])]);
+  try {
+    localStorage.setItem('analog_diaries', JSON.stringify(merged));
+  } catch (e) {}
+  return merged;
+}
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -463,7 +478,7 @@ function DiaryMainApp({ onOpenAdmin }) {
       async (cloudDiaries) => {
         if (syncSafetyTimer) clearTimeout(syncSafetyTimer);
         const deduped = sanitizeCloudDiaries(cloudDiaries);
-        setDiaries(deduped);
+        setDiaries((prev) => mergeCloudWithLocalDiaries(deduped, prev));
         setIsSyncing(false);
 
         // Firestore에 동일 날짜로 생성된 불필요한 중복 문서가 남아있다면 원격에서도 자동 정리
@@ -552,7 +567,7 @@ function DiaryMainApp({ onOpenAdmin }) {
         const freshDiaries = await fetchUserDiariesOnce(user.uid);
         if (freshDiaries && freshDiaries.length >= 0) {
           const deduped = sanitizeCloudDiaries(freshDiaries);
-          setDiaries(deduped);
+          setDiaries((prev) => mergeCloudWithLocalDiaries(deduped, prev));
         }
         // 스티커 에셋 최신화 (삭제된 스티커 묘비 등 반영)
         fetchDecorationsOnce().catch(() => {});

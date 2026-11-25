@@ -1046,17 +1046,22 @@ export async function updateDecorationAsset(id, fields) {
 }
 
 /**
- * 14. 카테고리 관리 기능 (기본 카테고리 상수 및 로컬 캐시 + Firestore categories 컬렉션)
+ * 14. 카테고리 관리 기능 (고정 카테고리 + 추가/삭제 가능한 스티커 하위 카테고리)
  */
-export const DEFAULT_CATEGORIES = [
-  { id: 'sticker', label: '스티커', order: 1 },
-  { id: 'weather', label: '날씨', order: 2 },
-  { id: 'tape', label: '마스킹테이프', order: 3 },
-  { id: 'character', label: '캐릭터', order: 4 },
-  { id: 'emotion', label: '감정', order: 5 },
-  { id: 'daily', label: '일상', order: 6 },
-  { id: 'food', label: '음식', order: 7 },
+export const FIXED_CATEGORIES = [
+  { id: 'weather', label: '날씨', isFixed: true },
+  { id: 'emotion', label: '표정', isFixed: true },
 ];
+export const FIXED_CATEGORY_IDS = new Set(['weather', 'emotion']);
+
+export const DEFAULT_CUSTOM_CATEGORIES = [
+  { id: 'sticker', label: '스티커', order: 1 },
+  { id: 'character', label: '캐릭터', order: 2 },
+  { id: 'daily', label: '일상', order: 3 },
+  { id: 'food', label: '음식', order: 4 },
+  { id: 'tape', label: '마스킹테이프', order: 5 },
+];
+export const DEFAULT_CATEGORIES = DEFAULT_CUSTOM_CATEGORIES;
 
 const LOCAL_CATEGORIES_KEY = 'analog_diary_categories';
 const localCategoryListeners = new Set();
@@ -1189,6 +1194,9 @@ export async function addCategory({ id, label, order }) {
   if (!cleanLabel) {
     throw new Error('카테고리 이름을 입력해 주세요.');
   }
+  if (FIXED_CATEGORY_IDS.has(cleanId)) {
+    throw new Error(`'${cleanId}'는 시스템 고정 카테고리로 예약되어 있습니다.`);
+  }
 
   const currentLocal = readLocalCategories();
   if (currentLocal.some((c) => c.id === cleanId)) {
@@ -1233,6 +1241,9 @@ export async function addCategory({ id, label, order }) {
 export async function deleteCategory(categoryId) {
   if (!categoryId) return;
   const targetId = String(categoryId);
+  if (FIXED_CATEGORY_IDS.has(targetId)) {
+    throw new Error('시스템 고정 카테고리는 삭제할 수 없습니다.');
+  }
 
   const currentLocal = readLocalCategories();
   const nextList = currentLocal.filter((c) => c.id !== targetId);
