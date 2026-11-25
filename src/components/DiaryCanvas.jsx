@@ -1909,11 +1909,14 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-left');
         setDragX(-window.innerWidth - 32);
         setTimeout(() => {
-          setExitAnimation(null);
-          setDragX(0);
-          setIsPageDragging(false);
           onNavigateDiary?.('next');
-        }, 220);
+          // 안전 폴백 타이머 (새 다이어리 props 수신 시 useEffect에서 즉시 0 리셋)
+          setTimeout(() => {
+            setExitAnimation(null);
+            setDragX(0);
+            setIsPageDragging(false);
+          }, 80);
+        }, 200);
       } else {
         triggerHaptic('boundary');
         showToast('가장 최근 일기입니다.');
@@ -1925,11 +1928,14 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-right');
         setDragX(window.innerWidth + 32);
         setTimeout(() => {
-          setExitAnimation(null);
-          setDragX(0);
-          setIsPageDragging(false);
           onNavigateDiary?.('prev');
-        }, 220);
+          // 안전 폴백 타이머 (새 다이어리 props 수신 시 useEffect에서 즉시 0 리셋)
+          setTimeout(() => {
+            setExitAnimation(null);
+            setDragX(0);
+            setIsPageDragging(false);
+          }, 80);
+        }, 200);
       } else {
         triggerHaptic('boundary');
         showToast('가장 첫 번째 일기입니다.');
@@ -1998,11 +2004,14 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-left');
         setDragX(-window.innerWidth - 32);
         setTimeout(() => {
-          setExitAnimation(null);
-          setDragX(0);
-          setIsPageDragging(false);
           onNavigateDiary?.('next');
-        }, 220);
+          // 안전 폴백 타이머 (새 다이어리 props 수신 시 useEffect에서 즉시 0 리셋)
+          setTimeout(() => {
+            setExitAnimation(null);
+            setDragX(0);
+            setIsPageDragging(false);
+          }, 80);
+        }, 200);
       } else {
         triggerHaptic('boundary');
         showToast('가장 최근 일기입니다.');
@@ -2014,11 +2023,14 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-right');
         setDragX(window.innerWidth + 32);
         setTimeout(() => {
-          setExitAnimation(null);
-          setDragX(0);
-          setIsPageDragging(false);
           onNavigateDiary?.('prev');
-        }, 220);
+          // 안전 폴백 타이머 (새 다이어리 props 수신 시 useEffect에서 즉시 0 리셋)
+          setTimeout(() => {
+            setExitAnimation(null);
+            setDragX(0);
+            setIsPageDragging(false);
+          }, 80);
+        }, 200);
       } else {
         triggerHaptic('boundary');
         showToast('가장 첫 번째 일기입니다.');
@@ -2801,7 +2813,7 @@ export default function DiaryCanvas({
         />
 
         {/* (2) 텍스트 블록 레이어 (캔버스 직접 입력 박스 형태) */}
-        {textBlocks.map((block, idx) => {
+        {(isViewMode ? activeTextBlocks : textBlocks).map((block, idx) => {
           const isSelected = selectedTextId === block.id;
           const blockScale = block.scale || 1;
           const blockRotation = block.rotation || 0;
@@ -2980,7 +2992,7 @@ export default function DiaryCanvas({
         })}
 
         {/* (3) 스티커 / 꾸미기 에셋 레이어 (만들어진 순서 layerOrder 기준 zIndex 적용) */}
-        {(stickers || []).filter(Boolean).map((sticker, idx) => {
+        {((isViewMode ? activeStickers : stickers) || []).filter(Boolean).map((sticker, idx) => {
           const isSelected = selectedStickerId === sticker.id;
           const stickerScale = sticker.scale || 1;
           const stickerRotation = sticker.rotation || 0;
@@ -2990,7 +3002,8 @@ export default function DiaryCanvas({
           const leftPercent = ((sticker.x || 0) / CANONICAL_WIDTH) * 100;
           const topPx = Math.round((sticker.y || 0) * scaleRatio);
           const isTape = sticker.category === 'tape' || sticker.type === 'tape';
-          const basePixelW = isTape ? 112 : 56;
+          const isPhoto = sticker.isPhoto || sticker.type === 'photo';
+          const basePixelW = isTape ? 112 : isPhoto ? 140 : 56;
           const scaledPixelW = Math.max(24, Math.round(basePixelW * scaleRatio));
 
           return (
@@ -3022,7 +3035,7 @@ export default function DiaryCanvas({
                 transformBox: 'fill-box',
                 touchAction: 'none',
                 pointerEvents: isViewMode ? 'none' : 'auto',
-                border: isSelected && !isViewMode ? '1px solid rgba(0, 0, 0, 0.2)' : '1px solid transparent',
+                boxShadow: isSelected && !isViewMode ? '0 0 0 1px rgba(0, 0, 0, 0.2)' : 'none',
                 borderRadius: '5px',
               }}
               className={`absolute select-none touch-none p-0 ${
@@ -3081,6 +3094,7 @@ export default function DiaryCanvas({
                       alt={sticker.label || sticker.category || 'decoration'}
                       draggable={false}
                       onLoad={(e) => {
+                        if (isViewMode) return;
                         const naturalW = e.currentTarget.naturalWidth || 1;
                         const naturalH = e.currentTarget.naturalHeight || 1;
                         const isTape = sticker.category === 'tape' || sticker.type === 'tape';

@@ -546,7 +546,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
                     transformOrigin: 'center center',
                     transformBox: 'fill-box',
                   }}
-                  className="select-none pointer-events-none p-1"
+                  className="select-none pointer-events-none p-0"
                 >
                   {(() => {
                     const resolvedImg = resolveStickerImage(sticker);
@@ -564,7 +564,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
                               ? 'w-28 h-auto object-contain select-none block'
                               : sticker.isPhoto || sticker.type === 'photo'
                               ? 'w-36 h-auto object-contain select-none block'
-                              : 'w-14 h-14 object-contain select-none block'
+                              : 'w-14 h-auto max-h-14 object-contain select-none block'
                           }
                         />
                       );

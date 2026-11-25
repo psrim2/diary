@@ -410,7 +410,7 @@ export default function CalendarView({
 
   return (
     <div 
-      className="flex flex-col h-full bg-[#fafafa] px-6 pb-6 select-none overflow-hidden touch-none"
+      className="flex flex-col h-full bg-[#fafafa] px-4 sm:px-6 pb-6 select-none overflow-hidden touch-none"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
