@@ -2225,8 +2225,11 @@ export default function DiaryCanvas({
               bottom: 0,
               left: 0,
               right: 0,
-              transform: `translateX(calc(-100% - 32px + ${dragX}px))`,
+              transform: `translate3d(calc(-100% - 32px + ${dragX}px), 0, 0)`,
               transition: exitAnimation ? 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
+              willChange: 'transform',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
               zIndex: 10,
             }}
           >
@@ -2234,13 +2237,16 @@ export default function DiaryCanvas({
           </div>
         )}
 
-        {/* 현재 다이어리 페이지 (3D 회전 넘어짐 제거, 그림자 삭제) */}
+        {/* 현재 다이어리 페이지 (GPU 레이어 고정으로 잔상 및 깜박임 원천 차단) */}
         <div 
           style={{
             transform: (isPageDragging || exitAnimation) && dragX !== 0
-              ? `translateX(${dragX}px)`
-              : undefined,
+              ? `translate3d(${dragX}px, 0, 0)`
+              : (isViewMode ? 'translate3d(0, 0, 0)' : undefined),
             transition: exitAnimation ? 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
+            willChange: (isPageDragging || exitAnimation) ? 'transform' : 'auto',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
             zIndex: 20,
           }}
           className="w-full flex-1 flex flex-col min-h-0 relative bg-[#fafafa]"
@@ -3187,8 +3193,11 @@ export default function DiaryCanvas({
               bottom: 0,
               left: 0,
               right: 0,
-              transform: `translateX(calc(100% + 32px + ${dragX}px))`,
+              transform: `translate3d(calc(100% + 32px + ${dragX}px), 0, 0)`,
               transition: exitAnimation ? 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
+              willChange: 'transform',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
               zIndex: 10,
             }}
           >
