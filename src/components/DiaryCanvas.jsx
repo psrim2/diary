@@ -231,7 +231,7 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
             );
           })}
 
-          {/* 스티커 */}
+          {/* 스티커 (본문 캔버스와 100% 동일한 좌표, 패딩 p-0, 너비 및 비율 적용하여 스와이프 시 덜컥거림 및 사이즈 불일치 원천 제거) */}
           {(normalized.stickers || []).filter(Boolean).map((sticker, idx) => {
             const stickerScale = sticker.scale || 1;
             const stickerRotation = sticker.rotation || 0;
@@ -239,7 +239,8 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
             const leftPercent = ((sticker.x || 0) / CANONICAL_WIDTH) * 100;
             const topPx = Math.round((sticker.y || 0) * scaleRatio);
             const isTape = sticker.category === 'tape' || sticker.type === 'tape';
-            const basePixelW = isTape ? 112 : 56;
+            const isPhoto = sticker.isPhoto || sticker.type === 'photo';
+            const basePixelW = isTape ? 112 : isPhoto ? 140 : 56;
             const scaledPixelW = Math.max(24, Math.round(basePixelW * scaleRatio));
             const resolvedImg = resolveStickerImage(sticker);
 
@@ -254,7 +255,7 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
                   transformOrigin: 'center center',
                   transformBox: 'fill-box',
                 }}
-                className="absolute select-none p-1 pointer-events-none"
+                className="absolute select-none p-0 pointer-events-none"
               >
                 {resolvedImg ? (
                   <img
@@ -262,15 +263,13 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
                     alt=""
                     draggable={false}
                     style={{
+                      width: `${scaledPixelW}px`,
+                      height: 'auto',
                       imageRendering: '-webkit-optimize-contrast',
                     }}
-                    className={
-                      sticker.category === 'tape' || sticker.type === 'tape'
-                        ? 'w-28 h-auto object-contain block'
-                        : 'w-14 h-14 object-contain block'
-                    }
+                    className="object-contain select-none pointer-events-none block"
                   />
-                ) : sticker.type === 'tape' || sticker.category === 'tape' ? (
+                ) : isTape ? (
                   <div
                     className="rounded shadow-xs relative overflow-hidden"
                     style={{
@@ -285,10 +284,16 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
                           : 'none',
                       backgroundSize: sticker.pattern === 'dots' ? '6px 6px' : 'auto',
                     }}
-                  />
+                  >
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
+                    <div className="absolute right-0 top-0 bottom-0 w-1 bg-black/10" />
+                  </div>
                 ) : isEmojiSticker(sticker) ? (
-                  <span className="text-3xl sm:text-4xl filter drop-shadow-xs block leading-none">
-                    {sticker.content || sticker.icon || ''}
+                  <span 
+                    style={{ fontSize: `${Math.round(36 * scaleRatio)}px` }}
+                    className="select-none leading-none filter drop-shadow-xs block"
+                  >
+                    {sticker.content}
                   </span>
                 ) : null}
               </div>
@@ -1904,6 +1909,9 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-left');
         setDragX(-window.innerWidth - 32);
         setTimeout(() => {
+          setExitAnimation(null);
+          setDragX(0);
+          setIsPageDragging(false);
           onNavigateDiary?.('next');
         }, 220);
       } else {
@@ -1917,6 +1925,9 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-right');
         setDragX(window.innerWidth + 32);
         setTimeout(() => {
+          setExitAnimation(null);
+          setDragX(0);
+          setIsPageDragging(false);
           onNavigateDiary?.('prev');
         }, 220);
       } else {
@@ -1987,6 +1998,9 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-left');
         setDragX(-window.innerWidth - 32);
         setTimeout(() => {
+          setExitAnimation(null);
+          setDragX(0);
+          setIsPageDragging(false);
           onNavigateDiary?.('next');
         }, 220);
       } else {
@@ -2000,6 +2014,9 @@ export default function DiaryCanvas({
         setExitAnimation('anim-page-exit-right');
         setDragX(window.innerWidth + 32);
         setTimeout(() => {
+          setExitAnimation(null);
+          setDragX(0);
+          setIsPageDragging(false);
           onNavigateDiary?.('prev');
         }, 220);
       } else {
@@ -3005,13 +3022,11 @@ export default function DiaryCanvas({
                 transformBox: 'fill-box',
                 touchAction: 'none',
                 pointerEvents: isViewMode ? 'none' : 'auto',
+                border: isSelected && !isViewMode ? '1px solid rgba(0, 0, 0, 0.2)' : '1px solid transparent',
+                borderRadius: '5px',
               }}
               className={`absolute select-none touch-none p-0 ${
                 !isViewMode ? 'cursor-move' : ''
-              } ${
-                isSelected && !isViewMode
-                  ? 'ring-1 ring-dashed ring-stone-800 rounded-xs'
-                  : ''
               }`}
             >
               {/* 선택된 스티커 모서리 직접 조작 핸들 (삭제 / 회전 / 크기조절) - 스티커 사이즈에 타이트하게 밀착 */}

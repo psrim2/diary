@@ -416,7 +416,7 @@ function DiaryCard({ diary, onSelect, onDelete, isSelected, isSwipeOpen, onSwipe
                 {dayNum}
               </span>
               {isToday && (
-                <span className="absolute -top-0.5 -right-2 w-1.5 h-1.5 rounded-full bg-black block select-none pointer-events-none" />
+                <span className="absolute -top-0.5 -right-1.5 w-1.5 h-1.5 rounded-full bg-black block select-none pointer-events-none" />
               )}
             </div>
             <span className="text-xl sm:text-2xl font-black text-black tracking-tight leading-none ml-2">
@@ -678,7 +678,7 @@ function ThumbnailItem({ diary, onSelect, isSelected }) {
             {dayNum}
           </span>
           {isToday && (
-            <span className="absolute -top-0.5 -right-2 w-1.5 h-1.5 rounded-full bg-black block select-none pointer-events-none" />
+            <span className="absolute -top-0.5 -right-1.5 w-1.5 h-1.5 rounded-full bg-black block select-none pointer-events-none" />
           )}
         </div>
         <span className="text-[10px] sm:text-[11px] font-bold text-stone-400 mt-0.5 tracking-wider">

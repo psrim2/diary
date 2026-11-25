@@ -136,7 +136,7 @@ export default function Header({
         </div>
 
         {/* 우측 버튼 그룹: [썸네일 격자 보기 토글 아이콘 버튼 (목록 뷰일 때)] + [오늘] 버튼 */}
-        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+        <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
           {currentView === 'list' && (
             <button
               type="button"
@@ -144,7 +144,7 @@ export default function Header({
                 triggerHaptic('light');
                 onToggleThumbnailView?.();
               }}
-              className={`w-7 h-7 rounded-full border transition-all flex items-center justify-center cursor-pointer select-none shrink-0 active:scale-95 ${
+              className={`h-7 px-2.5 sm:px-3 rounded-full border transition-all flex items-center justify-center cursor-pointer select-none shrink-0 active:scale-95 ${
                 isThumbnailView
                   ? 'bg-black text-white border-black shadow-xs'
                   : 'bg-white text-stone-700 border-stone-300 hover:bg-stone-50 shadow-2xs'
