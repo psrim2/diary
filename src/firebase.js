@@ -150,6 +150,72 @@ export async function logoutUser() {
 }
 
 /**
+ * 구글 계정 로그인/연결 시 사용자 메타데이터를 Firestore 'users' 컬렉션에 기록
+ * (어드민에서 연동자 수 및 활동 현황을 집계할 수 있도록 지원)
+ * @param {import('firebase/auth').User} user
+ */
+export async function recordUserConnection(user) {
+  if (!isFirebaseConfigured || !db || !user?.uid) return;
+  try {
+    const userRef = doc(db, 'users', user.uid);
+    const data = {
+      uid: user.uid,
+      email: user.email || '',
+      displayName: user.displayName || '',
+      photoURL: user.photoURL || '',
+      providerId: user.providerData?.[0]?.providerId || 'google.com',
+      lastConnectedAt: serverTimestamp(),
+      lastConnectedAtMs: Date.now(),
+    };
+    await setDoc(userRef, data, { merge: true });
+  } catch (err) {
+    console.warn('[Firestore] 사용자 연동 정보 기록 실패:', err);
+  }
+}
+
+/**
+ * 구글 계정 연결자(users) 목록 및 카운트 실시간 구독 (어드민 전용)
+ * @param {(users: Array<any>, count: number) => void} onUpdate
+ * @param {(error: Error) => void} [onError]
+ * @returns {() => void}
+ */
+export function subscribeToConnectedUsers(onUpdate, onError) {
+  if (!isFirebaseConfigured || !db) {
+    onUpdate([], 0);
+    return () => {};
+  }
+  const usersRef = collection(db, 'users');
+  return onSnapshot(
+    usersRef,
+    (snapshot) => {
+      const usersList = [];
+      snapshot.docs.forEach((d) => {
+        const data = d.data();
+        usersList.push({
+          id: d.id,
+          uid: data.uid || d.id,
+          email: data.email || '',
+          displayName: data.displayName || '',
+          photoURL: data.photoURL || '',
+          providerId: data.providerId || 'google.com',
+          lastConnectedAt: data.lastConnectedAt,
+          lastConnectedAtMs: data.lastConnectedAtMs || 0,
+        });
+      });
+      usersList.sort((a, b) => (b.lastConnectedAtMs || 0) - (a.lastConnectedAtMs || 0));
+      try {
+        localStorage.setItem('analog_diary_connected_users_count', String(snapshot.size));
+      } catch {}
+      onUpdate(usersList, snapshot.size);
+    },
+    (err) => {
+      console.warn('[Admin] users 구독 오류:', err);
+      if (onError) onError(err);
+    }
+  );
+}
+
+/**
  * 3. 인증 상태 변화 구독
  * @param {(user: import('firebase/auth').User | null) => void} callback
  */
@@ -158,7 +224,12 @@ export function subscribeToAuthChanges(callback) {
     callback(null);
     return () => {};
   }
-  return onAuthStateChanged(auth, callback);
+  return onAuthStateChanged(auth, (user) => {
+    if (user) {
+      recordUserConnection(user).catch(() => {});
+    }
+    callback(user);
+  });
 }
 
 // 초기 샘플 더미 데이터 ID 목록 (자동 정리 대상)

@@ -21,6 +21,7 @@ import {
   fetchUserDiariesOnce,
   reconnectFirebaseNetwork,
   fetchDecorationsOnce,
+  recordUserConnection,
 } from './firebase';
 
 // 이전 기본 샘플 더미 데이터 ID (초기 무데이터 상태를 위해 자동 필터링)
@@ -441,6 +442,7 @@ function DiaryMainApp({ onOpenAdmin }) {
     handleRedirectLoginResult()
       .then((redirectUser) => {
         if (redirectUser) {
+          recordUserConnection(redirectUser).catch(() => {});
           const userSnapshot = {
             uid: redirectUser.uid,
             displayName: redirectUser.displayName || '',

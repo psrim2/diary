@@ -2702,7 +2702,7 @@ export default function DiaryCanvas({
                 type="button"
                 disabled={!hasContent || isSaving}
                 onClick={handleSaveDiary}
-                className={`w-10 h-10 rounded-full bg-black text-white transition items-center justify-center shadow-xs shrink-0 ${
+                className={`w-10 h-10 rounded-full bg-black text-white transition flex items-center justify-center shadow-xs shrink-0 ${
                   !hasContent
                     ? 'opacity-25 cursor-not-allowed pointer-events-none'
                     : 'hover:bg-stone-800 active:scale-95 cursor-pointer'

@@ -1,5 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { GripVertical, Plus, Trash2, Upload, ArrowLeft } from 'lucide-react';
+import {
+  GripVertical,
+  Plus,
+  Trash2,
+  Upload,
+  ArrowLeft,
+  Users,
+  Sparkles,
+  Layers,
+  X,
+} from 'lucide-react';
 import {
   ADMIN_EMAIL,
   loginWithGoogle,
@@ -15,6 +25,7 @@ import {
   deleteCategory,
   updateCategoriesOrder,
   seedDefaultCategoriesIfNeeded,
+  subscribeToConnectedUsers,
   FIXED_CATEGORIES,
   FIXED_CATEGORY_IDS,
   DEFAULT_CUSTOM_CATEGORIES,
@@ -32,7 +43,11 @@ const BASE_CATEGORIES = [
 ];
 
 function formatDate(item) {
-  const ms = item?.createdAt?.toMillis?.() || item?.createdAtMs;
+  const ms =
+    item?.createdAt?.toMillis?.() ||
+    item?.createdAtMs ||
+    item?.lastConnectedAt?.toMillis?.() ||
+    item?.lastConnectedAtMs;
   if (!ms) return '-';
   const d = new Date(ms);
   if (isNaN(d.getTime())) return '-';
@@ -62,6 +77,17 @@ export default function AdminPage({ onBack }) {
   const [decorations, setDecorations] = useState([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [filterCategory, setFilterCategory] = useState('all');
+
+  // 구글 계정 연결자 통계 상태
+  const [connectedUsers, setConnectedUsers] = useState([]);
+  const [connectedUsersCount, setConnectedUsersCount] = useState(() => {
+    try {
+      return Number(localStorage.getItem('analog_diary_connected_users_count') || 0);
+    } catch {
+      return 0;
+    }
+  });
+  const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
 
   // 카테고리 관리 상태
   const [categories, setCategories] = useState([]);
@@ -177,6 +203,8 @@ export default function AdminPage({ onBack }) {
     if (!isAuthorized) {
       setDecorations([]);
       setCategories([]);
+      setConnectedUsers([]);
+      setConnectedUsersCount(0);
       return;
     }
 
@@ -205,9 +233,21 @@ export default function AdminPage({ onBack }) {
       }
     );
 
+    // 구글 계정 연결자 실시간 구독
+    const unsubUsers = subscribeToConnectedUsers(
+      (usersList, count) => {
+        setConnectedUsers(usersList);
+        setConnectedUsersCount(count);
+      },
+      (err) => {
+        console.error('[Admin] connected users 조회 오류:', err);
+      }
+    );
+
     return () => {
       unsubCats();
       unsubscribe();
+      unsubUsers();
     };
   }, [user]);
 
@@ -724,7 +764,7 @@ export default function AdminPage({ onBack }) {
     <div className="w-full h-full overflow-y-auto bg-stone-50 text-stone-900">
       <div className="admin-dashboard p-6 max-w-[1200px] w-full mx-auto min-h-full pb-20">
         {/* 상단 관리자 정보 및 로그아웃 */}
-        <header className="admin-header flex items-center justify-between border-b pb-4 mb-6">
+        <header className="admin-header flex flex-wrap items-center justify-between border-b pb-4 mb-6 gap-3">
           <div className="flex items-center space-x-3">
             <button
               type="button"
@@ -737,7 +777,24 @@ export default function AdminPage({ onBack }) {
             </button>
             <div>
               <h1 className="text-xl font-bold">꾸미기 에셋 관리자 대시보드</h1>
-              <p className="text-sm text-stone-600">접속 계정: {user.email}</p>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-stone-600 mt-0.5">
+                <span>
+                  접속 계정: <strong>{user.email}</strong>
+                </span>
+                <span className="text-stone-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => setIsUsersModalOpen(true)}
+                  className="inline-flex items-center text-stone-700 hover:text-black font-medium transition cursor-pointer group"
+                  title="클릭 시 연결된 구글 계정 목록 보기"
+                >
+                  <Users size={14} className="mr-1 text-stone-500 group-hover:text-black transition" />
+                  다이어리 구글 계정 연결자:{' '}
+                  <strong className="text-black ml-1 underline underline-offset-2">
+                    {connectedUsersCount}명
+                  </strong>
+                </button>
+              </div>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -757,6 +814,145 @@ export default function AdminPage({ onBack }) {
             </button>
           </div>
         </header>
+
+        {/* 상단 통계 요약 바 (구글 계정 연결자 수 카운트 & 에셋 통계) */}
+        <section className="admin-stats-summary grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          {/* 1. 구글 계정 연결자 수 카드 */}
+          <div
+            onClick={() => setIsUsersModalOpen(true)}
+            className="p-4 border bg-white rounded-lg shadow-2xs flex items-center justify-between cursor-pointer hover:border-black hover:bg-stone-50/70 transition group"
+            title="클릭 시 구글 계정 연결자 상세 목록 보기"
+          >
+            <div>
+              <p className="text-xs font-semibold text-stone-500 mb-0.5 flex items-center">
+                <span>다이어리 구글 계정 연결자</span>
+                <span className="ml-1 text-[11px] text-stone-400 group-hover:text-stone-800 transition">
+                  (상세 &gt;)
+                </span>
+              </p>
+              <div className="flex items-baseline space-x-1.5">
+                <span className="text-2xl font-black tracking-tight text-stone-900">
+                  {connectedUsersCount}
+                </span>
+                <span className="text-xs text-stone-500 font-medium">명</span>
+              </div>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-stone-100 group-hover:bg-black group-hover:text-white transition flex items-center justify-center text-stone-700">
+              <Users size={20} />
+            </div>
+          </div>
+
+          {/* 2. 등록된 꾸미기 에셋 수 카드 */}
+          <div className="p-4 border bg-white rounded-lg shadow-2xs flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-stone-500 mb-0.5">등록된 꾸미기 에셋</p>
+              <div className="flex items-baseline space-x-1.5">
+                <span className="text-2xl font-black tracking-tight text-stone-900">
+                  {decorations.length}
+                </span>
+                <span className="text-xs text-stone-500 font-medium">개</span>
+              </div>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center text-stone-700">
+              <Sparkles size={20} />
+            </div>
+          </div>
+
+          {/* 3. 에셋 카테고리 수 카드 */}
+          <div className="p-4 border bg-white rounded-lg shadow-2xs flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-stone-500 mb-0.5">에셋 카테고리</p>
+              <div className="flex items-baseline space-x-1.5">
+                <span className="text-2xl font-black tracking-tight text-stone-900">
+                  {allCategories.length}
+                </span>
+                <span className="text-xs text-stone-500 font-medium">개</span>
+              </div>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center text-stone-700">
+              <Layers size={20} />
+            </div>
+          </div>
+        </section>
+
+        {/* 구글 계정 연결자 상세 목록 모달 */}
+        {isUsersModalOpen && (
+          <div
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-2xs flex items-center justify-center p-4"
+            onClick={() => setIsUsersModalOpen(false)}
+          >
+            <div
+              className="bg-white rounded-xl max-w-md w-full max-h-[80vh] flex flex-col shadow-2xl border overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b">
+                <div className="flex items-center space-x-2">
+                  <Users size={18} className="text-stone-700" />
+                  <h3 className="font-bold text-base text-stone-900">
+                    구글 계정 연결자 ({connectedUsersCount}명)
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsUsersModalOpen(false)}
+                  className="p-1 text-stone-400 hover:text-black rounded-lg hover:bg-stone-100 transition cursor-pointer"
+                  title="닫기"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto p-4 flex-1 divide-y divide-stone-100">
+                {connectedUsers.length === 0 ? (
+                  <div className="text-center py-10 text-stone-500 text-sm">
+                    아직 연결된 계정 정보가 없습니다.
+                  </div>
+                ) : (
+                  connectedUsers.map((u) => {
+                    const lastDate = formatDate(u);
+                    return (
+                      <div key={u.id} className="py-3 flex items-center justify-between first:pt-0 last:pb-0">
+                        <div className="flex items-center space-x-3 min-w-0">
+                          {u.photoURL ? (
+                            <img
+                              src={u.photoURL}
+                              alt={u.displayName || u.email}
+                              className="w-9 h-9 rounded-full object-cover border border-stone-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-full bg-stone-100 border border-stone-300 flex items-center justify-center text-xs font-bold text-stone-600 shrink-0">
+                              {(u.displayName || u.email || 'U').charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-stone-900 truncate">
+                              {u.displayName || '이름 미지정'}
+                            </p>
+                            <p className="text-xs text-stone-500 truncate">{u.email}</p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 ml-3">
+                          <span className="text-[10px] text-stone-400 block">최근 접속</span>
+                          <span className="text-xs text-stone-600 font-medium">{lastDate}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="px-5 py-3 border-t bg-stone-50 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsUsersModalOpen(false)}
+                  className="px-4 py-1.5 bg-black text-white text-xs font-bold rounded-lg hover:bg-stone-800 transition cursor-pointer"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* [적용하기 / 취소] 액션 컨트롤 바 (상단 Sticky 고정) */}
       <section className="admin-action-bar sticky top-0 z-30 border p-4 mb-6 bg-white/95 backdrop-blur-xs shadow-sm flex flex-wrap items-center justify-between gap-3">
