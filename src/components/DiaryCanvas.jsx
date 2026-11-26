@@ -145,6 +145,8 @@ function DiaryStaticPage({ diary, scaleRatio = 1, paperHeightPx = 800 }) {
                 <img
                   src={upgradePresetSvgUrl(typeof weather === 'string' ? weather : weather?.imageUrl || '')}
                   alt=""
+                  decoding="sync"
+                  loading="eager"
                   style={{ imageRendering: '-webkit-optimize-contrast' }}
                   className="w-10 h-10 object-contain block p-0.5 select-none"
                 />
@@ -329,7 +331,24 @@ export default function DiaryCanvas({
   const [isPageDragging, setIsPageDragging] = useState(false);
   const [exitAnimation, setExitAnimation] = useState(null); // 'anim-page-exit-left' | 'anim-page-exit-right' | null
   const sliderWrapperRef = useRef(null);
-  const getSlideDistance = () => (sliderWrapperRef.current?.clientWidth || window.innerWidth) + 32;
+  const SLIDE_GAP = 32;
+  // 슬라이더 실제 폭(소수점 포함)을 측정해 현재/이전/다음 페이지가 완전히 동일한 px 좌표계로 이동하도록 통일
+  const [slideWidth, setSlideWidth] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 390));
+  useLayoutEffect(() => {
+    const el = sliderWrapperRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.getBoundingClientRect().width;
+      if (w > 0) setSlideWidth(w);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const getSlideDistance = () => slideWidth + SLIDE_GAP;
+  // 전환 완료 직후, 들어온 페이지(프리뷰 DOM)를 그대로 몇 프레임 유지해 본문 교체 순간의 잔상을 가림
+  const [handoffDiary, setHandoffDiary] = useState(null);
 
   // 정렬된 일기 목록에서 이전 및 다음 일기 식별 (스와이프 트랙 렌더링용)
   const sortedDiaries = useMemo(() => {
@@ -1837,18 +1856,23 @@ export default function DiaryCanvas({
       clearTimeout(exitFallbackTimerRef.current);
       exitFallbackTimerRef.current = null;
     }
-    const dir = pendingNavRef.current;
-    if (!dir) return;
+    const pending = pendingNavRef.current;
+    if (!pending) return;
     pendingNavRef.current = null;
+    // 들어온 페이지 DOM을 핸드오프 레이어로 유지 (같은 key → 동일 DOM 노드 재사용, 재래스터 없음)
+    if (pending.incoming) setHandoffDiary(pending.incoming);
     setExitAnimation(null);
     setDragX(0);
     setIsPageDragging(false);
-    onNavigateDiary?.(dir);
+    onNavigateDiary?.(pending.dir);
   }, [onNavigateDiary]);
 
   const startExitSwipe = (direction) => {
     if (exitFallbackTimerRef.current) clearTimeout(exitFallbackTimerRef.current);
-    pendingNavRef.current = direction;
+    pendingNavRef.current = {
+      dir: direction,
+      incoming: direction === 'next' ? nextDiary : prevDiary,
+    };
     triggerHaptic('pageTurn');
     setExitAnimation(direction === 'next' ? 'anim-page-exit-left' : 'anim-page-exit-right');
     setDragX(direction === 'next' ? -getSlideDistance() : getSlideDistance());
@@ -1857,6 +1881,31 @@ export default function DiaryCanvas({
       finishExitSwipe();
     }, 280);
   };
+
+  // 핸드오프 해제: 새 일기가 본문에 실제로 페인트된 뒤(2프레임 + 여유) 덮개 레이어 제거
+  useEffect(() => {
+    if (!handoffDiary) return;
+    const handoffKey = String(handoffDiary.id || handoffDiary.date);
+    const currentDiaryKey = String(diary?.id || diary?.date);
+    let raf1 = 0;
+    let raf2 = 0;
+    let timer = 0;
+    if (handoffKey === currentDiaryKey) {
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => {
+          timer = setTimeout(() => setHandoffDiary(null), 60);
+        });
+      });
+    } else {
+      // 네비게이션이 반영되지 않은 예외 상황 안전 해제
+      timer = setTimeout(() => setHandoffDiary(null), 400);
+    }
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      clearTimeout(timer);
+    };
+  }, [handoffDiary, diary?.id, diary?.date]);
 
   // 뷰 모드에서 좌우 스와이프로 이전/이후 일기 탐색 (3D 달력 책장 넘김 전환 및 햅틱 효과)
   const handleSwipeNavigation = (direction) => {
@@ -1887,6 +1936,7 @@ export default function DiaryCanvas({
   // 터치 스와이프 시작
   const handleViewTouchStart = (e) => {
     if (!isViewMode || !e.touches || e.touches.length !== 1 || exitAnimation) return;
+    if (handoffDiary) setHandoffDiary(null);
     viewSwipeTouchStartRef.current = {
       x: e.touches[0].clientX,
       y: e.touches[0].clientY,
@@ -1963,6 +2013,7 @@ export default function DiaryCanvas({
   // 마우스 드래그 시작
   const handleViewMouseDown = (e) => {
     if (!isViewMode || e.button !== 0 || exitAnimation) return;
+    if (handoffDiary) setHandoffDiary(null);
     viewSwipeMouseDownRef.current = {
       x: e.clientX,
       y: e.clientY,
@@ -2197,27 +2248,6 @@ export default function DiaryCanvas({
         ================================================================
       */}
       <div ref={sliderWrapperRef} className="w-full flex-1 flex flex-col min-h-0 relative overflow-hidden">
-        {/* 이전 다이어리 프리뷰 (우측으로 드래그할 때 좌측에서 밀려 들어옴, 32px 간격, 그림자 제거) */}
-        {isViewMode && (isPageDragging || exitAnimation === 'anim-page-exit-right') && prevDiary && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-              transform: `translate3d(calc(-100% - 32px + ${dragX}px), 0, 0)`,
-              transition: exitAnimation ? 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
-              willChange: 'transform',
-              backfaceVisibility: 'hidden',
-              WebkitBackfaceVisibility: 'hidden',
-              zIndex: 10,
-            }}
-          >
-            <DiaryStaticPage diary={prevDiary} scaleRatio={scaleRatio} paperHeightPx={paperHeightPx} />
-          </div>
-        )}
-
         {/* 현재 다이어리 페이지 (GPU 레이어 고정으로 잔상 및 깜박임 원천 차단) */}
         <div 
           onTransitionEnd={(e) => {
@@ -2285,6 +2315,7 @@ export default function DiaryCanvas({
                         <img
                           src={upgradePresetSvgUrl(typeof activeWeather === 'string' ? activeWeather : activeWeather?.imageUrl || '')}
                           alt="대표 아이콘"
+                          decoding="sync"
                           style={{ imageRendering: '-webkit-optimize-contrast' }}
                           className="w-10 h-10 object-contain block select-none overflow-visible p-0.5"
                         />
@@ -2301,6 +2332,8 @@ export default function DiaryCanvas({
                       <img
                         src={upgradePresetSvgUrl(typeof activeWeather === 'string' ? activeWeather : activeWeather?.imageUrl || '')}
                         alt="대표 아이콘"
+                        decoding="sync"
+                        loading="eager"
                         style={{ imageRendering: '-webkit-optimize-contrast' }}
                         className="w-10 h-10 object-contain block select-none overflow-visible p-0.5"
                       />
@@ -3170,26 +3203,43 @@ export default function DiaryCanvas({
       </div>
     </div>
 
-        {/* 다음 다이어리 프리뷰 (좌측으로 드래그할 때 우측에서 밀려 들어옴, 32px 간격, 그림자 제거) */}
-        {isViewMode && (isPageDragging || exitAnimation === 'anim-page-exit-left') && nextDiary && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-              transform: `translate3d(calc(100% + 32px + ${dragX}px), 0, 0)`,
-              transition: exitAnimation ? 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
-              willChange: 'transform',
-              backfaceVisibility: 'hidden',
-              WebkitBackfaceVisibility: 'hidden',
-              zIndex: 10,
-            }}
-          >
-            <DiaryStaticPage diary={nextDiary} scaleRatio={scaleRatio} paperHeightPx={paperHeightPx} />
-          </div>
-        )}
+        {/* 이전/다음 다이어리 프리뷰 + 전환 직후 핸드오프 레이어
+            - 하나의 key 기반 리스트로 렌더링하여, 들어온 페이지의 DOM 노드가 전환 완료 후에도 그대로 재사용됨
+            - 모든 페이지가 동일한 px 좌표계(slideWidth + GAP)로 이동하여 속도/위치 오차 0 */}
+        {(() => {
+          const pages = [];
+          const pageKey = (d) => String(d?.id || d?.date);
+          if (isViewMode && (isPageDragging || exitAnimation === 'anim-page-exit-right') && prevDiary) {
+            pages.push({ d: prevDiary, offset: -(slideWidth + SLIDE_GAP) + dragX, z: 10, animated: !!exitAnimation });
+          }
+          if (isViewMode && (isPageDragging || exitAnimation === 'anim-page-exit-left') && nextDiary) {
+            pages.push({ d: nextDiary, offset: slideWidth + SLIDE_GAP + dragX, z: 10, animated: !!exitAnimation });
+          }
+          if (handoffDiary && !pages.some((p) => pageKey(p.d) === pageKey(handoffDiary))) {
+            pages.push({ d: handoffDiary, offset: 0, z: 30, animated: false });
+          }
+          return pages.map((p) => (
+            <div
+              key={`side-${pageKey(p.d)}`}
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+                transform: `translate3d(${p.offset}px, 0, 0)`,
+                transition: p.animated ? 'transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1)' : 'none',
+                willChange: 'transform',
+                backfaceVisibility: 'hidden',
+                WebkitBackfaceVisibility: 'hidden',
+                zIndex: p.z,
+                pointerEvents: 'none',
+              }}
+            >
+              <DiaryStaticPage diary={p.d} scaleRatio={scaleRatio} paperHeightPx={paperHeightPx} />
+            </div>
+          ));
+        })()}
       </div>
 
       {/* 
