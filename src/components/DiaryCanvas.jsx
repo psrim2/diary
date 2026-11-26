@@ -2202,14 +2202,27 @@ export default function DiaryCanvas({
 
         {/* 모바일 화면 전용 상단 우측 버튼: 뷰 모드일 때는 [ 연필(편집) ], 편집 모드일 때는 [ 취소(라인 버튼) ] + [ ✔(저장 완료) ] */}
         {isViewMode ? (
-          <button
-            type="button"
-            onClick={handleEnterEditMode}
-            className="w-11 h-11 rounded-full bg-stone-900 text-white transition flex items-center justify-center shadow-xs hover:bg-stone-800 active:scale-95 cursor-pointer"
-            title="일기 편집하기"
-          >
-            <Pencil size={19} strokeWidth={2.4} />
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('light');
+                setIsDeleteModalOpen(true);
+              }}
+              className="w-11 h-11 rounded-full border border-stone-300 bg-white text-stone-700 hover:text-red-500 hover:border-red-300 hover:bg-red-50 transition flex items-center justify-center shadow-2xs active:scale-95 cursor-pointer"
+              title="일기 삭제"
+            >
+              <Trash2 size={19} strokeWidth={2.2} />
+            </button>
+            <button
+              type="button"
+              onClick={handleEnterEditMode}
+              className="w-11 h-11 rounded-full bg-stone-900 text-white transition flex items-center justify-center shadow-xs hover:bg-stone-800 active:scale-95 cursor-pointer"
+              title="일기 편집하기"
+            >
+              <Pencil size={19} strokeWidth={2.4} />
+            </button>
+          </div>
         ) : (
           <div className="flex items-center space-x-2">
             <button
@@ -2675,16 +2688,29 @@ export default function DiaryCanvas({
           )}
           </div>
 
-          {/* 와이드 버전(lg: >=1024px) 전용 [ 연필(편집) / 취소 및 ✔(저장 완료) ] 버튼 */}
+          {/* 와이드 버전(lg: >=1024px) 전용 [ 삭제 / 연필(편집) / 취소 및 ✔(저장 완료) ] 버튼 */}
           {isViewMode ? (
-            <button
-              type="button"
-              onClick={handleEnterEditMode}
-              className="hidden lg:flex w-10 h-10 rounded-full bg-stone-900 text-white transition items-center justify-center shadow-xs shrink-0 hover:bg-stone-800 active:scale-95 cursor-pointer"
-              title="일기 편집하기"
-            >
-              <Pencil size={18} strokeWidth={2.4} />
-            </button>
+            <div className="hidden lg:flex items-center space-x-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setIsDeleteModalOpen(true);
+                }}
+                className="w-10 h-10 rounded-full border border-stone-300 bg-white text-stone-700 hover:text-red-500 hover:border-red-300 hover:bg-red-50 transition flex items-center justify-center shadow-2xs active:scale-95 cursor-pointer shrink-0"
+                title="일기 삭제"
+              >
+                <Trash2 size={18} strokeWidth={2} />
+              </button>
+              <button
+                type="button"
+                onClick={handleEnterEditMode}
+                className="w-10 h-10 rounded-full bg-stone-900 text-white transition flex items-center justify-center shadow-xs shrink-0 hover:bg-stone-800 active:scale-95 cursor-pointer"
+                title="일기 편집하기"
+              >
+                <Pencil size={18} strokeWidth={2.4} />
+              </button>
+            </div>
           ) : (
             <div className="hidden lg:flex items-center space-x-1.5 shrink-0">
               <button
@@ -3628,31 +3654,36 @@ export default function DiaryCanvas({
       {isDeleteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-fadeIn">
           <div className="bg-white w-full max-w-xs sm:max-w-sm rounded-3xl shadow-2xl border border-stone-200 p-6 flex flex-col items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-3">
+              <Trash2 size={24} strokeWidth={2.2} />
+            </div>
             <h3 className="text-base sm:text-lg font-black text-black tracking-tight">
               삭제하시겠습니까?
             </h3>
             <p className="text-xs sm:text-sm text-stone-500 mt-2 leading-relaxed">
-              작성 중인 일기가 영구적으로 삭제되며 복구할 수 없습니다.
+              선택한 일기가 영구적으로 삭제되며 복구할 수 없습니다.
             </p>
             <div className="flex items-center space-x-2.5 w-full mt-6">
               <button
                 type="button"
                 onClick={() => setIsDeleteModalOpen(false)}
-                className="flex-1 py-2.5 px-3 rounded-xl border border-stone-200 bg-stone-100 hover:bg-stone-200 active:scale-95 text-stone-700 text-xs font-bold transition"
+                className="flex-1 py-2.5 px-3 rounded-xl border border-stone-200 bg-stone-100 hover:bg-stone-200 active:scale-95 text-stone-700 text-xs font-bold transition cursor-pointer"
               >
                 취소
               </button>
               <button
                 type="button"
                 onClick={() => {
+                  triggerHaptic('medium');
                   setIsDeleteModalOpen(false);
-                  if (onDelete) {
-                    onDelete(diary?.id);
+                  const targetId = diary?.id || (diaries || []).find(d => d.date === activeDate)?.id;
+                  if (onDelete && targetId) {
+                    onDelete(targetId);
                   } else if (onBack) {
                     onBack();
                   }
                 }}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-black hover:bg-stone-800 active:scale-95 text-white text-xs font-bold transition shadow-xs"
+                className="flex-1 py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white text-xs font-bold transition shadow-xs cursor-pointer"
               >
                 삭제
               </button>
