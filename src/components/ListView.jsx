@@ -1073,7 +1073,7 @@ export default function ListView({
             return (
               <div key={key} id={`month-group-${key}`} className="relative">
                 {/* 8. 목록 월, 년도 영문 표기 sticky: z-30 및 완전 불투명 배경(#fafafa)으로 카드 스크롤 시 최상위 고정 유지 */}
-                <div className="sticky top-0 z-30 bg-[#fafafa] pt-2.5 pb-2 -mx-4 px-4 border-b border-stone-200/60 shadow-xs">
+                <div className="sticky top-0 z-30 bg-[#fafafa] pt-2.5 pb-2 -mx-4 px-6 border-b border-stone-200/60 shadow-xs">
                   <div className="flex items-end justify-between">
                     <div className="text-5xl sm:text-6xl font-black text-black leading-none tracking-tight select-none">
                       {group.month}
