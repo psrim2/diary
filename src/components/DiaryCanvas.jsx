@@ -2188,9 +2188,6 @@ export default function DiaryCanvas({
           <button
             onClick={() => {
               triggerHaptic('light');
-              if (!isViewMode && hasContent) {
-                handleSaveDiary();
-              }
               onBack();
             }}
             className="text-black hover:opacity-70 transition p-1.5 -ml-1.5 rounded-full"
